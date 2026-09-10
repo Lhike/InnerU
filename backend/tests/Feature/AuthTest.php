@@ -121,6 +121,31 @@ class AuthTest extends TestCase
         ]);
     }
 
+    public function test_login_keeps_existing_device_sessions_valid(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'multi.device.inneru@gmail.com',
+            'email_verified_at' => now(),
+            'password' => bcrypt('Password123'),
+        ]);
+
+        $firstToken = $this->postJson('/api/auth/login', [
+            'email' => $user->email,
+            'password' => 'Password123',
+        ])->assertOk()->json('token');
+
+        $secondToken = $this->postJson('/api/auth/login', [
+            'email' => $user->email,
+            'password' => 'Password123',
+        ])->assertOk()->json('token');
+
+        $this->assertNotSame($firstToken, $secondToken);
+
+        $this->getJson('/api/me', ['Authorization' => "Bearer {$firstToken}"])
+            ->assertOk()
+            ->assertJsonPath('user.id', $user->id);
+    }
+
     public function test_register_stores_a_pending_registration_and_sends_a_verification_email(): void
     {
         Notification::fake();

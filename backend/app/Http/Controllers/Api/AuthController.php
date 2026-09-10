@@ -129,7 +129,6 @@ class AuthController extends Controller
             ], Response::HTTP_FORBIDDEN);
         }
 
-        $user->tokens()->delete();
         $token = $user->createToken('mobile')->plainTextToken;
 
         return response()->json([
@@ -339,7 +338,6 @@ class AuthController extends Controller
             $user->forceFill($updates)->save();
         }
 
-        $user->tokens()->delete();
         $token = $user->createToken('mobile')->plainTextToken;
 
         return response()->json([
@@ -538,7 +536,6 @@ class AuthController extends Controller
             $user->forceFill($updates)->save();
         }
 
-        $user->tokens()->delete();
         $token = $user->createToken('mobile')->plainTextToken;
 
         return response()->json([
