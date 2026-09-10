@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\PostHeartController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\StepSubmissionController;
 use App\Http\Controllers\Api\AccountabilityMeetingController;
+use App\Http\Controllers\Api\AnalyticsEmployeeScoreController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', fn () => response()->json([
@@ -56,6 +57,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/dashboard', [DashboardController::class, 'show']);
     Route::get('/admin/users', [AdminUserController::class, 'index']);
     Route::patch('/admin/users/{user}/role', [AdminUserController::class, 'updateRole']);
+    Route::get('/admin/analytics/employee-scores', [AnalyticsEmployeeScoreController::class, 'index']);
     Route::get('/companies', [CompanyController::class, 'index']);
     Route::get('/companies/lookup', [CompanyController::class, 'lookup']);
     Route::post('/companies', [CompanyController::class, 'store']);
