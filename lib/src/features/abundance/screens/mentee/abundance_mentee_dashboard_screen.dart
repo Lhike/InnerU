@@ -387,6 +387,10 @@ class _AbundanceMenteeDashboardScreenState
             loggedAt: DateTime.fromMillisecondsSinceEpoch(0),
           ),
         );
+        final isAbundance = AbundanceCompany.matches(
+          data.companyCode,
+          data.companyName,
+        );
 
         return Theme(
           data: AppTheme.company(data.theme),
@@ -483,162 +487,168 @@ class _AbundanceMenteeDashboardScreenState
                     ),
                     const SizedBox(height: 16),
                     const _A12HomeQuote(),
-                    const SizedBox(height: 18),
-                    // Keep the existing data-backed analytics and support
-                    // cards below the reference layout for users who need the
-                    // richer InnerU detail view.
-                    _HeroCard(
-                      theme: data.theme,
-                      companyName: data.companyName,
-                      displayName: data.displayName,
-                      companyCode: data.companyCode,
-                      profilePic: data.profilePic,
-                      goalTotalScore: goalTotalScore,
-                      rank: rank,
-                      currentStreak: score.currentStreak,
-                      checkInRate: score.checkInRate,
-                      todayTasksCompleted: todayLog?.completedTasks ?? 0,
-                      todayTasksTotal:
-                          todayLog?.totalTasks ?? _taskFields.length,
-                      todayEmotion: todayEmotion.emotion,
-                    ),
-                    const SizedBox(height: 18),
-                    _QuickActionGrid(
-                      theme: data.theme,
-                      onGoals: () => unawaited(_openNamedRoute('/goalsHub')),
-                      onCheckIn: () =>
-                          unawaited(_openNamedRoute('/emotionScreen')),
-                      onRank: () => unawaited(_openNamedRoute('/leaderboard')),
-                      onTasks: () =>
-                          unawaited(_openNamedRoute('/userprogress')),
-                    ),
-                    const SizedBox(height: 18),
-                    _SectionHeader(
-                      title: 'Goals by category',
-                      actionLabel: 'Open goals',
-                      onAction: () => unawaited(_openNamedRoute('/goalsHub')),
-                    ),
-                    if (requiredGoalGaps(goals).isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      _MissingCategoryBanner(gaps: requiredGoalGaps(goals)),
-                    ],
-                    const SizedBox(height: 12),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final columns = constraints.maxWidth >= 900
-                            ? 3
-                            : constraints.maxWidth >= 560
-                                ? 2
-                                : 1;
-                        return GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: GoalCategory.values.length,
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: columns,
-                            childAspectRatio: columns == 1 ? 2.3 : 1.55,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                          ),
-                          itemBuilder: (context, index) {
-                            final category = GoalCategory.values[index];
-                            final stat = categoryStats[category]!;
-                            return _CategoryCard(
-                              theme: data.theme,
-                              category: category,
-                              totalGoals: stat.totalGoals,
-                              completedGoals: stat.completedGoals,
-                              score: stat.score,
-                            );
-                          },
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 18),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final twoColumn = constraints.maxWidth >= 900;
-                        final left = _DeadlinesCard(
-                          theme: data.theme,
-                          goals: upcomingDeadlines.take(5).toList(),
-                          onGoalTap: _openGoalDetail,
-                        );
-                        final right = _CoachAndCheckInsCard(
-                          theme: data.theme,
-                          coach: data.coach,
-                          recentCheckIns: recentCheckIns,
-                          todayEmotion: todayEmotion.emotion,
-                          onOpenMoodTracker: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const EmotionTrackerPage(),
+                    if (!isAbundance) ...[
+                      const SizedBox(height: 18),
+                      // Keep the existing data-backed analytics and support
+                      // cards below the reference layout for users who need the
+                      // richer InnerU detail view.
+                      _HeroCard(
+                        theme: data.theme,
+                        companyName: data.companyName,
+                        displayName: data.displayName,
+                        companyCode: data.companyCode,
+                        profilePic: data.profilePic,
+                        goalTotalScore: goalTotalScore,
+                        rank: rank,
+                        currentStreak: score.currentStreak,
+                        checkInRate: score.checkInRate,
+                        todayTasksCompleted: todayLog?.completedTasks ?? 0,
+                        todayTasksTotal:
+                            todayLog?.totalTasks ?? _taskFields.length,
+                        todayEmotion: todayEmotion.emotion,
+                      ),
+                      const SizedBox(height: 18),
+                      _QuickActionGrid(
+                        theme: data.theme,
+                        onGoals: () => unawaited(_openNamedRoute('/goalsHub')),
+                        onCheckIn: () =>
+                            unawaited(_openNamedRoute('/emotionScreen')),
+                        onRank: () =>
+                            unawaited(_openNamedRoute('/leaderboard')),
+                        onTasks: () =>
+                            unawaited(_openNamedRoute('/userprogress')),
+                      ),
+                      const SizedBox(height: 18),
+                      _SectionHeader(
+                        title: 'Goals by category',
+                        actionLabel: 'Open goals',
+                        onAction: () => unawaited(_openNamedRoute('/goalsHub')),
+                      ),
+                      if (requiredGoalGaps(goals).isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        _MissingCategoryBanner(gaps: requiredGoalGaps(goals)),
+                      ],
+                      const SizedBox(height: 12),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final columns = constraints.maxWidth >= 900
+                              ? 3
+                              : constraints.maxWidth >= 560
+                                  ? 2
+                                  : 1;
+                          return GridView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: GoalCategory.values.length,
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: columns,
+                              childAspectRatio: columns == 1 ? 2.3 : 1.55,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
                             ),
-                          ),
-                        );
-
-                        if (twoColumn) {
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(child: left),
-                              const SizedBox(width: 12),
-                              Expanded(child: right),
-                            ],
-                          );
-                        }
-
-                        return Column(
-                          children: [
-                            left,
-                            const SizedBox(height: 12),
-                            right,
-                          ],
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 18),
-                    _SectionHeader(
-                      title: 'Personal analytics',
-                      actionLabel: 'Refresh',
-                      onAction: () => unawaited(_reloadDashboard()),
-                    ),
-                    const SizedBox(height: 10),
-                    _AnalyticsCard(
-                      theme: data.theme,
-                      points: momentumPoints,
-                    ),
-                    const SizedBox(height: 18),
-                    _SectionHeader(
-                      title: 'Achievements',
-                      actionLabel: 'Add goal',
-                      onAction: () => unawaited(_openGoalForm()),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      height: 180,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemBuilder: (context, index) {
-                          final achievement = achievements[index];
-                          return _AchievementCard(
-                            theme: data.theme,
-                            achievement: achievement,
+                            itemBuilder: (context, index) {
+                              final category = GoalCategory.values[index];
+                              final stat = categoryStats[category]!;
+                              return _CategoryCard(
+                                theme: data.theme,
+                                category: category,
+                                totalGoals: stat.totalGoals,
+                                completedGoals: stat.completedGoals,
+                                score: stat.score,
+                              );
+                            },
                           );
                         },
-                        separatorBuilder: (_, __) => const SizedBox(width: 12),
-                        itemCount: achievements.length,
                       ),
-                    ),
-                    const SizedBox(height: 24),
+                      const SizedBox(height: 18),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final twoColumn = constraints.maxWidth >= 900;
+                          final left = _DeadlinesCard(
+                            theme: data.theme,
+                            goals: upcomingDeadlines.take(5).toList(),
+                            onGoalTap: _openGoalDetail,
+                          );
+                          final right = _CoachAndCheckInsCard(
+                            theme: data.theme,
+                            coach: data.coach,
+                            recentCheckIns: recentCheckIns,
+                            todayEmotion: todayEmotion.emotion,
+                            onOpenMoodTracker: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const EmotionTrackerPage(),
+                              ),
+                            ),
+                          );
+
+                          if (twoColumn) {
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(child: left),
+                                const SizedBox(width: 12),
+                                Expanded(child: right),
+                              ],
+                            );
+                          }
+
+                          return Column(
+                            children: [
+                              left,
+                              const SizedBox(height: 12),
+                              right,
+                            ],
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 18),
+                      _SectionHeader(
+                        title: 'Personal analytics',
+                        actionLabel: 'Refresh',
+                        onAction: () => unawaited(_reloadDashboard()),
+                      ),
+                      const SizedBox(height: 10),
+                      _AnalyticsCard(
+                        theme: data.theme,
+                        points: momentumPoints,
+                      ),
+                      const SizedBox(height: 18),
+                      _SectionHeader(
+                        title: 'Achievements',
+                        actionLabel: 'Add goal',
+                        onAction: () => unawaited(_openGoalForm()),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        height: 180,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemBuilder: (context, index) {
+                            final achievement = achievements[index];
+                            return _AchievementCard(
+                              theme: data.theme,
+                              achievement: achievement,
+                            );
+                          },
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(width: 12),
+                          itemCount: achievements.length,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
                   ],
                 ),
               )
             ]),
-            floatingActionButton: FloatingActionButton.extended(
-              onPressed: () => unawaited(_openGoalForm()),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('New goal'),
-            ),
+            floatingActionButton: isAbundance
+                ? null
+                : FloatingActionButton.extended(
+                    onPressed: () => unawaited(_openGoalForm()),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('New goal'),
+                  ),
           ),
         );
       },

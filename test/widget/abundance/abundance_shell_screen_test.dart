@@ -208,6 +208,28 @@ void main() {
   });
 
   testWidgets(
+      'Abundance Home does not render the legacy InnerU dashboard sections',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceShellScreen(
+        isCoach: false,
+        service: GoalsService(FakeFirebaseFirestore()),
+        uid: 'u1',
+        companyTheme: CompanyThemeData.standard.copyWith(
+          companyCode: 'ABU15DN',
+          companyName: 'Abundance',
+          isCompanyTheme: true,
+        ),
+        questsAccessResolverOverride: (_) async => true,
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Personal analytics'), findsNothing);
+    expect(find.text('New goal'), findsNothing);
+  });
+
+  testWidgets(
       'Quests tab uses GoalsHubScreen\'s own real access check when no override is supplied',
       (tester) async {
     // Bare GoalsService(), no legacy Firestore — matches how production
