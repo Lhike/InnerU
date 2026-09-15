@@ -6,6 +6,45 @@
 /// tiers.
 const String _ranksBase = 'assets/images/abundance/ranks';
 const String _scenesBase = 'assets/images/abundance/scenes';
+const String _brandBase = 'assets/images/abundance/brand';
+const String _charactersBase = 'assets/images/abundance/characters';
+const String _achievementsBase = 'assets/images/abundance/achievements';
+
+const String abundanceLogoAsset = '$_brandBase/a12-logo.png';
+const String abundanceHomeSceneAsset = '$_scenesBase/bg2.webp';
+
+const List<String> abundanceCharacterKeys = <String>[
+  'warrior',
+  'ranger',
+  'mage',
+  'healer',
+  'guardian',
+  'paladin',
+  'vanguard',
+  'rogue',
+  'sage',
+  'artificer',
+];
+
+String? abundanceCharacterAsset(String key) {
+  final normalized = key.trim().toLowerCase();
+  return abundanceCharacterKeys.contains(normalized)
+      ? '$_charactersBase/$normalized.webp'
+      : null;
+}
+
+const Map<String, String> abundanceAchievementAssets = <String, String>{
+  'first-flame': '$_achievementsBase/first-flame.png',
+  'finding-rythm': '$_achievementsBase/finding-rythm.png',
+  '30-days-strong': '$_achievementsBase/30-days-strong.png',
+  'unbroken': '$_achievementsBase/unbroken.png',
+  'discipline': '$_achievementsBase/discipline.png',
+  'finished-first': '$_achievementsBase/finished-first.png',
+  'closer': '$_achievementsBase/closer.png',
+  'quest-architect': '$_achievementsBase/quest-architect.png',
+  'high-performer': '$_achievementsBase/high-performer.png',
+  'abundance-elite': '$_achievementsBase/abundance-elite.png',
+};
 
 const Map<String, String> _rankMedalAssets = {
   'HERALD': '$_ranksBase/archon.png',
@@ -41,3 +80,13 @@ String? abundanceQuestSceneAsset(String categoryCode) =>
 /// The ambient backdrop art used behind the Quests screens (not the whole
 /// app shell — see the design spec's "Image assets" section for why).
 const String abundanceBackdropAsset = '$_scenesBase/hero-dark.webp';
+
+final List<String> abundanceExperienceAssets = <String>{
+  abundanceLogoAsset,
+  abundanceHomeSceneAsset,
+  abundanceBackdropAsset,
+  ..._rankMedalAssets.values,
+  ..._questSceneAssets.values,
+  ...abundanceCharacterKeys.map((key) => '$_charactersBase/$key.webp'),
+  ...abundanceAchievementAssets.values,
+}.toList(growable: false);

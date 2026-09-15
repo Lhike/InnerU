@@ -129,6 +129,9 @@ flutter:
     - assets/images/login-image/
     - assets/images/abundance/ranks/
     - assets/images/abundance/scenes/
+    - assets/images/abundance/brand/
+    - assets/images/abundance/characters/
+    - assets/images/abundance/achievements/
     - assets/logo/
     - assets/audio/
     - assets/videos/
@@ -137,6 +140,20 @@ flutter:
     - family: Parisienne
       fonts:
         - asset: assets/fonts/Parisienne-Regular.ttf
+    - family: AbundanceCinzel
+      fonts:
+        - asset: assets/fonts/abundance/Cinzel-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/abundance/Cinzel-Bold.ttf
+          weight: 700
+    - family: AbundanceInter
+      fonts:
+        - asset: assets/fonts/abundance/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/abundance/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/abundance/Inter-ExtraBold.ttf
+          weight: 800
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

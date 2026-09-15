@@ -48,6 +48,22 @@ void main() {
   });
 
   test('backdrop asset points at the hero-dark plate', () {
-    expect(abundanceBackdropAsset, 'assets/images/abundance/scenes/hero-dark.webp');
+    expect(abundanceBackdropAsset,
+        'assets/images/abundance/scenes/hero-dark.webp');
+  });
+
+  test('all experience assets remain in the Abundance namespace', () {
+    expect(abundanceExperienceAssets, isNotEmpty);
+    for (final path in abundanceExperienceAssets) {
+      expect(path, startsWith('assets/images/abundance/'));
+    }
+  });
+
+  test('reference home and profile assets use isolated paths', () {
+    expect(abundanceLogoAsset, 'assets/images/abundance/brand/a12-logo.png');
+    expect(abundanceHomeSceneAsset, 'assets/images/abundance/scenes/bg2.webp');
+    expect(abundanceCharacterAsset('warrior'),
+        'assets/images/abundance/characters/warrior.webp');
+    expect(abundanceCharacterAsset('../login'), isNull);
   });
 }
