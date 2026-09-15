@@ -397,7 +397,14 @@ class _AbundanceMenteeDashboardScreenState
               foregroundColor: data.theme.inkColor,
               surfaceTintColor: Colors.transparent,
               elevation: 0,
-              title: const Text('Abundance Dashboard'),
+              title: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('ABUNDANCE 12', style: AbundanceTypography.title),
+                  Text('THE GAME OF MY LIFE', style: AbundanceTypography.eyebrow),
+                ],
+              ),
               actions: [
                 IconButton(
                   icon: const Icon(Icons.refresh_rounded),
