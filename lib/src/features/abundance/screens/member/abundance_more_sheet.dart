@@ -22,7 +22,7 @@ class AbundanceMoreSheet extends StatelessWidget {
       color: AbundanceColors.surfaceRaised,
       child: SafeArea(
         top: false,
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -60,6 +60,16 @@ class AbundanceMoreSheet extends StatelessWidget {
                 trailing: const Icon(Icons.chevron_right,
                     color: AbundanceColors.muted),
                 onTap: () => onDestination('activity_logs'),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.auto_awesome_outlined,
+                    color: AbundanceColors.primaryGold),
+                title: const Text('Replay tutorial',
+                    style: AbundanceTypography.body),
+                trailing: const Icon(Icons.chevron_right,
+                    color: AbundanceColors.muted),
+                onTap: () => onDestination('tutorial'),
               ),
               ListTile(
                 contentPadding: EdgeInsets.zero,

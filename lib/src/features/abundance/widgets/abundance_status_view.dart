@@ -9,6 +9,7 @@ class AbundanceStatusView extends StatelessWidget {
     required this.message,
     required this.icon,
     this.onRetry,
+    this.actionLabel,
     this.loading = false,
   });
 
@@ -18,7 +19,14 @@ class AbundanceStatusView extends StatelessWidget {
   const AbundanceStatusView.empty({
     required String message,
     IconData icon = Icons.explore_outlined,
-  }) : this._(message: message, icon: icon);
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) : this._(
+          message: message,
+          icon: icon,
+          actionLabel: actionLabel,
+          onRetry: onAction,
+        );
 
   const AbundanceStatusView.error({
     required String message,
@@ -32,6 +40,7 @@ class AbundanceStatusView extends StatelessWidget {
   final String message;
   final IconData icon;
   final VoidCallback? onRetry;
+  final String? actionLabel;
   final bool loading;
 
   @override
@@ -61,7 +70,7 @@ class AbundanceStatusView extends StatelessWidget {
               if (onRetry != null) ...[
                 const SizedBox(height: 18),
                 AbundanceButton(
-                  label: 'Try again',
+                  label: actionLabel ?? 'Try again',
                   outlined: true,
                   onPressed: onRetry,
                 ),

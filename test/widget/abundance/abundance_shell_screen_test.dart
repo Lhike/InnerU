@@ -23,6 +23,28 @@ class _FakeCoachGoalsService extends GoalsService {
 }
 
 void main() {
+  testWidgets('direct non-Abundance construction never renders A12 chrome',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceShellScreen(
+        isCoach: false,
+        service: GoalsService(FakeFirebaseFirestore()),
+        uid: 'u1',
+        companyTheme: CompanyThemeData.standard.copyWith(
+          companyCode: 'GEN01',
+          companyName: 'General Company',
+          isCompanyTheme: true,
+        ),
+      ),
+    ));
+    await tester.pump();
+
+    expect(
+        find.byKey(const ValueKey('abundance-access-denied')), findsOneWidget);
+    expect(find.text('ABUNDANCE 12'), findsNothing);
+    expect(find.byType(BottomNavigationBar), findsNothing);
+  });
+
   testWidgets('shows the header chrome and switches tabs on tap',
       (tester) async {
     final service = GoalsService(FakeFirebaseFirestore());
@@ -358,6 +380,7 @@ void main() {
         // down to a real tab (3, Awards) instead of showing a blank screen.
         initialIndex: 4,
         questsAccessResolverOverride: (_) async => true,
+        achievementsLoaderOverride: () async => const <String>{},
       ),
     ));
     await tester.pumpAndSettle();

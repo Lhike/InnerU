@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_typography.dart';
+import 'package:selfcare_projects/src/features/abundance/widgets/abundance_button.dart';
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_card.dart';
 
 class _AwardDefinition {
@@ -32,16 +33,66 @@ const _awards = <_AwardDefinition>[
       'abundance-elite', 'Abundance Elite', 'Reach the highest standard.'),
 ];
 
-class AbundanceAchievementsScreen extends StatelessWidget {
+class AbundanceAchievementsScreen extends StatefulWidget {
   const AbundanceAchievementsScreen({
     super.key,
     this.unlockedKeys = const <String>{},
+    this.loader,
   });
 
   final Set<String> unlockedKeys;
+  final Future<Set<String>> Function()? loader;
+
+  @override
+  State<AbundanceAchievementsScreen> createState() =>
+      _AbundanceAchievementsScreenState();
+}
+
+class _AbundanceAchievementsScreenState
+    extends State<AbundanceAchievementsScreen> {
+  Future<Set<String>>? _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = widget.loader?.call();
+  }
+
+  void _retry() => setState(() => _future = widget.loader?.call());
 
   @override
   Widget build(BuildContext context) {
+    if (_future == null) return _content(widget.unlockedKeys);
+    return FutureBuilder<Set<String>>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const ColoredBox(
+            color: AbundanceColors.background,
+            child: Center(
+              child:
+                  CircularProgressIndicator(color: AbundanceColors.primaryGold),
+            ),
+          );
+        }
+        if (snapshot.hasError) {
+          return ColoredBox(
+            color: AbundanceColors.background,
+            child: Center(
+              child: AbundanceButton(
+                label: 'Try again',
+                icon: Icons.refresh,
+                onPressed: _retry,
+              ),
+            ),
+          );
+        }
+        return _content(snapshot.data ?? const <String>{});
+      },
+    );
+  }
+
+  Widget _content(Set<String> unlockedKeys) {
     final earned = _awards.where((award) => unlockedKeys.contains(award.key));
     final locked = _awards.where((award) => !unlockedKeys.contains(award.key));
     return ColoredBox(

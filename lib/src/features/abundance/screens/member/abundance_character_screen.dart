@@ -52,12 +52,22 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
   }
 
   Future<void> _select(String character) async {
+    final previous = _selected;
     setState(() => _selected = character);
-    if (widget.saveCharacter != null) {
-      await widget.saveCharacter!(widget.uid, character);
-    } else {
-      await (await SharedPreferences.getInstance())
-          .setString(_storageKey, character);
+    try {
+      if (widget.saveCharacter != null) {
+        await widget.saveCharacter!(widget.uid, character);
+      } else {
+        final saved = await (await SharedPreferences.getInstance())
+            .setString(_storageKey, character);
+        if (!saved) throw StateError('Character preference was not saved.');
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _selected = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('We could not save your character.')),
+      );
     }
   }
 

@@ -1,22 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_achievements_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_character_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_guild_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_missions_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_more_sheet.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_notifications_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_tutorial_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/coach/abundance_coach_home_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/coach/coach_quests_roster_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/abundance_mentee_dashboard_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/goals_hub_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_achievements_service.dart';
+import 'package:selfcare_projects/src/features/abundance/domain/abundance_company.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/coach_dashboard/coach_dashboard_screen.dart';
-import 'package:selfcare_projects/src/features/authentication/screen/leaderboard/leaderboard_screen.dart';
-import 'package:selfcare_projects/src/features/authentication/screen/dashboard/daily_tracker.dart';
-import 'package:selfcare_projects/src/features/authentication/screen/notifications/notifications_screen.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/coach_dashboard/coach_accountability_meetings_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/profile/profile_settings.dart';
-import 'package:selfcare_projects/src/features/authentication/screen/todo_list.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/login/login_screen.dart';
 import 'package:selfcare_projects/src/services/app_session_service.dart';
+import 'package:selfcare_projects/src/services/auth_service.dart';
 import 'package:selfcare_projects/src/services/company_theme_service.dart';
 import 'package:selfcare_projects/src/services/session_cleanup_service.dart';
 
@@ -36,6 +41,7 @@ class AbundanceShellScreen extends StatefulWidget {
     required this.companyTheme,
     this.initialIndex = 0,
     this.questsAccessResolverOverride,
+    this.achievementsLoaderOverride,
   });
 
   final bool isCoach;
@@ -64,6 +70,7 @@ class AbundanceShellScreen extends StatefulWidget {
   /// `users/{uid}` doc, which would otherwise make the real check correctly
   /// (but inconveniently, for that test) deny access.
   final Future<bool> Function(String uid)? questsAccessResolverOverride;
+  final Future<Set<String>> Function()? achievementsLoaderOverride;
 
   @override
   State<AbundanceShellScreen> createState() => _AbundanceShellScreenState();
@@ -113,7 +120,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         );
 
   Widget get _homeTabBody => widget.isCoach
-      ? const CoachDashboardScreen()
+      ? AbundanceCoachHomeScreen(onDestination: _openCoachDestination)
       : AbundanceMenteeDashboardScreen(
           initialCompanyTheme: widget.companyTheme,
           service: widget.service,
@@ -124,14 +131,19 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       case 0:
         return _homeTabBody;
       case 1:
-        return AbundanceMissionsScreen(
-          onOpenDailyMission: () => _push(const UserProgressPage()),
-          onOpenMissionPlan: () => _push(const TodoList()),
-        );
+        return const AbundanceMissionsScreen();
       case 2:
         return _questsTabBody;
       case 3:
-        return const AbundanceAchievementsScreen();
+        final override = widget.achievementsLoaderOverride;
+        if (override != null) {
+          return AbundanceAchievementsScreen(loader: override);
+        }
+        final gateway = InnerUAbundanceAchievementsGateway(
+          uid: widget.uid,
+          goals: widget.service,
+        );
+        return AbundanceAchievementsScreen(loader: gateway.load);
       default:
         return const SizedBox.shrink(); // "More" never actually renders.
     }
@@ -145,7 +157,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
     Navigator.of(context).pop();
     switch (key) {
       case 'guild':
-        await _push(const Leaderboard());
+        await _push(const AbundanceGuildScreen());
         return;
       case 'profile':
         await _push(AbundanceCharacterScreen(
@@ -154,16 +166,38 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         ));
         return;
       case 'notifications':
-        await _push(NotificationsScreen(userId: widget.uid));
+        await _push(const AbundanceNotificationsScreen());
         return;
       case 'activity_logs':
         await Navigator.of(context).pushNamed('/activityLogs');
+        return;
+      case 'tutorial':
+        await _push(AbundanceTutorialScreen(uid: widget.uid));
         return;
       case 'sign_out':
         await _confirmSignOut();
         return;
       case 'coach_students':
       case 'coach_councils':
+      case 'coach_core_tasks':
+      case 'coach_quests':
+        await _openCoachDestination(key);
+        return;
+    }
+  }
+
+  Future<void> _openCoachDestination(String key) async {
+    switch (key) {
+      case 'coach_students':
+      case 'coach_quests':
+        await _push(CoachQuestsRosterScreen(
+          service: widget.service,
+          coachUid: widget.uid,
+        ));
+        return;
+      case 'coach_councils':
+        await _push(const CoachAccountabilityMeetingsScreen());
+        return;
       case 'coach_core_tasks':
         await _push(const CoachDashboardScreen());
         return;
@@ -226,6 +260,19 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
     // not a tab body, so landing on it would show an empty SizedBox.shrink().
     _index = widget.initialIndex.clamp(0, 3);
     _ensureBuilt(_index);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showFirstRunGuide());
+  }
+
+  Future<void> _showFirstRunGuide() async {
+    final session = AuthService.instance.currentSession;
+    if (session == null || session.id.toString() != widget.uid) return;
+    final preferences = await SharedPreferences.getInstance();
+    final completed = preferences.getBool(
+          AbundanceTutorialScreen.completionKey(widget.uid),
+        ) ??
+        false;
+    if (!mounted || completed) return;
+    await _push(AbundanceTutorialScreen(uid: widget.uid));
   }
 
   void _onTabTapped(int newIndex) {
@@ -262,7 +309,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         IconButton(
           icon: const Icon(Icons.notifications_none,
               color: AbundanceColors.foreground),
-          onPressed: () => _push(NotificationsScreen(userId: widget.uid)),
+          onPressed: () => _push(const AbundanceNotificationsScreen()),
         ),
         const SizedBox(width: 8),
       ],
@@ -271,27 +318,41 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!AbundanceCompany.matches(
+      widget.companyTheme.companyCode,
+      widget.companyTheme.companyName,
+    )) {
+      return const Scaffold(
+        key: ValueKey('abundance-access-denied'),
+        body: Center(
+          child: Text('This company does not have access to Abundance 12.'),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: AbundanceColors.background,
       // The dashboard owns its AppBar. All other in-shell pages use the
       // shared branded header, avoiding stacked headers.
       appBar: _index == 0 ? null : _buildShellHeader(),
       body: IndexedStack(index: _index, children: _builtTabs),
-      bottomNavigationBar: BottomNavigationBar(
-        key: const ValueKey('abundance-primary-navigation'),
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: AbundanceColors.surfaceRaised,
-        selectedItemColor: AbundanceColors.primaryGold,
-        unselectedItemColor: AbundanceColors.muted,
-        currentIndex: _index,
-        onTap: _onTabTapped,
-        items: [
-          for (var i = 0; i < _tabLabels.length; i++)
-            BottomNavigationBarItem(
-              icon: Icon(_tabIcons[i]),
-              label: _tabLabels[i],
-            ),
-        ],
+      bottomNavigationBar: Semantics(
+        label: 'Abundance primary navigation',
+        child: BottomNavigationBar(
+          key: const ValueKey('abundance-primary-navigation'),
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: AbundanceColors.surfaceRaised,
+          selectedItemColor: AbundanceColors.primaryGold,
+          unselectedItemColor: AbundanceColors.muted,
+          currentIndex: _index,
+          onTap: _onTabTapped,
+          items: [
+            for (var i = 0; i < _tabLabels.length; i++)
+              BottomNavigationBarItem(
+                icon: Icon(_tabIcons[i]),
+                label: _tabLabels[i],
+              ),
+          ],
+        ),
       ),
     );
   }
