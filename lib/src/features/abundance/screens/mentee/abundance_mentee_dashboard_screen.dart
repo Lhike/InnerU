@@ -9,13 +9,20 @@ import 'package:selfcare_projects/src/features/abundance/domain/abundance_compan
 import 'package:selfcare_projects/src/features/abundance/domain/day_keys.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/domain.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/scoring.dart';
+import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.dart';
+import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
+import 'package:selfcare_projects/src/features/abundance/theme/abundance_typography.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/goal_detail_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/goal_form_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_missions_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/dashboard/emotion_tracker.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/todo_list.dart'
+    as todo;
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/UsersData/user_service.dart';
 import 'package:selfcare_projects/src/services/coach_api_service.dart';
 import 'package:selfcare_projects/src/services/daily_tracker_api_service.dart';
+import 'package:selfcare_projects/src/services/todo_task_api_service.dart';
 import 'package:selfcare_projects/src/services/emotion_service.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
 import 'package:selfcare_projects/src/services/company_membership_service.dart';
@@ -98,6 +105,16 @@ class _AbundanceMenteeDashboardScreenState
     final goals = await _service.watchGoals(userId).first;
     final trackerDocs = await DailyTrackerApiService.instance.fetchHistory();
     final emotionDocs = await EmotionService().fetchHistory();
+    List<todo.Task> tasks = const <todo.Task>[];
+    try {
+      tasks = (await TodoTaskApiService.instance.fetchTasks())
+          .map(todo.Task.fromJson)
+          .where((task) => task.goalType == todo.GoalType.everyday)
+          .toList(growable: false);
+    } catch (_) {
+      // The dashboard can still render its goal and progress sections if the
+      // optional mission endpoint is temporarily unavailable.
+    }
 
     final coach = await _loadCoachProfile();
 
@@ -123,6 +140,7 @@ class _AbundanceMenteeDashboardScreenState
       goals: goals,
       dailyLogs: dailyLogs,
       emotionLogs: emotionLogs,
+      tasks: tasks,
       userId: userId,
     );
   }
@@ -415,8 +433,42 @@ class _AbundanceMenteeDashboardScreenState
             body: RefreshIndicator(
               onRefresh: _reloadDashboard,
               child: ListView(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                 children: [
+                  _A12HomeHero(
+                    displayName: data.displayName,
+                    rank: rank,
+                    score: goalTotalScore,
+                    profilePic: data.profilePic,
+                  ),
+                  const SizedBox(height: 16),
+                  _A12MissionPanel(
+                    tasks: data.tasks,
+                    selectedDay: DateUtils.dateOnly(DateTime.now()),
+                    onOpenMissions: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const AbundanceMissionsScreen(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _A12GoalsPanel(
+                    goals: goals,
+                    onOpenGoals: () => unawaited(_openNamedRoute('/goalsHub')),
+                    onGoalTap: _openGoalDetail,
+                  ),
+                  const SizedBox(height: 16),
+                  _A12AchievementShelf(
+                    achievements: achievements,
+                    onOpenAwards: () =>
+                        unawaited(_openNamedRoute('/achievements')),
+                  ),
+                  const SizedBox(height: 16),
+                  const _A12HomeQuote(),
+                  const SizedBox(height: 18),
+                  // Keep the existing data-backed analytics and support
+                  // cards below the reference layout for users who need the
+                  // richer InnerU detail view.
                   _HeroCard(
                     theme: data.theme,
                     companyName: data.companyName,
@@ -681,6 +733,290 @@ class _AbundanceMenteeDashboardScreenState
   }
 }
 
+class _A12HomeHero extends StatelessWidget {
+  const _A12HomeHero({
+    required this.displayName,
+    required this.rank,
+    required this.score,
+    required this.profilePic,
+  });
+
+  final String displayName;
+  final GoalRank rank;
+  final double score;
+  final String profilePic;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = score.clamp(0, 100).toDouble() / 100;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Image.asset(abundanceHomeSceneAsset, fit: BoxFit.cover),
+          ),
+          Positioned.fill(
+            child: ColoredBox(
+                color: AbundanceColors.background.withValues(alpha: .62)),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('WELCOME BACK',
+                          style: AbundanceTypography.eyebrow),
+                      const SizedBox(height: 5),
+                      Text(displayName, style: AbundanceTypography.display),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Image.asset(abundanceRankMedalAsset(rank.key),
+                              width: 48, height: 48),
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(rank.name.toUpperCase(),
+                                  style: AbundanceTypography.title.copyWith(
+                                      color: AbundanceColors.primaryGold)),
+                              Text('LEVEL ${rank.min ~/ 10 + 1}',
+                                  style: AbundanceTypography.eyebrow),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                          'You hold ${rank.name}, the rank your Life Power has earned.',
+                          style: AbundanceTypography.body
+                              .copyWith(color: AbundanceColors.muted)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 92,
+                  child: Column(
+                    children: [
+                      SizedBox(
+                        width: 84,
+                        height: 84,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            CircularProgressIndicator(
+                                value: progress,
+                                strokeWidth: 7,
+                                backgroundColor: AbundanceColors.border,
+                                valueColor: const AlwaysStoppedAnimation(
+                                    AbundanceColors.accentCyan)),
+                            Text('${score.round()}%',
+                                style: AbundanceTypography.title),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      const Text('LIFE POWER',
+                          style: AbundanceTypography.eyebrow,
+                          textAlign: TextAlign.center),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _A12MissionPanel extends StatelessWidget {
+  const _A12MissionPanel(
+      {required this.tasks,
+      required this.selectedDay,
+      required this.onOpenMissions});
+  final List<todo.Task> tasks;
+  final DateTime selectedDay;
+  final VoidCallback onOpenMissions;
+
+  @override
+  Widget build(BuildContext context) {
+    final today = tasks
+        .where((task) => todo.taskOccursOnDate(task, selectedDay))
+        .toList(growable: false);
+    return _A12Panel(
+      title: "TODAY'S MISSION",
+      action: 'VIEW ALL',
+      onAction: onOpenMissions,
+      child: today.isEmpty
+          ? Text('Your daily mission is empty.',
+              style: AbundanceTypography.body
+                  .copyWith(color: AbundanceColors.muted))
+          : Column(
+              children: [
+                for (final task in today)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                        task.isCompleted
+                            ? Icons.check_circle
+                            : Icons.circle_outlined,
+                        color: task.isCompleted
+                            ? AbundanceColors.scoreExcellent
+                            : AbundanceColors.accentCyan),
+                    title: Text(task.title,
+                        style: AbundanceTypography.title.copyWith(
+                            decoration: task.isCompleted
+                                ? TextDecoration.lineThrough
+                                : null)),
+                    subtitle: task.scheduledTime == null
+                        ? null
+                        : Text('Scheduled ${task.scheduledTime}',
+                            style: AbundanceTypography.body
+                                .copyWith(color: AbundanceColors.muted)),
+                    trailing: const Text('+10 XP',
+                        style: AbundanceTypography.eyebrow),
+                    onTap: onOpenMissions,
+                  ),
+              ],
+            ),
+    );
+  }
+}
+
+class _A12GoalsPanel extends StatelessWidget {
+  const _A12GoalsPanel(
+      {required this.goals,
+      required this.onOpenGoals,
+      required this.onGoalTap});
+  final List<GoalSummary> goals;
+  final VoidCallback onOpenGoals;
+  final Future<void> Function(GoalSummary) onGoalTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = goals.take(3).toList(growable: false);
+    return _A12Panel(
+      title: 'GOALS',
+      action: 'VIEW ALL',
+      onAction: onOpenGoals,
+      child: visible.isEmpty
+          ? Text('Your quests appear here after onboarding.',
+              style: AbundanceTypography.body
+                  .copyWith(color: AbundanceColors.muted))
+          : Column(
+              children: [
+                for (final goal in visible)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(goal.title, style: AbundanceTypography.title),
+                    subtitle: Text(
+                        '${goal.category.label} · ${goal.progress}% complete',
+                        style: AbundanceTypography.body
+                            .copyWith(color: AbundanceColors.muted)),
+                    trailing: SizedBox(
+                        width: 56,
+                        child: LinearProgressIndicator(
+                            value: goal.progress / 100,
+                            color: AbundanceColors.categoryColor(
+                                goal.category.code),
+                            backgroundColor: AbundanceColors.border)),
+                    onTap: () => onGoalTap(goal),
+                  ),
+              ],
+            ),
+    );
+  }
+}
+
+class _A12AchievementShelf extends StatelessWidget {
+  const _A12AchievementShelf(
+      {required this.achievements, required this.onOpenAwards});
+  final List<_Achievement> achievements;
+  final VoidCallback onOpenAwards;
+
+  @override
+  Widget build(BuildContext context) => _A12Panel(
+        title: 'ACHIEVEMENTS',
+        action: 'VIEW ALL',
+        onAction: onOpenAwards,
+        child: SizedBox(
+          height: 112,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: achievements.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            itemBuilder: (_, index) {
+              final item = achievements[index];
+              return SizedBox(
+                width: 84,
+                child: Column(
+                  children: [
+                    Icon(item.icon,
+                        size: 42,
+                        color: item.unlocked
+                            ? AbundanceColors.primaryGold
+                            : AbundanceColors.muted),
+                    const SizedBox(height: 6),
+                    Text(item.title,
+                        maxLines: 2,
+                        textAlign: TextAlign.center,
+                        style: AbundanceTypography.eyebrow),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      );
+}
+
+class _A12HomeQuote extends StatelessWidget {
+  const _A12HomeQuote();
+  @override
+  Widget build(BuildContext context) => _A12Panel(
+        title: 'THE GAME OF MY LIFE',
+        child: Text(
+          'THE KINGDOM OF YOUR LIFE IS NOT GIVEN TO YOU. IT IS BUILT BY YOUR DAILY CHOICES.',
+          style: AbundanceTypography.body
+              .copyWith(color: AbundanceColors.primaryGold, height: 1.5),
+        ),
+      );
+}
+
+class _A12Panel extends StatelessWidget {
+  const _A12Panel(
+      {required this.title, required this.child, this.action, this.onAction});
+  final String title;
+  final String? action;
+  final VoidCallback? onAction;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+            color: AbundanceColors.surfaceRaised,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AbundanceColors.border)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: Text(title, style: AbundanceTypography.eyebrow)),
+            if (action != null)
+              TextButton(onPressed: onAction, child: Text(action!))
+          ]),
+          const SizedBox(height: 6),
+          child,
+        ]),
+      );
+}
+
 class _DashboardData {
   const _DashboardData({
     required this.allowed,
@@ -694,6 +1030,7 @@ class _DashboardData {
     required this.goals,
     required this.dailyLogs,
     required this.emotionLogs,
+    required this.tasks,
     required this.userId,
   });
 
@@ -708,6 +1045,7 @@ class _DashboardData {
         goals = const <GoalSummary>[],
         dailyLogs = const <_DailyLog>[],
         emotionLogs = const <_EmotionLog>[],
+        tasks = const <todo.Task>[],
         userId = '';
 
   final bool allowed;
@@ -721,6 +1059,7 @@ class _DashboardData {
   final List<GoalSummary> goals;
   final List<_DailyLog> dailyLogs;
   final List<_EmotionLog> emotionLogs;
+  final List<todo.Task> tasks;
   final String userId;
 }
 
