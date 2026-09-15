@@ -60,6 +60,14 @@ class _AbundanceAchievementsScreenState
 
   void _retry() => setState(() => _future = widget.loader?.call());
 
+  Future<void> _refresh() async {
+    final loader = widget.loader;
+    if (loader == null) return;
+    final future = loader();
+    setState(() => _future = future);
+    await future;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_future == null) return _content(widget.unlockedKeys);
@@ -95,32 +103,36 @@ class _AbundanceAchievementsScreenState
   Widget _content(Set<String> unlockedKeys) {
     final earned = _awards.where((award) => unlockedKeys.contains(award.key));
     final locked = _awards.where((award) => !unlockedKeys.contains(award.key));
+    final list = ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+      children: [
+        const Text('ACHIEVEMENTS', style: AbundanceTypography.eyebrow),
+        const SizedBox(height: 6),
+        const Text('Your legacy', style: AbundanceTypography.display),
+        const SizedBox(height: 8),
+        Text(
+          '${earned.length} of ${_awards.length} earned',
+          style:
+              AbundanceTypography.body.copyWith(color: AbundanceColors.muted),
+        ),
+        const SizedBox(height: 22),
+        if (earned.isNotEmpty) ...[
+          const Text('EARNED', style: AbundanceTypography.eyebrow),
+          const SizedBox(height: 10),
+          ...earned.map((award) => _AwardCard(award: award, unlocked: true)),
+          const SizedBox(height: 18),
+        ],
+        const Text('LOCKED', style: AbundanceTypography.eyebrow),
+        const SizedBox(height: 10),
+        ...locked.map((award) => _AwardCard(award: award, unlocked: false)),
+      ],
+    );
     return ColoredBox(
       color: AbundanceColors.background,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-        children: [
-          const Text('ACHIEVEMENTS', style: AbundanceTypography.eyebrow),
-          const SizedBox(height: 6),
-          const Text('Your legacy', style: AbundanceTypography.display),
-          const SizedBox(height: 8),
-          Text(
-            '${earned.length} of ${_awards.length} earned',
-            style:
-                AbundanceTypography.body.copyWith(color: AbundanceColors.muted),
-          ),
-          const SizedBox(height: 22),
-          if (earned.isNotEmpty) ...[
-            const Text('EARNED', style: AbundanceTypography.eyebrow),
-            const SizedBox(height: 10),
-            ...earned.map((award) => _AwardCard(award: award, unlocked: true)),
-            const SizedBox(height: 18),
-          ],
-          const Text('LOCKED', style: AbundanceTypography.eyebrow),
-          const SizedBox(height: 10),
-          ...locked.map((award) => _AwardCard(award: award, unlocked: false)),
-        ],
-      ),
+      child: widget.loader == null
+          ? list
+          : RefreshIndicator(onRefresh: _refresh, child: list),
     );
   }
 }

@@ -1,9 +1,12 @@
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/abundance_shell_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
 import 'package:selfcare_projects/src/services/company_theme_service.dart';
+import 'package:selfcare_projects/src/services/app_session_service.dart';
 
 /// [GoalsService.fetchCoachGoalsRoster] always calls the real network API —
 /// unlike `watchGoals` (used by the mentee Quests tab), it has no
@@ -23,6 +26,11 @@ class _FakeCoachGoalsService extends GoalsService {
 }
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    FlutterSecureStorage.setMockInitialValues(<String, String>{});
+  });
+
   testWidgets('direct non-Abundance construction never renders A12 chrome',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
@@ -43,6 +51,38 @@ void main() {
         find.byKey(const ValueKey('abundance-access-denied')), findsOneWidget);
     expect(find.text('ABUNDANCE 12'), findsNothing);
     expect(find.byType(BottomNavigationBar), findsNothing);
+  });
+
+  testWidgets('authenticated non-Abundance direct route cannot open tutorial',
+      (tester) async {
+    await AppSessionService.instance.setSession(const AppSession(
+      id: 99,
+      token: 'test-token',
+      name: 'Standard User',
+      email: 'standard@example.test',
+      role: 'user',
+      isCoach: false,
+      companyCode: 'GEN01',
+      companyName: 'General Company',
+    ));
+    addTearDown(() async => AppSessionService.instance.clear());
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceShellScreen(
+        isCoach: false,
+        service: GoalsService(FakeFirebaseFirestore()),
+        uid: '99',
+        companyTheme: CompanyThemeData.standard.copyWith(
+          companyCode: 'GEN01',
+          companyName: 'General Company',
+          isCompanyTheme: true,
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(
+        find.byKey(const ValueKey('abundance-access-denied')), findsOneWidget);
+    expect(find.text('WELCOME TO ABUNDANCE 12'), findsNothing);
   });
 
   testWidgets('shows the header chrome and switches tabs on tap',
@@ -389,5 +429,44 @@ void main() {
       find.byType(BottomNavigationBar),
     );
     expect(nav.currentIndex, 3);
+  });
+
+  testWidgets('revisiting Awards reloads progress earned in other tabs',
+      (tester) async {
+    var loads = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceShellScreen(
+        isCoach: false,
+        service: GoalsService(FakeFirebaseFirestore()),
+        uid: 'u1',
+        companyTheme: CompanyThemeData.standard.copyWith(
+          companyCode: 'ABU15DN',
+          companyName: 'Abundance',
+          isCompanyTheme: true,
+        ),
+        initialIndex: 3,
+        achievementsLoaderOverride: () async {
+          loads++;
+          return const <String>{};
+        },
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(loads, 1);
+
+    final navigation = find.byKey(
+      const ValueKey('abundance-primary-navigation'),
+    );
+    await tester.tap(find.descendant(
+      of: navigation,
+      matching: find.byIcon(Icons.home_outlined),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.descendant(
+      of: navigation,
+      matching: find.byIcon(Icons.workspace_premium_outlined),
+    ));
+    await tester.pumpAndSettle();
+    expect(loads, 2);
   });
 }

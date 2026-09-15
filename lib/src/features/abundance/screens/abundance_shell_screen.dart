@@ -9,6 +9,7 @@ import 'package:selfcare_projects/src/features/abundance/screens/member/abundanc
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_notifications_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_tutorial_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/coach/abundance_coach_home_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/coach/abundance_coach_management_screens.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/coach/coach_quests_roster_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/abundance_mentee_dashboard_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/goals_hub_screen.dart';
@@ -137,13 +138,19 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       case 3:
         final override = widget.achievementsLoaderOverride;
         if (override != null) {
-          return AbundanceAchievementsScreen(loader: override);
+          return AbundanceAchievementsScreen(
+            key: UniqueKey(),
+            loader: override,
+          );
         }
         final gateway = InnerUAbundanceAchievementsGateway(
           uid: widget.uid,
           goals: widget.service,
         );
-        return AbundanceAchievementsScreen(loader: gateway.load);
+        return AbundanceAchievementsScreen(
+          key: UniqueKey(),
+          loader: gateway.load,
+        );
       default:
         return const SizedBox.shrink(); // "More" never actually renders.
     }
@@ -189,17 +196,25 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   Future<void> _openCoachDestination(String key) async {
     switch (key) {
       case 'coach_students':
+        await _push(AbundanceCoachStudentsScreen(
+          onOpenManagement: () => _push(const CoachDashboardScreen()),
+        ));
+        return;
+      case 'coach_councils':
+        await _push(AbundanceCoachCouncilsScreen(
+          onOpenMeetings: () => _push(
+            const CoachAccountabilityMeetingsScreen(),
+          ),
+        ));
+        return;
+      case 'coach_core_tasks':
+        await _push(const AbundanceCoachCoreTasksScreen());
+        return;
       case 'coach_quests':
         await _push(CoachQuestsRosterScreen(
           service: widget.service,
           coachUid: widget.uid,
         ));
-        return;
-      case 'coach_councils':
-        await _push(const CoachAccountabilityMeetingsScreen());
-        return;
-      case 'coach_core_tasks':
-        await _push(const CoachDashboardScreen());
         return;
     }
   }
@@ -264,6 +279,12 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   }
 
   Future<void> _showFirstRunGuide() async {
+    if (!AbundanceCompany.matches(
+      widget.companyTheme.companyCode,
+      widget.companyTheme.companyName,
+    )) {
+      return;
+    }
     final session = AuthService.instance.currentSession;
     if (session == null || session.id.toString() != widget.uid) return;
     final preferences = await SharedPreferences.getInstance();
@@ -282,6 +303,9 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
     }
     setState(() {
       _index = newIndex;
+      if (newIndex == 3 && _visited.contains(3)) {
+        _builtTabs[3] = _tabBodyFor(3);
+      }
       _ensureBuilt(newIndex);
     });
   }

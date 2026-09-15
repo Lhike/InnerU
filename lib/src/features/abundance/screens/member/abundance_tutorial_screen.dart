@@ -52,11 +52,21 @@ class _AbundanceTutorialScreenState extends State<AbundanceTutorialScreen> {
   ];
 
   Future<void> _finish() async {
-    if (widget.saveCompletion != null) {
-      await widget.saveCompletion!(widget.uid);
-    } else {
-      await (await SharedPreferences.getInstance())
-          .setBool(AbundanceTutorialScreen.completionKey(widget.uid), true);
+    try {
+      if (widget.saveCompletion != null) {
+        await widget.saveCompletion!(widget.uid);
+      } else {
+        final saved = await (await SharedPreferences.getInstance())
+            .setBool(AbundanceTutorialScreen.completionKey(widget.uid), true);
+        if (!saved) throw StateError('Tutorial preference was not saved.');
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Your tutorial progress could not be saved.'),
+        ),
+      );
     }
     if (!mounted) return;
     final navigator = Navigator.of(context);

@@ -158,6 +158,28 @@ void main() {
       );
       expect(shell.initialIndex, 0);
     });
+
+    testWidgets('active-company switching rebuilds the correct shell both ways',
+        (tester) async {
+      Widget app(CompanyThemeData theme) => MaterialApp(
+            home: Setuppage(initialIndex: 3, initialCompanyTheme: theme),
+          );
+
+      await tester.pumpWidget(app(_abundanceTheme()));
+      await tester.pump();
+      expect(find.byType(AbundanceShellScreen), findsOneWidget);
+      expect(find.byType(CurvedNavigationBar), findsNothing);
+
+      await tester.pumpWidget(app(CompanyThemeData.standard));
+      await tester.pumpAndSettle();
+      expect(find.byType(AbundanceShellScreen), findsNothing);
+      expect(find.byType(CurvedNavigationBar), findsOneWidget);
+
+      await tester.pumpWidget(app(_abundanceTheme()));
+      await tester.pump();
+      expect(find.byType(AbundanceShellScreen), findsOneWidget);
+      expect(find.byType(CurvedNavigationBar), findsNothing);
+    });
   });
 
   group('CoachSetuppage', () {
@@ -175,13 +197,6 @@ void main() {
         find.byType(AbundanceShellScreen),
       );
 
-      // The coach shell's Home tab is CoachDashboardScreen, which touches
-      // FirebaseFirestore.instance in a State field initializer and throws
-      // with no live Firebase app. That is a pre-existing limitation already
-      // documented in abundance_shell_screen_test.dart, and it is downstream
-      // of the branch under test here — drain the errors it raises so this
-      // test reports on the gating decision only.
-      while (tester.takeException() != null) {}
       // The coach flavour of the shell, not the mentee one — this is the bit
       // that decides whether the Quests tab shows the coach roster or the
       // mentee hub.

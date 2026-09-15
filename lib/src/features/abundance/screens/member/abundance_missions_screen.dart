@@ -10,10 +10,16 @@ import 'package:selfcare_projects/src/features/abundance/widgets/abundance_statu
 import 'package:selfcare_projects/src/features/authentication/screen/todo_list.dart';
 
 class AbundanceMissionsScreen extends StatefulWidget {
-  const AbundanceMissionsScreen({super.key, this.gateway, this.initialDate});
+  const AbundanceMissionsScreen({
+    super.key,
+    this.gateway,
+    this.initialDate,
+    this.today,
+  });
 
   final AbundanceMissionsGateway? gateway;
   final DateTime? initialDate;
+  final DateTime? today;
 
   @override
   State<AbundanceMissionsScreen> createState() =>
@@ -51,7 +57,9 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
   }
 
   List<Task> get _visible => _tasks
-      .where((task) => taskOccursOnDate(task, _selected))
+      .where((task) =>
+          task.goalType == GoalType.everyday &&
+          taskOccursOnDate(task, _selected))
       .toList(growable: false);
 
   bool _completed(Task task) => task.goalType == GoalType.everyday
@@ -84,65 +92,213 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
     }
   }
 
-  Future<void> _createMission() async {
-    final controller = TextEditingController();
-    final title = await showModalBottomSheet<String>(
+  Future<void> _openEditor([Task? existing]) async {
+    final titleController = TextEditingController(text: existing?.title ?? '');
+    final descriptionController =
+        TextEditingController(text: existing?.description ?? '');
+    var tag = existing?.tag ?? TaskTag.none;
+    var startDate = DateUtils.dateOnly(existing?.startDate ?? _selected);
+    var dueDate = DateUtils.dateOnly(
+      existing?.dueDate ?? _selected.add(const Duration(days: 29)),
+    );
+    final draft = await showModalBottomSheet<_MissionDraft>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AbundanceColors.surfaceRaised,
-      builder: (sheetContext) => Padding(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          20,
-          20,
-          MediaQuery.viewInsetsOf(sheetContext).bottom + 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('CREATE MISSION', style: AbundanceTypography.title),
-            const SizedBox(height: 14),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              style: AbundanceTypography.body,
-              decoration: const InputDecoration(
-                labelText: 'What will you do?',
-                labelStyle: TextStyle(color: AbundanceColors.muted),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            MediaQuery.viewInsetsOf(sheetContext).bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                existing == null ? 'CREATE MISSION' : 'EDIT MISSION',
+                style: AbundanceTypography.title,
               ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: AbundanceButton(
-                label: 'Create mission',
-                onPressed: () {
-                  final value = controller.text.trim();
-                  if (value.isNotEmpty) Navigator.pop(sheetContext, value);
+              const SizedBox(height: 14),
+              TextField(
+                key: const ValueKey('mission-title-field'),
+                controller: titleController,
+                autofocus: true,
+                maxLength: 120,
+                style: AbundanceTypography.body,
+                decoration: const InputDecoration(
+                  labelText: 'Mission name',
+                  labelStyle: TextStyle(color: AbundanceColors.muted),
+                ),
+              ),
+              TextField(
+                controller: descriptionController,
+                maxLength: 1000,
+                minLines: 2,
+                maxLines: 4,
+                style: AbundanceTypography.body,
+                decoration: const InputDecoration(
+                  labelText: 'Description (optional)',
+                  labelStyle: TextStyle(color: AbundanceColors.muted),
+                ),
+              ),
+              DropdownButtonFormField<TaskTag>(
+                initialValue: tag,
+                dropdownColor: AbundanceColors.surfaceRaised,
+                style: AbundanceTypography.body,
+                decoration: const InputDecoration(labelText: 'Category'),
+                items: TaskTag.values
+                    .map((value) => DropdownMenuItem<TaskTag>(
+                          value: value,
+                          child: Text(value.displayName),
+                        ))
+                    .toList(growable: false),
+                onChanged: (value) {
+                  if (value != null) setSheetState(() => tag = value);
                 },
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        final value = await showDatePicker(
+                          context: sheetContext,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2100),
+                          initialDate: startDate,
+                        );
+                        if (value != null) {
+                          setSheetState(() {
+                            startDate = value;
+                            if (dueDate.isBefore(value)) dueDate = value;
+                          });
+                        }
+                      },
+                      icon: const Icon(Icons.calendar_today_outlined),
+                      label: Text(DateFormat('MMM d').format(startDate)),
+                    ),
+                  ),
+                  Expanded(
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        final value = await showDatePicker(
+                          context: sheetContext,
+                          firstDate: startDate,
+                          lastDate: DateTime(2100),
+                          initialDate:
+                              dueDate.isBefore(startDate) ? startDate : dueDate,
+                        );
+                        if (value != null) {
+                          setSheetState(() => dueDate = value);
+                        }
+                      },
+                      icon: const Icon(Icons.event_available_outlined),
+                      label: Text(DateFormat('MMM d').format(dueDate)),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: AbundanceButton(
+                  label: existing == null ? 'Create mission' : 'Save mission',
+                  onPressed: () {
+                    final title = titleController.text.trim();
+                    if (title.isEmpty) return;
+                    Navigator.pop(
+                      sheetContext,
+                      _MissionDraft(
+                        title: title,
+                        description: descriptionController.text.trim(),
+                        tag: tag,
+                        startDate: startDate,
+                        dueDate: dueDate,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
-    controller.dispose();
-    if (title == null || !mounted) return;
+    // The modal Future resolves when pop begins; keep field controllers alive
+    // until the reverse transition has detached its editable widgets.
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    titleController.dispose();
+    descriptionController.dispose();
+    if (draft == null || !mounted) return;
     final task = Task(
-      id: '',
-      title: title,
+      id: existing?.id ?? '',
+      title: draft.title,
+      description: draft.description,
       goalType: GoalType.everyday,
-      startDate: _selected,
-      dueDate: _selected.add(const Duration(days: 29)),
+      startDate: draft.startDate,
+      dueDate: draft.dueDate,
+      tag: draft.tag,
+      isCompleted: existing?.isCompleted ?? false,
+      createdAt: existing?.createdAt,
+      updatedAt: existing?.updatedAt,
+      completedAt: existing?.completedAt,
+      completionDates: existing?.completionDates,
+      subTasks: existing?.subTasks,
     );
     try {
-      await _gateway.create(task);
-      if (mounted) setState(() => _tasks = [..._tasks, task]);
+      if (existing == null) {
+        await _gateway.create(task);
+        if (mounted) setState(() => _tasks = [..._tasks, task]);
+      } else {
+        await _gateway.update(task);
+        if (!mounted) return;
+        final index = _tasks.indexOf(existing);
+        if (index >= 0) setState(() => _tasks[index] = task);
+      }
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('We could not create that mission.')),
+        SnackBar(
+          content: Text(existing == null
+              ? 'We could not create that mission.'
+              : 'We could not save that mission.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteMission(Task task) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete mission?'),
+        content: Text('Remove "${task.title}" and its completion history?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final previous = _tasks;
+    setState(() => _tasks = _tasks.where((item) => item != task).toList());
+    try {
+      await _gateway.delete(task.id);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _tasks = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('We could not delete that mission.')),
       );
     }
   }
@@ -194,7 +350,7 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
                 ),
                 IconButton.filled(
                   tooltip: 'Create mission',
-                  onPressed: _createMission,
+                  onPressed: _openEditor,
                   icon: const Icon(Icons.add),
                 ),
               ],
@@ -215,7 +371,7 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
       return AbundanceStatusView.empty(
         message: 'No missions are scheduled for this day.',
         actionLabel: 'Create mission',
-        onAction: _createMission,
+        onAction: _openEditor,
       );
     }
     return RefreshIndicator(
@@ -226,18 +382,26 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
         separatorBuilder: (_, __) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
           final task = _visible[index];
+          final enabled = taskCalendarDayIsEnabled(
+            task,
+            _selected,
+            today: widget.today,
+          );
           return AbundanceCard(
             child: Row(
               children: [
                 Semantics(
                   label: 'Complete ${task.title}',
                   checked: _completed(task),
-                  onTap: () => _toggle(task, !_completed(task)),
+                  onTap:
+                      enabled ? () => _toggle(task, !_completed(task)) : null,
                   child: ExcludeSemantics(
                     child: Checkbox(
                       value: _completed(task),
                       activeColor: AbundanceColors.primaryGold,
-                      onChanged: (value) => _toggle(task, value ?? false),
+                      onChanged: enabled
+                          ? (value) => _toggle(task, value ?? false)
+                          : null,
                     ),
                   ),
                 ),
@@ -255,6 +419,17 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
                   ),
                 ),
                 const Text('+10 XP', style: AbundanceTypography.eyebrow),
+                PopupMenuButton<String>(
+                  iconColor: AbundanceColors.muted,
+                  onSelected: (value) {
+                    if (value == 'edit') _openEditor(task);
+                    if (value == 'delete') _deleteMission(task);
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'edit', child: Text('Edit')),
+                    PopupMenuItem(value: 'delete', child: Text('Delete')),
+                  ],
+                ),
               ],
             ),
           );
@@ -262,4 +437,20 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
       ),
     );
   }
+}
+
+class _MissionDraft {
+  const _MissionDraft({
+    required this.title,
+    required this.description,
+    required this.tag,
+    required this.startDate,
+    required this.dueDate,
+  });
+
+  final String title;
+  final String description;
+  final TaskTag tag;
+  final DateTime startDate;
+  final DateTime dueDate;
 }

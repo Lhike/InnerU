@@ -13,7 +13,13 @@ import 'package:selfcare_projects/src/features/abundance/services/goals_service.
 import 'package:selfcare_projects/src/features/authentication/screen/todo_list.dart';
 
 class _FakeMissionsGateway implements AbundanceMissionsGateway {
-  _FakeMissionsGateway({this.failCompletion = false});
+  _FakeMissionsGateway({this.failCompletion = false, List<Task>? seed}) {
+    if (seed != null) {
+      tasks
+        ..clear()
+        ..addAll(seed);
+    }
+  }
   final bool failCompletion;
   final tasks = <Task>[
     Task(
@@ -73,6 +79,69 @@ void main() {
     expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isFalse);
     expect(find.text('We could not update that mission.'), findsOneWidget);
     semantics.dispose();
+  });
+
+  testWidgets('missions exclude long-term goals and disable future completion',
+      (tester) async {
+    final gateway = _FakeMissionsGateway(seed: <Task>[
+      Task(
+        id: 'daily',
+        title: 'Daily practice',
+        goalType: GoalType.everyday,
+        startDate: DateTime(2026, 9, 1),
+        dueDate: DateTime(2026, 9, 30),
+      ),
+      Task(
+        id: 'quest',
+        title: 'Long-term quest',
+        goalType: GoalType.longTerm,
+        startDate: DateTime(2026, 9, 1),
+        dueDate: DateTime(2026, 9, 30),
+      ),
+    ]);
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceMissionsScreen(
+        gateway: gateway,
+        initialDate: DateTime(2026, 9, 16),
+        today: DateTime(2026, 9, 15),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Daily practice'), findsOneWidget);
+    expect(find.text('Long-term quest'), findsNothing);
+    expect(tester.widget<Checkbox>(find.byType(Checkbox)).onChanged, isNull);
+  });
+
+  testWidgets('mission menu edits and deletes through the gateway',
+      (tester) async {
+    final gateway = _FakeMissionsGateway();
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceMissionsScreen(
+        gateway: gateway,
+        initialDate: DateTime(2026, 9, 15),
+        today: DateTime(2026, 9, 15),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
+    final titleField = find.byKey(const ValueKey('mission-title-field'));
+    await tester.enterText(titleField, 'Read 20 pages');
+    await tester.tap(find.text('Save mission'));
+    await tester.pumpAndSettle();
+    expect(find.text('Read 20 pages'), findsOneWidget);
+
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+    expect(gateway.tasks, isEmpty);
   });
 
   testWidgets('achievements distinguish earned and locked awards',
