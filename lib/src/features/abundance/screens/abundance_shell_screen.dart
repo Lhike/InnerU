@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,6 +19,7 @@ import 'package:selfcare_projects/src/features/abundance/services/goals_service.
 import 'package:selfcare_projects/src/features/abundance/services/abundance_achievements_service.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/abundance_company.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
+import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/coach_dashboard/coach_dashboard_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/coach_dashboard/coach_accountability_meetings_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/profile/profile_settings.dart';
@@ -26,9 +29,9 @@ import 'package:selfcare_projects/src/services/auth_service.dart';
 import 'package:selfcare_projects/src/services/company_theme_service.dart';
 import 'package:selfcare_projects/src/services/session_cleanup_service.dart';
 
-/// The custom app shell (header + 5-tab bottom nav) used only for Abundance
+/// The custom app shell (header + six-tab bottom nav) used only for Abundance
 /// members. It keeps InnerU's existing data-backed screens and services while
-/// presenting the A12 Home, Mission, Quests, Awards, and overflow navigation.
+/// presenting the A12 Home, Mission, Quests, Awards, Guild, and Profile flow.
 ///
 /// The "ABUNDANCE 12" / "THE GAME OF MY LIFE" header copy is static ported
 /// brand text, not derived from [companyTheme]'s company name — A12 is
@@ -78,7 +81,8 @@ class AbundanceShellScreen extends StatefulWidget {
 }
 
 class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
-  // Tab order is Home(0)/Mission(1)/Quests(2)/Awards(3)/More(4). Seeded from
+  // Tab order is Home(0)/Mission(1)/Quests(2)/Awards(3)/Guild(4)/Profile(5).
+  // Seeded from
   // widget.initialIndex (defaults to Home) in initState below.
   late int _index;
 
@@ -92,16 +96,24 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   // initializers, which is unsafe to do for tabs the user hasn't opened yet
   // (and, in widget tests without a live Firebase app, throws outright).
   final List<Widget> _builtTabs =
-      List<Widget>.filled(5, const SizedBox.shrink());
+      List<Widget>.filled(6, const SizedBox.shrink());
   final Set<int> _visited = {};
 
-  static const _tabLabels = ['Home', 'Mission', 'Quests', 'Awards', 'More'];
+  static const _tabLabels = [
+    'Home',
+    'Mission',
+    'Quests',
+    'Awards',
+    'Guild',
+    'Profile',
+  ];
   static const _tabIcons = [
     Icons.home_outlined,
     Icons.calendar_month_outlined,
     Icons.flag_outlined,
     Icons.workspace_premium_outlined,
-    Icons.more_horiz,
+    Icons.groups_outlined,
+    Icons.account_circle_outlined,
   ];
 
   Widget get _questsTabBody => widget.isCoach
@@ -151,8 +163,15 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
           key: UniqueKey(),
           loader: gateway.load,
         );
+      case 4:
+        return const AbundanceGuildScreen();
+      case 5:
+        return AbundanceCharacterScreen(
+          uid: widget.uid,
+          onOpenAccountSettings: () => _push(const ProfileSettings()),
+        );
       default:
-        return const SizedBox.shrink(); // "More" never actually renders.
+        return const SizedBox.shrink();
     }
   }
 
@@ -271,9 +290,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   @override
   void initState() {
     super.initState();
-    // Clamped to 0-3, not 0-4: index 4 ("More") is a bottom-sheet trigger,
-    // not a tab body, so landing on it would show an empty SizedBox.shrink().
-    _index = widget.initialIndex.clamp(0, 3);
+    _index = widget.initialIndex.clamp(0, 5);
     _ensureBuilt(_index);
     WidgetsBinding.instance.addPostFrameCallback((_) => _showFirstRunGuide());
   }
@@ -297,10 +314,6 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   }
 
   void _onTabTapped(int newIndex) {
-    if (newIndex == 4) {
-      _showMore();
-      return; // stay on the current tab; More is a trigger, not a screen.
-    }
     setState(() {
       _index = newIndex;
       if (newIndex == 3 && _visited.contains(3)) {
@@ -315,18 +328,24 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       backgroundColor: AbundanceColors.surfaceRaised,
       surfaceTintColor: Colors.transparent,
       automaticallyImplyLeading: false,
-      title: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+      title: Row(
         children: [
-          Text('ABUNDANCE 12',
-              style: TextStyle(
-                  color: AbundanceColors.foreground,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14)),
-          Text('THE GAME OF MY LIFE',
-              style:
-                  TextStyle(color: AbundanceColors.primaryGold, fontSize: 10)),
+          Image.asset(abundanceLogoAsset, width: 38, height: 38),
+          const SizedBox(width: 10),
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('ABUNDANCE 12',
+                  style: TextStyle(
+                      color: AbundanceColors.foreground,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14)),
+              Text('THE GAME OF MY LIFE',
+                  style: TextStyle(
+                      color: AbundanceColors.primaryGold, fontSize: 10)),
+            ],
+          ),
         ],
       ),
       actions: [
@@ -334,6 +353,29 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
           icon: const Icon(Icons.notifications_none,
               color: AbundanceColors.foreground),
           onPressed: () => _push(const AbundanceNotificationsScreen()),
+        ),
+        PopupMenuButton<String>(
+          icon: const CircleAvatar(
+            radius: 17,
+            backgroundColor: AbundanceColors.primaryGold,
+            child: Text('AM',
+                style: TextStyle(
+                    color: AbundanceColors.background,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11)),
+          ),
+          onSelected: (value) {
+            if (value == 'more') {
+              _showMore();
+            } else {
+              unawaited(_openDestination(value));
+            }
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'profile', child: Text('Profile')),
+            PopupMenuItem(value: 'notifications', child: Text('Notifications')),
+            PopupMenuItem(value: 'more', child: Text('More')),
+          ],
         ),
         const SizedBox(width: 8),
       ],
@@ -355,9 +397,10 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
     }
     return Scaffold(
       backgroundColor: AbundanceColors.background,
-      // The dashboard owns its AppBar. All other in-shell pages use the
-      // shared branded header, avoiding stacked headers.
-      appBar: _index == 0 ? null : _buildShellHeader(),
+      // Each embedded screen owns its own AppBar except the Quests body,
+      // which is intentionally AppBar-free and uses the shared A12 header.
+      // This prevents stacked headers while keeping the reference chrome.
+      appBar: _index == 2 ? _buildShellHeader() : null,
       body: IndexedStack(index: _index, children: _builtTabs),
       bottomNavigationBar: Semantics(
         label: 'Abundance primary navigation',

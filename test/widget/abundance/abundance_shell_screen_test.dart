@@ -244,7 +244,7 @@ void main() {
   });
 
   testWidgets(
-      'tapping More opens the bottom sheet without changing the selected tab',
+      'profile menu still exposes the overflow actions without changing the selected tab',
       (tester) async {
     final service = GoalsService(FakeFirebaseFirestore());
 
@@ -272,6 +272,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Life Power'), findsWidgets);
 
+    await tester.tap(find.byType(CircleAvatar));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('More'));
     await tester.pumpAndSettle();
 
@@ -308,8 +310,6 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('More'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Guild'));
     await tester.pumpAndSettle();
 
@@ -336,9 +336,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('More'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Character'));
+    await tester.tap(find.text('Profile'));
     await tester.pumpAndSettle();
 
     // ProfileSettings brings its own AppBar; the shell must not add a second.
@@ -402,8 +400,7 @@ void main() {
     expect(find.text('ABUNDANCE 12'), findsNothing);
   });
 
-  testWidgets('initialIndex can never land on the More trigger',
-      (tester) async {
+  testWidgets('initialIndex can land on the Guild tab', (tester) async {
     final service = GoalsService(FakeFirebaseFirestore());
 
     await tester.pumpWidget(MaterialApp(
@@ -416,8 +413,7 @@ void main() {
           companyName: 'Abundance',
           isCompanyTheme: true,
         ),
-        // 4 is "More" — a bottom-sheet trigger, not a tab body. It must clamp
-        // down to a real tab (3, Awards) instead of showing a blank screen.
+        // 4 is the real Guild tab in the A12 six-item navigation.
         initialIndex: 4,
         questsAccessResolverOverride: (_) async => true,
         achievementsLoaderOverride: () async => const <String>{},
@@ -428,7 +424,7 @@ void main() {
     final nav = tester.widget<BottomNavigationBar>(
       find.byType(BottomNavigationBar),
     );
-    expect(nav.currentIndex, 3);
+    expect(nav.currentIndex, 4);
   });
 
   testWidgets('revisiting Awards reloads progress earned in other tabs',

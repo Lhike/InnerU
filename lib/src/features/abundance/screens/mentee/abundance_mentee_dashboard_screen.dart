@@ -397,14 +397,18 @@ class _AbundanceMenteeDashboardScreenState
               foregroundColor: data.theme.inkColor,
               surfaceTintColor: Colors.transparent,
               elevation: 0,
-              title: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('ABUNDANCE 12', style: AbundanceTypography.title),
-                  Text('THE GAME OF MY LIFE', style: AbundanceTypography.eyebrow),
-                ],
-              ),
+              title: Row(children: [
+                Image.asset(abundanceLogoAsset, width: 38, height: 38),
+                const SizedBox(width: 10),
+                const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('ABUNDANCE 12', style: AbundanceTypography.title),
+                      Text('THE GAME OF MY LIFE',
+                          style: AbundanceTypography.eyebrow),
+                    ]),
+              ]),
               actions: [
                 IconButton(
                   icon: const Icon(Icons.refresh_rounded),
@@ -437,188 +441,199 @@ class _AbundanceMenteeDashboardScreenState
                 ),
               ],
             ),
-            body: RefreshIndicator(
-              onRefresh: _reloadDashboard,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                children: [
-                  _A12HomeHero(
-                    displayName: data.displayName,
-                    rank: rank,
-                    score: goalTotalScore,
-                    profilePic: data.profilePic,
-                  ),
-                  const SizedBox(height: 16),
-                  _A12MissionPanel(
-                    tasks: data.tasks,
-                    selectedDay: DateUtils.dateOnly(DateTime.now()),
-                    onOpenMissions: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const AbundanceMissionsScreen(),
+            body: Stack(children: [
+              Positioned.fill(
+                  child: Opacity(
+                      opacity: .26,
+                      child: Image.asset(abundanceBackdropAsset,
+                          fit: BoxFit.cover))),
+              RefreshIndicator(
+                onRefresh: _reloadDashboard,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                  children: [
+                    _A12HomeHero(
+                      displayName: data.displayName,
+                      rank: rank,
+                      score: goalTotalScore,
+                      profilePic: data.profilePic,
+                    ),
+                    const SizedBox(height: 16),
+                    _A12MissionPanel(
+                      tasks: data.tasks,
+                      selectedDay: DateUtils.dateOnly(DateTime.now()),
+                      onOpenMissions: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const AbundanceMissionsScreen(),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  _A12GoalsPanel(
-                    goals: goals,
-                    onOpenGoals: () => unawaited(_openNamedRoute('/goalsHub')),
-                    onGoalTap: _openGoalDetail,
-                  ),
-                  const SizedBox(height: 16),
-                  _A12AchievementShelf(
-                    achievements: achievements,
-                    onOpenAwards: () =>
-                        unawaited(_openNamedRoute('/achievements')),
-                  ),
-                  const SizedBox(height: 16),
-                  const _A12HomeQuote(),
-                  const SizedBox(height: 18),
-                  // Keep the existing data-backed analytics and support
-                  // cards below the reference layout for users who need the
-                  // richer InnerU detail view.
-                  _HeroCard(
-                    theme: data.theme,
-                    companyName: data.companyName,
-                    displayName: data.displayName,
-                    companyCode: data.companyCode,
-                    profilePic: data.profilePic,
-                    goalTotalScore: goalTotalScore,
-                    rank: rank,
-                    currentStreak: score.currentStreak,
-                    checkInRate: score.checkInRate,
-                    todayTasksCompleted: todayLog?.completedTasks ?? 0,
-                    todayTasksTotal: todayLog?.totalTasks ?? _taskFields.length,
-                    todayEmotion: todayEmotion.emotion,
-                  ),
-                  const SizedBox(height: 18),
-                  _QuickActionGrid(
-                    theme: data.theme,
-                    onGoals: () => unawaited(_openNamedRoute('/goalsHub')),
-                    onCheckIn: () =>
-                        unawaited(_openNamedRoute('/emotionScreen')),
-                    onRank: () => unawaited(_openNamedRoute('/leaderboard')),
-                    onTasks: () => unawaited(_openNamedRoute('/userprogress')),
-                  ),
-                  const SizedBox(height: 18),
-                  _SectionHeader(
-                    title: 'Goals by category',
-                    actionLabel: 'Open goals',
-                    onAction: () => unawaited(_openNamedRoute('/goalsHub')),
-                  ),
-                  if (requiredGoalGaps(goals).isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    _MissingCategoryBanner(gaps: requiredGoalGaps(goals)),
-                  ],
-                  const SizedBox(height: 12),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final columns = constraints.maxWidth >= 900
-                          ? 3
-                          : constraints.maxWidth >= 560
-                              ? 2
-                              : 1;
-                      return GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: GoalCategory.values.length,
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: columns,
-                          childAspectRatio: columns == 1 ? 2.3 : 1.55,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                        ),
-                        itemBuilder: (context, index) {
-                          final category = GoalCategory.values[index];
-                          final stat = categoryStats[category]!;
-                          return _CategoryCard(
-                            theme: data.theme,
-                            category: category,
-                            totalGoals: stat.totalGoals,
-                            completedGoals: stat.completedGoals,
-                            score: stat.score,
-                          );
-                        },
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 18),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final twoColumn = constraints.maxWidth >= 900;
-                      final left = _DeadlinesCard(
-                        theme: data.theme,
-                        goals: upcomingDeadlines.take(5).toList(),
-                        onGoalTap: _openGoalDetail,
-                      );
-                      final right = _CoachAndCheckInsCard(
-                        theme: data.theme,
-                        coach: data.coach,
-                        recentCheckIns: recentCheckIns,
-                        todayEmotion: todayEmotion.emotion,
-                        onOpenMoodTracker: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const EmotionTrackerPage(),
+                    const SizedBox(height: 16),
+                    _A12GoalsPanel(
+                      goals: goals,
+                      onOpenGoals: () =>
+                          unawaited(_openNamedRoute('/goalsHub')),
+                      onGoalTap: _openGoalDetail,
+                    ),
+                    const SizedBox(height: 16),
+                    _A12AchievementShelf(
+                      achievements: achievements,
+                      onOpenAwards: () =>
+                          unawaited(_openNamedRoute('/achievements')),
+                    ),
+                    const SizedBox(height: 16),
+                    const _A12HomeQuote(),
+                    const SizedBox(height: 18),
+                    // Keep the existing data-backed analytics and support
+                    // cards below the reference layout for users who need the
+                    // richer InnerU detail view.
+                    _HeroCard(
+                      theme: data.theme,
+                      companyName: data.companyName,
+                      displayName: data.displayName,
+                      companyCode: data.companyCode,
+                      profilePic: data.profilePic,
+                      goalTotalScore: goalTotalScore,
+                      rank: rank,
+                      currentStreak: score.currentStreak,
+                      checkInRate: score.checkInRate,
+                      todayTasksCompleted: todayLog?.completedTasks ?? 0,
+                      todayTasksTotal:
+                          todayLog?.totalTasks ?? _taskFields.length,
+                      todayEmotion: todayEmotion.emotion,
+                    ),
+                    const SizedBox(height: 18),
+                    _QuickActionGrid(
+                      theme: data.theme,
+                      onGoals: () => unawaited(_openNamedRoute('/goalsHub')),
+                      onCheckIn: () =>
+                          unawaited(_openNamedRoute('/emotionScreen')),
+                      onRank: () => unawaited(_openNamedRoute('/leaderboard')),
+                      onTasks: () =>
+                          unawaited(_openNamedRoute('/userprogress')),
+                    ),
+                    const SizedBox(height: 18),
+                    _SectionHeader(
+                      title: 'Goals by category',
+                      actionLabel: 'Open goals',
+                      onAction: () => unawaited(_openNamedRoute('/goalsHub')),
+                    ),
+                    if (requiredGoalGaps(goals).isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      _MissingCategoryBanner(gaps: requiredGoalGaps(goals)),
+                    ],
+                    const SizedBox(height: 12),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final columns = constraints.maxWidth >= 900
+                            ? 3
+                            : constraints.maxWidth >= 560
+                                ? 2
+                                : 1;
+                        return GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: GoalCategory.values.length,
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: columns,
+                            childAspectRatio: columns == 1 ? 2.3 : 1.55,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
                           ),
-                        ),
-                      );
-
-                      if (twoColumn) {
-                        return Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(child: left),
-                            const SizedBox(width: 12),
-                            Expanded(child: right),
-                          ],
-                        );
-                      }
-
-                      return Column(
-                        children: [
-                          left,
-                          const SizedBox(height: 12),
-                          right,
-                        ],
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 18),
-                  _SectionHeader(
-                    title: 'Personal analytics',
-                    actionLabel: 'Refresh',
-                    onAction: () => unawaited(_reloadDashboard()),
-                  ),
-                  const SizedBox(height: 10),
-                  _AnalyticsCard(
-                    theme: data.theme,
-                    points: momentumPoints,
-                  ),
-                  const SizedBox(height: 18),
-                  _SectionHeader(
-                    title: 'Achievements',
-                    actionLabel: 'Add goal',
-                    onAction: () => unawaited(_openGoalForm()),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    height: 180,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemBuilder: (context, index) {
-                        final achievement = achievements[index];
-                        return _AchievementCard(
-                          theme: data.theme,
-                          achievement: achievement,
+                          itemBuilder: (context, index) {
+                            final category = GoalCategory.values[index];
+                            final stat = categoryStats[category]!;
+                            return _CategoryCard(
+                              theme: data.theme,
+                              category: category,
+                              totalGoals: stat.totalGoals,
+                              completedGoals: stat.completedGoals,
+                              score: stat.score,
+                            );
+                          },
                         );
                       },
-                      separatorBuilder: (_, __) => const SizedBox(width: 12),
-                      itemCount: achievements.length,
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                ],
-              ),
-            ),
+                    const SizedBox(height: 18),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final twoColumn = constraints.maxWidth >= 900;
+                        final left = _DeadlinesCard(
+                          theme: data.theme,
+                          goals: upcomingDeadlines.take(5).toList(),
+                          onGoalTap: _openGoalDetail,
+                        );
+                        final right = _CoachAndCheckInsCard(
+                          theme: data.theme,
+                          coach: data.coach,
+                          recentCheckIns: recentCheckIns,
+                          todayEmotion: todayEmotion.emotion,
+                          onOpenMoodTracker: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const EmotionTrackerPage(),
+                            ),
+                          ),
+                        );
+
+                        if (twoColumn) {
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: left),
+                              const SizedBox(width: 12),
+                              Expanded(child: right),
+                            ],
+                          );
+                        }
+
+                        return Column(
+                          children: [
+                            left,
+                            const SizedBox(height: 12),
+                            right,
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 18),
+                    _SectionHeader(
+                      title: 'Personal analytics',
+                      actionLabel: 'Refresh',
+                      onAction: () => unawaited(_reloadDashboard()),
+                    ),
+                    const SizedBox(height: 10),
+                    _AnalyticsCard(
+                      theme: data.theme,
+                      points: momentumPoints,
+                    ),
+                    const SizedBox(height: 18),
+                    _SectionHeader(
+                      title: 'Achievements',
+                      actionLabel: 'Add goal',
+                      onAction: () => unawaited(_openGoalForm()),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      height: 180,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemBuilder: (context, index) {
+                          final achievement = achievements[index];
+                          return _AchievementCard(
+                            theme: data.theme,
+                            achievement: achievement,
+                          );
+                        },
+                        separatorBuilder: (_, __) => const SizedBox(width: 12),
+                        itemCount: achievements.length,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ),
+              )
+            ]),
             floatingActionButton: FloatingActionButton.extended(
               onPressed: () => unawaited(_openGoalForm()),
               icon: const Icon(Icons.add_rounded),
@@ -677,36 +692,42 @@ class _AbundanceMenteeDashboardScreenState
         subtitle: 'A goal is on the board.',
         icon: Icons.flag_rounded,
         unlocked: hasAnyGoal,
+        assetKey: 'first-flame',
       ),
       _Achievement(
         title: 'Balanced',
         subtitle: 'All three life areas are covered.',
         icon: Icons.balance_rounded,
         unlocked: hasAllCategories,
+        assetKey: 'discipline',
       ),
       _Achievement(
         title: 'Momentum',
         subtitle: 'Current streak of 3 days.',
         icon: Icons.local_fire_department_rounded,
         unlocked: score.currentStreak >= 3,
+        assetKey: 'finding-rythm',
       ),
       _Achievement(
         title: 'Consistency',
         subtitle: 'Current streak of 7 days.',
         icon: Icons.trending_up_rounded,
         unlocked: score.currentStreak >= 7,
+        assetKey: 'unbroken',
       ),
       _Achievement(
         title: 'Finisher',
         subtitle: '$completed completed goals.',
         icon: Icons.verified_rounded,
         unlocked: completed >= 3,
+        assetKey: 'finished-first',
       ),
       _Achievement(
         title: 'Clear runway',
         subtitle: 'No overdue goals left behind.',
         icon: Icons.check_circle_rounded,
         unlocked: hasNoOverdue,
+        assetKey: 'closer',
       ),
     ];
   }
@@ -769,71 +790,74 @@ class _A12HomeHero extends StatelessWidget {
           ),
           Padding(
             padding: const EdgeInsets.all(18),
-            child: Row(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('WELCOME BACK',
-                          style: AbundanceTypography.eyebrow),
-                      const SizedBox(height: 5),
-                      Text(displayName, style: AbundanceTypography.display),
-                      const SizedBox(height: 12),
-                      Row(
+                Text(
+                    'Good ${DateTime.now().hour >= 17 ? 'evening' : DateTime.now().hour >= 12 ? 'afternoon' : 'morning'},',
+                    style: AbundanceTypography.body),
+                const SizedBox(height: 2),
+                Text(displayName.toUpperCase(),
+                    style: AbundanceTypography.display),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Image.asset(abundanceRankMedalAsset(rank.key),
+                      width: 58, height: 58),
+                  const SizedBox(width: 10),
+                  Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(rank.name.toUpperCase(),
+                            style: AbundanceTypography.title
+                                .copyWith(color: AbundanceColors.primaryGold)),
+                        Text('LEVEL ${rank.min ~/ 10 + 1}',
+                            style: AbundanceTypography.eyebrow),
+                      ]),
+                ]),
+                const SizedBox(height: 10),
+                Text(
+                    'You hold ${rank.name}, the rank your Life Power has earned.',
+                    style: AbundanceTypography.body
+                        .copyWith(color: AbundanceColors.muted)),
+                const SizedBox(height: 14),
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+                  decoration: BoxDecoration(
+                      color: AbundanceColors.surfaceRaised,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: AbundanceColors.border)),
+                  child: Column(children: [
+                    const Text('LIFE POWER',
+                        style: AbundanceTypography.eyebrow),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: 142,
+                      height: 142,
+                      child: Stack(
+                        alignment: Alignment.center,
                         children: [
-                          Image.asset(abundanceRankMedalAsset(rank.key),
-                              width: 48, height: 48),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(rank.name.toUpperCase(),
-                                  style: AbundanceTypography.title.copyWith(
-                                      color: AbundanceColors.primaryGold)),
-                              Text('LEVEL ${rank.min ~/ 10 + 1}',
-                                  style: AbundanceTypography.eyebrow),
-                            ],
-                          ),
+                          CircularProgressIndicator(
+                              value: progress,
+                              strokeWidth: 9,
+                              backgroundColor: AbundanceColors.border,
+                              valueColor: const AlwaysStoppedAnimation(
+                                  AbundanceColors.accentCyan)),
+                          Column(mainAxisSize: MainAxisSize.min, children: [
+                            Text('${score.round()}%',
+                                style: AbundanceTypography.display),
+                            Text('of 100',
+                                style: AbundanceTypography.body
+                                    .copyWith(color: AbundanceColors.muted)),
+                          ]),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                          'You hold ${rank.name}, the rank your Life Power has earned.',
-                          style: AbundanceTypography.body
-                              .copyWith(color: AbundanceColors.muted)),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 92,
-                  child: Column(
-                    children: [
-                      SizedBox(
-                        width: 84,
-                        height: 84,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            CircularProgressIndicator(
-                                value: progress,
-                                strokeWidth: 7,
-                                backgroundColor: AbundanceColors.border,
-                                valueColor: const AlwaysStoppedAnimation(
-                                    AbundanceColors.accentCyan)),
-                            Text('${score.round()}%',
-                                style: AbundanceTypography.title),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 7),
-                      const Text('LIFE POWER',
-                          style: AbundanceTypography.eyebrow,
-                          textAlign: TextAlign.center),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('The kingdom answers to you.',
+                        style: AbundanceTypography.body),
+                  ]),
                 ),
               ],
             ),
@@ -866,32 +890,66 @@ class _A12MissionPanel extends StatelessWidget {
           ? Text('Your daily mission is empty.',
               style: AbundanceTypography.body
                   .copyWith(color: AbundanceColors.muted))
-          : Column(
+          : GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: .88,
               children: [
                 for (final task in today)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                        task.isCompleted
-                            ? Icons.check_circle
-                            : Icons.circle_outlined,
-                        color: task.isCompleted
-                            ? AbundanceColors.scoreExcellent
-                            : AbundanceColors.accentCyan),
-                    title: Text(task.title,
-                        style: AbundanceTypography.title.copyWith(
-                            decoration: task.isCompleted
-                                ? TextDecoration.lineThrough
-                                : null)),
-                    subtitle: task.scheduledTime == null
-                        ? null
-                        : Text('Scheduled ${task.scheduledTime}',
-                            style: AbundanceTypography.body
-                                .copyWith(color: AbundanceColors.muted)),
-                    trailing: const Text('+10 XP',
-                        style: AbundanceTypography.eyebrow),
+                  InkWell(
                     onTap: onOpenMissions,
-                  ),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                          color: AbundanceColors.surfaceSunken,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                              color: task.isCompleted
+                                  ? AbundanceColors.scoreExcellent
+                                  : AbundanceColors.border)),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                                task.isCompleted
+                                    ? Icons.check_circle
+                                    : Icons.auto_awesome,
+                                color: task.isCompleted
+                                    ? AbundanceColors.scoreExcellent
+                                    : AbundanceColors.primaryGold,
+                                size: 30),
+                            const Spacer(),
+                            Text(task.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: AbundanceTypography.title.copyWith(
+                                    decoration: task.isCompleted
+                                        ? TextDecoration.lineThrough
+                                        : null)),
+                            if (task.scheduledTime != null)
+                              Text(task.scheduledTime!,
+                                  style: AbundanceTypography.body
+                                      .copyWith(color: AbundanceColors.muted)),
+                            const SizedBox(height: 8),
+                            Row(children: [
+                              const Text('+10 XP',
+                                  style: AbundanceTypography.eyebrow),
+                              const Spacer(),
+                              Icon(
+                                  task.isCompleted
+                                      ? Icons.check_circle
+                                      : Icons.circle_outlined,
+                                  color: task.isCompleted
+                                      ? AbundanceColors.scoreExcellent
+                                      : AbundanceColors.border)
+                            ]),
+                          ]),
+                    ),
+                  )
               ],
             ),
     );
@@ -921,21 +979,59 @@ class _A12GoalsPanel extends StatelessWidget {
           : Column(
               children: [
                 for (final goal in visible)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(goal.title, style: AbundanceTypography.title),
-                    subtitle: Text(
-                        '${goal.category.label} · ${goal.progress}% complete',
-                        style: AbundanceTypography.body
-                            .copyWith(color: AbundanceColors.muted)),
-                    trailing: SizedBox(
-                        width: 56,
-                        child: LinearProgressIndicator(
-                            value: goal.progress / 100,
-                            color: AbundanceColors.categoryColor(
-                                goal.category.code),
-                            backgroundColor: AbundanceColors.border)),
+                  InkWell(
                     onTap: () => onGoalTap(goal),
+                    borderRadius: BorderRadius.circular(18),
+                    child: Container(
+                      height: 150,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: AbundanceColors.border),
+                          image: abundanceQuestSceneAsset(goal.category.code) ==
+                                  null
+                              ? null
+                              : DecorationImage(
+                                  image: AssetImage(abundanceQuestSceneAsset(
+                                      goal.category.code)!),
+                                  fit: BoxFit.cover,
+                                  colorFilter: ColorFilter.mode(
+                                      Colors.black.withValues(alpha: .55),
+                                      BlendMode.darken))),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 5),
+                                decoration: BoxDecoration(
+                                    border: Border.all(
+                                        color: AbundanceColors.categoryColor(
+                                            goal.category.code),
+                                        width: 2),
+                                    borderRadius: BorderRadius.circular(20)),
+                                child: Text(goal.category.code,
+                                    style: AbundanceTypography.eyebrow.copyWith(
+                                        color: AbundanceColors.categoryColor(
+                                            goal.category.code)))),
+                            const Spacer(),
+                            Text(goal.title, style: AbundanceTypography.title),
+                            Text('${goal.progress}%',
+                                style: AbundanceTypography.display
+                                    .copyWith(fontSize: 28)),
+                            LinearProgressIndicator(
+                                value: goal.progress / 100,
+                                color: AbundanceColors.categoryColor(
+                                    goal.category.code),
+                                backgroundColor: Colors.black54),
+                            const SizedBox(height: 5),
+                            Text(
+                                '${goal.progress}% complete · Tap to log progress',
+                                style: AbundanceTypography.body
+                                    .copyWith(color: AbundanceColors.muted)),
+                          ]),
+                    ),
                   ),
               ],
             ),
@@ -952,7 +1048,8 @@ class _A12AchievementShelf extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _A12Panel(
         title: 'ACHIEVEMENTS',
-        action: 'VIEW ALL',
+        action:
+            '${achievements.where((a) => a.unlocked).length} of 15 earned ›',
         onAction: onOpenAwards,
         child: SizedBox(
           height: 112,
@@ -966,11 +1063,17 @@ class _A12AchievementShelf extends StatelessWidget {
                 width: 84,
                 child: Column(
                   children: [
-                    Icon(item.icon,
-                        size: 42,
-                        color: item.unlocked
-                            ? AbundanceColors.primaryGold
-                            : AbundanceColors.muted),
+                    SizedBox(
+                        width: 62,
+                        height: 62,
+                        child: item.unlocked &&
+                                abundanceAchievementAssets[item.assetKey] !=
+                                    null
+                            ? Image.asset(
+                                abundanceAchievementAssets[item.assetKey]!,
+                                fit: BoxFit.contain)
+                            : Icon(Icons.diamond_outlined,
+                                size: 42, color: AbundanceColors.muted)),
                     const SizedBox(height: 6),
                     Text(item.title,
                         maxLines: 2,
@@ -1138,12 +1241,14 @@ class _Achievement {
     required this.subtitle,
     required this.icon,
     required this.unlocked,
+    required this.assetKey,
   });
 
   final String title;
   final String subtitle;
   final IconData icon;
   final bool unlocked;
+  final String assetKey;
 }
 
 class _AccessDeniedView extends StatelessWidget {
