@@ -8,7 +8,8 @@ import 'package:selfcare_projects/src/features/abundance/services/goals_service.
 const _declaration = 'I see myself finishing what I start';
 
 void main() {
-  testWidgets('wizard starts on step 1 of 4 and blocks Next until the declaration is filled',
+  testWidgets(
+      'wizard starts on step 1 of 4 and blocks Next until the declaration is filled',
       (tester) async {
     final service = GoalsService(FakeFirebaseFirestore());
 
@@ -57,7 +58,8 @@ void main() {
     expect(find.text('Step 2 of 4 — How'), findsOneWidget);
 
     await tester.tap(find.text('Personal'));
-    await tester.enterText(find.byKey(const Key('quest-target-value-field')), '10');
+    await tester.enterText(
+        find.byKey(const Key('quest-target-value-field')), '10');
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
 
@@ -66,8 +68,7 @@ void main() {
 
   testWidgets(
       'editing an existing quest seeds the declaration field from its title '
-      'so step 1 is not blocked by an empty required field',
-      (tester) async {
+      'so step 1 is not blocked by an empty required field', (tester) async {
     final service = GoalsService(FakeFirebaseFirestore());
     final existing = GoalSummary(
       id: 'g1',
@@ -130,7 +131,8 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Personal'));
-    await tester.enterText(find.byKey(const Key('quest-target-value-field')), '10');
+    await tester.enterText(
+        find.byKey(const Key('quest-target-value-field')), '10');
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
 
@@ -140,7 +142,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Step 4 of 4 — Declaration'), findsOneWidget);
-    expect(find.textContaining('I see myself finishing what I start'), findsWidgets);
+    expect(find.textContaining('I see myself finishing what I start'),
+        findsWidgets);
     expect(find.text('Commitment'), findsWidgets);
 
     await tester.tap(find.text('Submit'));
@@ -153,8 +156,7 @@ void main() {
   testWidgets(
       'submitting the wizard persists a non-blank title/description derived '
       'from the declaration -- the gap this task must close is a quest '
-      'silently saved with a blank title/description',
-      (tester) async {
+      'silently saved with a blank title/description', (tester) async {
     final firestore = FakeFirebaseFirestore();
     final service = GoalsService(firestore);
     await firestore.collection('users').doc('u1').set({
@@ -175,7 +177,8 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Personal'));
-    await tester.enterText(find.byKey(const Key('quest-target-value-field')), '10');
+    await tester.enterText(
+        find.byKey(const Key('quest-target-value-field')), '10');
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
 
@@ -203,8 +206,7 @@ void main() {
 
   testWidgets(
       'chip taps never clobber qualities the member typed directly into the '
-      'free-text field',
-      (tester) async {
+      'free-text field', (tester) async {
     final service = GoalsService(FakeFirebaseFirestore());
 
     await tester.pumpWidget(MaterialApp(
@@ -220,7 +222,8 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Personal'));
-    await tester.enterText(find.byKey(const Key('quest-target-value-field')), '10');
+    await tester.enterText(
+        find.byKey(const Key('quest-target-value-field')), '10');
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
 
@@ -253,8 +256,7 @@ void main() {
 
   testWidgets(
       'a punctuation-only declaration that clears the 3-character gate '
-      'still persists a non-blank composed description',
-      (tester) async {
+      'still persists a non-blank composed description', (tester) async {
     final firestore = FakeFirebaseFirestore();
     final service = GoalsService(firestore);
     await firestore.collection('users').doc('u1').set({
@@ -279,7 +281,8 @@ void main() {
     expect(find.text('Step 2 of 4 — How'), findsOneWidget);
 
     await tester.tap(find.text('Personal'));
-    await tester.enterText(find.byKey(const Key('quest-target-value-field')), '10');
+    await tester.enterText(
+        find.byKey(const Key('quest-target-value-field')), '10');
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
 
@@ -428,7 +431,8 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Personal'));
-    await tester.enterText(find.byKey(const Key('quest-target-value-field')), '0');
+    await tester.enterText(
+        find.byKey(const Key('quest-target-value-field')), '0');
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
 
@@ -455,7 +459,8 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Personal'));
-    await tester.enterText(find.byKey(const Key('quest-target-value-field')), '-5');
+    await tester.enterText(
+        find.byKey(const Key('quest-target-value-field')), '-5');
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
 
@@ -627,8 +632,8 @@ void main() {
 
     // Saving pops the wizard back to its caller, and the edit landed.
     expect(find.byType(GoalFormScreen), findsNothing);
-    final data = (await firestore.collection('goals').doc(existing.id).get())
-        .data()!;
+    final data =
+        (await firestore.collection('goals').doc(existing.id).get()).data()!;
     expect(data['title'], 'I see myself shipping the launch on time');
     expect(data['goalType'], GoalType.milestone.code);
   });
@@ -673,7 +678,8 @@ void main() {
     final titles = plans.docs.map((d) => d.data()['title']).toList();
     // The pre-existing plan must survive (the wizard must not re-create or
     // replace it), and the newly typed one must actually exist afterwards.
-    expect(titles, containsAll(<String>['Book the venue', 'Print the banners']));
+    expect(
+        titles, containsAll(<String>['Book the venue', 'Print the banners']));
     expect(titles.where((t) => t == 'Book the venue'), hasLength(1));
   });
 

@@ -1036,7 +1036,8 @@ class GoalsService {
     if (raw is! List) return const <CoachMenteeGoals>[];
     return raw
         .whereType<Map>()
-        .map((entry) => CoachMenteeGoals.fromJson(Map<String, dynamic>.from(entry)))
+        .map((entry) =>
+            CoachMenteeGoals.fromJson(Map<String, dynamic>.from(entry)))
         .toList();
   }
 

@@ -61,7 +61,8 @@ class _FailingGoalsService extends GoalsService {
       throw Exception('roster unavailable');
     }
     return const [
-      CoachMenteeGoals(menteeId: '1', menteeName: 'Maychell Alcorin', goals: []),
+      CoachMenteeGoals(
+          menteeId: '1', menteeName: 'Maychell Alcorin', goals: []),
     ];
   }
 }
@@ -90,10 +91,12 @@ GoalSummary goalIn(GoalCategory category, {String id = 'g'}) {
 }
 
 void main() {
-  testWidgets('roster groups quests by mentee, with an empty state for coaches with none',
+  testWidgets(
+      'roster groups quests by mentee, with an empty state for coaches with none',
       (tester) async {
     final service = _FakeGoalsService(const [
-      CoachMenteeGoals(menteeId: '1', menteeName: 'Maychell Alcorin', goals: []),
+      CoachMenteeGoals(
+          menteeId: '1', menteeName: 'Maychell Alcorin', goals: []),
     ]);
 
     await tester.pumpWidget(MaterialApp(
@@ -104,7 +107,8 @@ void main() {
     expect(find.text('Maychell Alcorin'), findsOneWidget);
   });
 
-  testWidgets('shows an empty state when the coach has no mentees', (tester) async {
+  testWidgets('shows an empty state when the coach has no mentees',
+      (tester) async {
     final service = _FakeGoalsService(const []);
 
     await tester.pumpWidget(MaterialApp(
@@ -115,10 +119,12 @@ void main() {
     expect(find.textContaining('No students yet'), findsOneWidget);
   });
 
-  testWidgets('a mentee with no quests yet shows a per-mentee empty note, not a crash',
+  testWidgets(
+      'a mentee with no quests yet shows a per-mentee empty note, not a crash',
       (tester) async {
     final service = _FakeGoalsService(const [
-      CoachMenteeGoals(menteeId: '1', menteeName: 'Maychell Alcorin', goals: []),
+      CoachMenteeGoals(
+          menteeId: '1', menteeName: 'Maychell Alcorin', goals: []),
     ]);
 
     await tester.pumpWidget(MaterialApp(
@@ -132,7 +138,8 @@ void main() {
   testWidgets('search filters the roster by mentee name, client-side',
       (tester) async {
     final service = _FakeGoalsService(const [
-      CoachMenteeGoals(menteeId: '1', menteeName: 'Maychell Alcorin', goals: []),
+      CoachMenteeGoals(
+          menteeId: '1', menteeName: 'Maychell Alcorin', goals: []),
       CoachMenteeGoals(menteeId: '2', menteeName: 'Jamie Rivera', goals: []),
     ]);
 
@@ -193,7 +200,8 @@ void main() {
     await tester.tap(find.text('Read 12 books'));
     await tester.pumpAndSettle();
 
-    final detail = tester.widget<GoalDetailScreen>(find.byType(GoalDetailScreen));
+    final detail =
+        tester.widget<GoalDetailScreen>(find.byType(GoalDetailScreen));
     expect(detail.goalId, 'goal-1');
     // The mentee's uid must be threaded through — never the coach's.
     expect(detail.uid, 'mentee-1');
@@ -242,7 +250,8 @@ void main() {
 
     expect(find.textContaining('No '), findsNothing);
   });
-  testWidgets('a failed roster fetch shows an error state with retry, not a spinner',
+  testWidgets(
+      'a failed roster fetch shows an error state with retry, not a spinner',
       (tester) async {
     final service = _FailingGoalsService();
 
@@ -257,7 +266,8 @@ void main() {
     expect(service.calls, 1);
   });
 
-  testWidgets('tapping retry re-attempts the fetch and renders the roster on success',
+  testWidgets(
+      'tapping retry re-attempts the fetch and renders the roster on success',
       (tester) async {
     final service = _FailingGoalsService();
 

@@ -112,7 +112,8 @@ void main() {
   // bundle with zero production call sites — they were referenced only from
   // their own unit test. These assert the art is genuinely on screen.
   // -------------------------------------------------------------------
-  testWidgets('quest cards render their category scene art and the page '
+  testWidgets(
+      'quest cards render their category scene art and the page '
       'carries the backdrop plate', (tester) async {
     final firestore = FakeFirebaseFirestore();
     final service = GoalsService(firestore);

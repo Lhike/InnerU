@@ -566,8 +566,9 @@ class _QuestRow extends StatelessWidget {
     final categoryColor = AbundanceColors.categoryColor(goal.category.code);
     final statusColor = _statusColor(goal.status);
     final score = goal.score;
-    final scoreColor =
-        score == null ? AbundanceColors.muted : AbundanceColors.scoreColorFor(score);
+    final scoreColor = score == null
+        ? AbundanceColors.muted
+        : AbundanceColors.scoreColorFor(score);
 
     return InkWell(
       onTap: onTap,

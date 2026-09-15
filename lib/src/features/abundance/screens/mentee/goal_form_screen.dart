@@ -54,6 +54,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
   late GoalStatus _status;
   late DateTime _startDate;
   late DateTime _targetDate;
+
   /// Action plans typed into the wizard during THIS session. On create they
   /// are handed to `createGoal(planTitles:)`; on edit they are created
   /// afterwards through [GoalsService.addActionPlan] -- the same call the
@@ -195,7 +196,8 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
     // its type survives a round-trip through the wizard now that the type is
     // derived from the measure.
     _unit = TextEditingController(
-      text: g?.goalType == GoalType.milestone ? _milestoneUnit : (g?.unit ?? ''),
+      text:
+          g?.goalType == GoalType.milestone ? _milestoneUnit : (g?.unit ?? ''),
     );
     _category = g?.category;
     _direction = g?.direction ?? GoalDirection.gain;
@@ -1187,8 +1189,10 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
         Row(
           children: [
             TextButton(
-              onPressed: _currentStep == 0 ? () => Navigator.pop(context) : _goBack,
-              style: TextButton.styleFrom(foregroundColor: AbundanceColors.muted),
+              onPressed:
+                  _currentStep == 0 ? () => Navigator.pop(context) : _goBack,
+              style:
+                  TextButton.styleFrom(foregroundColor: AbundanceColors.muted),
               child: Text(_currentStep == 0 ? 'Cancel' : 'Back'),
             ),
             const Spacer(),
@@ -1242,7 +1246,8 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
       hintText: hint,
       hintStyle: const TextStyle(color: AbundanceColors.muted, fontSize: 15),
       helperText: helper,
-      helperStyle: const TextStyle(color: AbundanceColors.muted, fontSize: 12.5),
+      helperStyle:
+          const TextStyle(color: AbundanceColors.muted, fontSize: 12.5),
       filled: true,
       fillColor: AbundanceColors.surfaceRaised,
       border: OutlineInputBorder(
@@ -1255,7 +1260,8 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: AbundanceColors.primaryGold, width: 1.4),
+        borderSide:
+            const BorderSide(color: AbundanceColors.primaryGold, width: 1.4),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     );
@@ -1292,8 +1298,9 @@ class _MeasureChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
-              color:
-                  selected ? AbundanceColors.primaryGold : AbundanceColors.border,
+              color: selected
+                  ? AbundanceColors.primaryGold
+                  : AbundanceColors.border,
               width: selected ? 1.6 : 1,
             ),
           ),
@@ -1345,7 +1352,9 @@ class _CategoryChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: selected ? AbundanceColors.primaryGold : AbundanceColors.border,
+              color: selected
+                  ? AbundanceColors.primaryGold
+                  : AbundanceColors.border,
               width: selected ? 1.6 : 1,
             ),
           ),
@@ -1409,7 +1418,9 @@ class _DirectionButton extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: selected ? AbundanceColors.primaryGold : AbundanceColors.border,
+              color: selected
+                  ? AbundanceColors.primaryGold
+                  : AbundanceColors.border,
               width: selected ? 1.6 : 1,
             ),
           ),
@@ -1673,11 +1684,13 @@ class _ActionPlansPanel extends StatelessWidget {
                     fillColor: AbundanceColors.surfaceRaised,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: AbundanceColors.border),
+                      borderSide:
+                          const BorderSide(color: AbundanceColors.border),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: AbundanceColors.border),
+                      borderSide:
+                          const BorderSide(color: AbundanceColors.border),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),

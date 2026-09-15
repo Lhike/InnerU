@@ -96,7 +96,8 @@ void main() {
         await firestore.collection('goals').doc(id).collection('tasks').get();
     expect(plans.docs.first.data()['status'], 'IN_PROGRESS');
   });
-  testWidgets('quest detail carries the ambient backdrop plate', (tester) async {
+  testWidgets('quest detail carries the ambient backdrop plate',
+      (tester) async {
     final firestore = FakeFirebaseFirestore();
     final service = GoalsService(firestore);
     await firestore.collection('users').doc('u1').set({'companyId': 'A12'});
@@ -254,7 +255,8 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Add'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Could not add the action plan'), findsOneWidget);
+    expect(
+        find.textContaining('Could not add the action plan'), findsOneWidget);
   });
 }
 

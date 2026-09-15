@@ -434,21 +434,17 @@ class _AbundanceMenteeDashboardScreenState
                   const SizedBox(height: 18),
                   _QuickActionGrid(
                     theme: data.theme,
-                    onGoals: () =>
-                        unawaited(_openNamedRoute('/goalsHub')),
+                    onGoals: () => unawaited(_openNamedRoute('/goalsHub')),
                     onCheckIn: () =>
                         unawaited(_openNamedRoute('/emotionScreen')),
-                    onRank: () =>
-                        unawaited(_openNamedRoute('/leaderboard')),
-                    onTasks: () =>
-                        unawaited(_openNamedRoute('/userprogress')),
+                    onRank: () => unawaited(_openNamedRoute('/leaderboard')),
+                    onTasks: () => unawaited(_openNamedRoute('/userprogress')),
                   ),
                   const SizedBox(height: 18),
                   _SectionHeader(
                     title: 'Goals by category',
                     actionLabel: 'Open goals',
-                    onAction: () =>
-                        unawaited(_openNamedRoute('/goalsHub')),
+                    onAction: () => unawaited(_openNamedRoute('/goalsHub')),
                   ),
                   if (requiredGoalGaps(goals).isNotEmpty) ...[
                     const SizedBox(height: 10),
@@ -591,7 +587,8 @@ class _AbundanceMenteeDashboardScreenState
   ) {
     final stats = <GoalCategory, _CategoryStat>{
       for (final category in GoalCategory.values)
-        category: const _CategoryStat(totalGoals: 0, completedGoals: 0, score: 0),
+        category:
+            const _CategoryStat(totalGoals: 0, completedGoals: 0, score: 0),
     };
 
     for (final goal in goals) {
@@ -607,8 +604,10 @@ class _AbundanceMenteeDashboardScreenState
     return stats;
   }
 
-  List<_Achievement> _buildAchievements(UserScore score, List<GoalSummary> goals) {
-    final completed = goals.where((goal) => goal.status == GoalStatus.completed).length;
+  List<_Achievement> _buildAchievements(
+      UserScore score, List<GoalSummary> goals) {
+    final completed =
+        goals.where((goal) => goal.status == GoalStatus.completed).length;
     final hasAllCategories = requiredGoalGaps(goals).isEmpty;
     final hasAnyGoal = goals.isNotEmpty;
     final hasNoOverdue = goals.every((goal) => !goal.isOverdue);
@@ -655,7 +654,9 @@ class _AbundanceMenteeDashboardScreenState
 
   List<_MomentumPoint> _buildMomentumPoints(_DashboardData data) {
     final days = lastNDays(7);
-    final trackerByDay = <String, _DailyLog>{for (final log in data.dailyLogs) log.dayKey: log};
+    final trackerByDay = <String, _DailyLog>{
+      for (final log in data.dailyLogs) log.dayKey: log
+    };
     final checkInsByDay = <String, _EmotionLog>{
       for (final log in data.emotionLogs) log.dayKey: log,
     };
@@ -945,10 +946,11 @@ class _HeroCard extends StatelessWidget {
                     children: [
                       Text(
                         'Welcome back, $displayName',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w900,
-                            ),
+                        style:
+                            Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                ),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -1344,7 +1346,8 @@ class _MissingCategoryBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final missing = gaps.map((category) => category.label.toLowerCase()).join(' or ');
+    final missing =
+        gaps.map((category) => category.label.toLowerCase()).join(' or ');
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -1545,7 +1548,9 @@ class _DeadlineTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(
-                late ? Icons.warning_amber_rounded : Icons.calendar_month_rounded,
+                late
+                    ? Icons.warning_amber_rounded
+                    : Icons.calendar_month_rounded,
                 color: late ? Colors.red : color,
               ),
             ),
@@ -1644,11 +1649,14 @@ class _CoachAndCheckInsCard extends StatelessWidget {
                   CircleAvatar(
                     radius: 22,
                     backgroundColor: theme.iconColor.withValues(alpha: 0.12),
-                    backgroundImage:
-                        coach!.profilePic.isNotEmpty ? NetworkImage(coach!.profilePic) : null,
+                    backgroundImage: coach!.profilePic.isNotEmpty
+                        ? NetworkImage(coach!.profilePic)
+                        : null,
                     child: coach!.profilePic.isEmpty
                         ? Text(
-                            coach!.name.isNotEmpty ? coach!.name[0].toUpperCase() : 'C',
+                            coach!.name.isNotEmpty
+                                ? coach!.name[0].toUpperCase()
+                                : 'C',
                             style: TextStyle(
                               color: theme.iconColor,
                               fontWeight: FontWeight.w900,
@@ -1663,20 +1671,22 @@ class _CoachAndCheckInsCard extends StatelessWidget {
                       children: [
                         Text(
                           coach!.name,
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                color: theme.inkColor,
-                                fontWeight: FontWeight.w800,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    color: theme.inkColor,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                         ),
                         const SizedBox(height: 3),
                         Text(
                           coach!.headline,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: theme.mutedInkColor,
-                                height: 1.35,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: theme.mutedInkColor,
+                                    height: 1.35,
+                                  ),
                         ),
                       ],
                     ),
@@ -1821,7 +1831,8 @@ class _AnalyticsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final maxY = math.max(
       100.0,
-      points.fold<double>(0, (total, point) => math.max(total, point.value + 10)),
+      points.fold<double>(
+          0, (total, point) => math.max(total, point.value + 10)),
     );
 
     return Container(
@@ -1880,9 +1891,10 @@ class _AnalyticsCard extends StatelessWidget {
                         if (value % 25 != 0) return const SizedBox.shrink();
                         return Text(
                           value.toInt().toString(),
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: theme.mutedInkColor,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: theme.mutedInkColor,
+                                  ),
                         );
                       },
                     ),
@@ -1900,7 +1912,10 @@ class _AnalyticsCard extends StatelessWidget {
                           padding: const EdgeInsets.only(top: 8),
                           child: Text(
                             points[index].label,
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
                                   color: theme.mutedInkColor,
                                   fontWeight: FontWeight.w700,
                                 ),

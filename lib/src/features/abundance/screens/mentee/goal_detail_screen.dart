@@ -225,151 +225,153 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
           // than the shell chrome every company shares.
           body: AbundanceBackdrop(
             child: SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final wide = constraints.maxWidth >= 1180;
-                return SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1320),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _BackLink(onTap: () => Navigator.of(context).maybePop()),
-                          const SizedBox(height: 18),
-                          _TopHeader(
-                            goal: goal,
-                            onStatusChanged: _setStatus,
-                            onEdit: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => GoalFormScreen(
-                                  service: widget.service,
-                                  uid: widget.uid,
-                                  existing: goal,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final wide = constraints.maxWidth >= 1180;
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1320),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _BackLink(
+                                onTap: () => Navigator.of(context).maybePop()),
+                            const SizedBox(height: 18),
+                            _TopHeader(
+                              goal: goal,
+                              onStatusChanged: _setStatus,
+                              onEdit: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => GoalFormScreen(
+                                    service: widget.service,
+                                    uid: widget.uid,
+                                    existing: goal,
+                                  ),
                                 ),
                               ),
+                              onDelete: _deleteGoal,
                             ),
-                            onDelete: _deleteGoal,
-                          ),
-                          const SizedBox(height: 20),
-                          if (wide)
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  flex: 2,
-                                  child: Column(
-                                    children: [
-                                      _GoalScoreCard(
-                                        goal: goal,
-                                        goalId: widget.goalId,
-                                        service: widget.service,
-                                        currentValueController:
-                                            _currentValueController,
-                                        currentValueFocus: _currentValueFocus,
-                                        onSave: goal.goalType == GoalType.merit
-                                            ? () => _editCurrentValue(goal)
-                                            : null,
-                                        onExtraMile: goal.goalType ==
-                                                GoalType.merit
-                                            ? _goExtraMile
-                                            : null,
-                                        onLogPeriodTarget: goal.goalType ==
-                                                    GoalType.merit &&
+                            const SizedBox(height: 20),
+                            if (wide)
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    flex: 2,
+                                    child: Column(
+                                      children: [
+                                        _GoalScoreCard(
+                                          goal: goal,
+                                          goalId: widget.goalId,
+                                          service: widget.service,
+                                          currentValueController:
+                                              _currentValueController,
+                                          currentValueFocus: _currentValueFocus,
+                                          onSave: goal.goalType ==
+                                                  GoalType.merit
+                                              ? () => _editCurrentValue(goal)
+                                              : null,
+                                          onExtraMile:
+                                              goal.goalType == GoalType.merit
+                                                  ? _goExtraMile
+                                                  : null,
+                                          onLogPeriodTarget:
+                                              goal.goalType == GoalType.merit &&
+                                                      goal.targetPeriod !=
+                                                          TargetPeriod.none
+                                                  ? _logPeriodTarget
+                                                  : null,
+                                        ),
+                                        const SizedBox(height: 18),
+                                        _ActionPlansCard(
+                                          goalId: widget.goalId,
+                                          service: widget.service,
+                                          uid: widget.uid,
+                                          planEntryController:
+                                              _planEntryController,
+                                        ),
+                                        const SizedBox(height: 18),
+                                        _CommentsCard(
+                                          goalId: widget.goalId,
+                                          service: widget.service,
+                                          uid: widget.uid,
+                                          controller: _commentController,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 18),
+                                  SizedBox(
+                                    width: 540,
+                                    child: Column(
+                                      children: [
+                                        _ProgressHistoryCard(
+                                          goalId: widget.goalId,
+                                          service: widget.service,
+                                        ),
+                                        const SizedBox(height: 18),
+                                        _AttachmentsCard(goal: goal),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              )
+                            else
+                              Column(
+                                children: [
+                                  _GoalScoreCard(
+                                    goal: goal,
+                                    goalId: widget.goalId,
+                                    service: widget.service,
+                                    currentValueController:
+                                        _currentValueController,
+                                    currentValueFocus: _currentValueFocus,
+                                    onSave: goal.goalType == GoalType.merit
+                                        ? () => _editCurrentValue(goal)
+                                        : null,
+                                    onExtraMile: goal.goalType == GoalType.merit
+                                        ? _goExtraMile
+                                        : null,
+                                    onLogPeriodTarget:
+                                        goal.goalType == GoalType.merit &&
                                                 goal.targetPeriod !=
                                                     TargetPeriod.none
                                             ? _logPeriodTarget
                                             : null,
-                                      ),
-                                      const SizedBox(height: 18),
-                                      _ActionPlansCard(
-                                        goalId: widget.goalId,
-                                        service: widget.service,
-                                        uid: widget.uid,
-                                        planEntryController:
-                                            _planEntryController,
-                                      ),
-                                      const SizedBox(height: 18),
-                                      _CommentsCard(
-                                        goalId: widget.goalId,
-                                        service: widget.service,
-                                        uid: widget.uid,
-                                        controller: _commentController,
-                                      ),
-                                    ],
                                   ),
-                                ),
-                                const SizedBox(width: 18),
-                                SizedBox(
-                                  width: 540,
-                                  child: Column(
-                                    children: [
-                                      _ProgressHistoryCard(
-                                        goalId: widget.goalId,
-                                        service: widget.service,
-                                      ),
-                                      const SizedBox(height: 18),
-                                      _AttachmentsCard(goal: goal),
-                                    ],
+                                  const SizedBox(height: 18),
+                                  _ActionPlansCard(
+                                    goalId: widget.goalId,
+                                    service: widget.service,
+                                    uid: widget.uid,
+                                    planEntryController: _planEntryController,
                                   ),
-                                ),
-                              ],
-                            )
-                          else
-                            Column(
-                              children: [
-                                _GoalScoreCard(
-                                  goal: goal,
-                                  goalId: widget.goalId,
-                                  service: widget.service,
-                                  currentValueController:
-                                      _currentValueController,
-                                  currentValueFocus: _currentValueFocus,
-                                  onSave: goal.goalType == GoalType.merit
-                                      ? () => _editCurrentValue(goal)
-                                      : null,
-                                  onExtraMile: goal.goalType == GoalType.merit
-                                      ? _goExtraMile
-                                      : null,
-                                  onLogPeriodTarget: goal.goalType ==
-                                                  GoalType.merit &&
-                                              goal.targetPeriod !=
-                                                  TargetPeriod.none
-                                      ? _logPeriodTarget
-                                      : null,
-                                ),
-                                const SizedBox(height: 18),
-                                _ActionPlansCard(
-                                  goalId: widget.goalId,
-                                  service: widget.service,
-                                  uid: widget.uid,
-                                  planEntryController: _planEntryController,
-                                ),
-                                const SizedBox(height: 18),
-                                _CommentsCard(
-                                  goalId: widget.goalId,
-                                  service: widget.service,
-                                  uid: widget.uid,
-                                  controller: _commentController,
-                                ),
-                                const SizedBox(height: 18),
-                                _ProgressHistoryCard(
-                                  goalId: widget.goalId,
-                                  service: widget.service,
-                                ),
-                                const SizedBox(height: 18),
-                                _AttachmentsCard(goal: goal),
-                              ],
-                            ),
-                        ],
+                                  const SizedBox(height: 18),
+                                  _CommentsCard(
+                                    goalId: widget.goalId,
+                                    service: widget.service,
+                                    uid: widget.uid,
+                                    controller: _commentController,
+                                  ),
+                                  const SizedBox(height: 18),
+                                  _ProgressHistoryCard(
+                                    goalId: widget.goalId,
+                                    service: widget.service,
+                                  ),
+                                  const SizedBox(height: 18),
+                                  _AttachmentsCard(goal: goal),
+                                ],
+                              ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
           ),
         );
       },
@@ -674,11 +676,18 @@ class _GoalScoreCard extends StatelessWidget {
                     Text(
                       hasTarget
                           ? '${goal.currentValue.toStringAsFixed(
-                              goal.currentValue.truncateToDouble() == goal.currentValue ? 0 : 2,
+                              goal.currentValue.truncateToDouble() ==
+                                      goal.currentValue
+                                  ? 0
+                                  : 2,
                             )} / ${goal.targetValue.toStringAsFixed(
-                              goal.targetValue.truncateToDouble() == goal.targetValue ? 0 : 2,
-                            )} ${goal.unit}'.trim()
-                      : 'No measure set yet — add a target to start scoring this quest.',
+                              goal.targetValue.truncateToDouble() ==
+                                      goal.targetValue
+                                  ? 0
+                                  : 2,
+                            )} ${goal.unit}'
+                              .trim()
+                          : 'No measure set yet — add a target to start scoring this quest.',
                       style: const TextStyle(
                         color: _text,
                         fontSize: 15.5,
@@ -898,8 +907,9 @@ class _ActionPlansCard extends StatelessWidget {
         stream: service.watchPlans(goalId),
         builder: (context, snapshot) {
           final plans = snapshot.data ?? const <ActionPlanItem>[];
-          final doneCount =
-              plans.where((plan) => plan.status == ActionPlanStatus.done).length;
+          final doneCount = plans
+              .where((plan) => plan.status == ActionPlanStatus.done)
+              .length;
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1065,14 +1075,14 @@ class _CommentsCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-              'Comments',
-              style: TextStyle(
-                color: _text,
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                fontFamily: 'Georgia',
+                'Comments',
+                style: TextStyle(
+                  color: _text,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  fontFamily: 'Georgia',
+                ),
               ),
-            ),
               const SizedBox(height: 10),
               const Text(
                 'Your coach\'s feedback, and your replies.',
@@ -1083,7 +1093,8 @@ class _CommentsCard extends StatelessWidget {
                 const _EmptySectionBody(
                   icon: Icons.chat_bubble_outline_rounded,
                   title: 'No comments yet',
-                  subtitle: 'Start the thread and your coach gets a notification.',
+                  subtitle:
+                      'Start the thread and your coach gets a notification.',
                 )
               else
                 Column(
@@ -1115,7 +1126,8 @@ class _CommentsCard extends StatelessWidget {
                 maxLines: 3,
                 style: const TextStyle(color: _text, fontSize: 15),
                 decoration: const InputDecoration(
-                  hintText: 'Ask a question, log a reflection, or reply to your coach...',
+                  hintText:
+                      'Ask a question, log a reflection, or reply to your coach...',
                   hintStyle: TextStyle(color: _muted, fontSize: 14),
                 ),
               ),
@@ -1188,25 +1200,26 @@ class _ProgressHistoryCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-            'Progress History',
-            style: TextStyle(
-              color: _text,
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              fontFamily: 'Georgia',
-            ),
-          ),
+                'Progress History',
+                style: TextStyle(
+                  color: _text,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  fontFamily: 'Georgia',
+                ),
+              ),
               const SizedBox(height: 8),
-          const Text(
-            'Every movement, in order.',
-            style: TextStyle(color: _muted, fontSize: 14.5, height: 1.45),
-          ),
+              const Text(
+                'Every movement, in order.',
+                style: TextStyle(color: _muted, fontSize: 14.5, height: 1.45),
+              ),
               const SizedBox(height: 14),
               if (updates.isEmpty)
                 const _EmptySectionBody(
                   icon: Icons.trending_up_rounded,
                   title: 'No movement yet',
-                  subtitle: 'Tick a task or change the status and it shows up here.',
+                  subtitle:
+                      'Tick a task or change the status and it shows up here.',
                 )
               else
                 Column(
@@ -1228,19 +1241,19 @@ class _ProgressHistoryCard extends StatelessWidget {
                               update.statusFrom != update.statusTo
                                   ? '${update.statusFrom.label} → ${update.statusTo.label}'
                                   : 'Progress update',
-                                style: const TextStyle(
-                                  color: _text,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                              style: const TextStyle(
+                                color: _text,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                             const SizedBox(height: 6),
                             Text(
                               '${update.progressFrom}% → ${update.progressTo}%',
-                                style: const TextStyle(
-                                  color: _muted,
-                                  fontSize: 13,
-                                ),
+                              style: const TextStyle(
+                                color: _muted,
+                                fontSize: 13,
+                              ),
                             ),
                             if (update.createdAt != null) ...[
                               const SizedBox(height: 4),
@@ -1535,7 +1548,8 @@ class _StatusDropdown extends StatelessWidget {
       child: DropdownButtonHideUnderline(
         child: DropdownButton<GoalStatus>(
           value: value,
-          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: _muted, size: 18),
+          icon: const Icon(Icons.keyboard_arrow_down_rounded,
+              color: _muted, size: 18),
           dropdownColor: _panel,
           style: const TextStyle(
             color: _text,

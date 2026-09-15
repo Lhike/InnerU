@@ -193,7 +193,8 @@ void main() {
 
     expect(find.byType(SingleChildScrollView), findsOneWidget);
     expect(tester.takeException(), isNull);
-    await tester.drag(find.byType(SingleChildScrollView), const Offset(0, -250));
+    await tester.drag(
+        find.byType(SingleChildScrollView), const Offset(0, -250));
     await tester.pump();
     expect(find.text('Log out'), findsOneWidget);
     expect(tester.takeException(), isNull);

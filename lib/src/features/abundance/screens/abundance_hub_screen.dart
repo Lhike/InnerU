@@ -264,21 +264,25 @@ class _AbundanceHubScreenState extends State<AbundanceHubScreen> {
                               children: [
                                 _Pill(
                                   label: 'Abundance 12',
-                                  background: Colors.white.withValues(alpha: 0.18),
+                                  background:
+                                      Colors.white.withValues(alpha: 0.18),
                                   foreground: Colors.white,
                                 ),
                                 _Pill(
-                                  label: widget.audience == AbundanceHubAudience.coach
+                                  label: widget.audience ==
+                                          AbundanceHubAudience.coach
                                       ? 'Coach mode'
                                       : 'Mentee mode',
-                                  background: Colors.white.withValues(alpha: 0.18),
+                                  background:
+                                      Colors.white.withValues(alpha: 0.18),
                                   foreground: Colors.white,
                                 ),
                                 _Pill(
                                   label: access.companyCode.isNotEmpty
                                       ? access.companyCode
                                       : access.companyName,
-                                  background: Colors.white.withValues(alpha: 0.18),
+                                  background:
+                                      Colors.white.withValues(alpha: 0.18),
                                   foreground: Colors.white,
                                 ),
                               ],
