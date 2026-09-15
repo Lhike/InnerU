@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_achievements_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_character_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_missions_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_more_sheet.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/coach/coach_quests_roster_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/abundance_mentee_dashboard_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/goals_hub_screen.dart';
@@ -7,16 +11,18 @@ import 'package:selfcare_projects/src/features/abundance/services/goals_service.
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/coach_dashboard/coach_dashboard_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/leaderboard/leaderboard_screen.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/dashboard/daily_tracker.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/notifications/notifications_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/profile/profile_settings.dart';
-import 'package:selfcare_projects/src/models/bottom_sheet.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/todo_list.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/login/login_screen.dart';
+import 'package:selfcare_projects/src/services/app_session_service.dart';
 import 'package:selfcare_projects/src/services/company_theme_service.dart';
+import 'package:selfcare_projects/src/services/session_cleanup_service.dart';
 
-/// The custom app shell (header + 5-tab bottom nav) A12-Tracker wraps every
-/// screen in, built only for Abundance members. Only the Quests tab has a
-/// finished redesign so far (mentee: [GoalsHubScreen]; coach:
-/// [CoachQuestsRosterScreen]) — Home/Guild/Profile/More render InnerU's
-/// existing equivalent screens verbatim as placeholders until their own
-/// specs land (see the design spec's "App shell" section).
+/// The custom app shell (header + 5-tab bottom nav) used only for Abundance
+/// members. It keeps InnerU's existing data-backed screens and services while
+/// presenting the A12 Home, Mission, Quests, Awards, and overflow navigation.
 ///
 /// The "ABUNDANCE 12" / "THE GAME OF MY LIFE" header copy is static ported
 /// brand text, not derived from [companyTheme]'s company name — A12 is
@@ -64,7 +70,7 @@ class AbundanceShellScreen extends StatefulWidget {
 }
 
 class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
-  // Tab order is Home(0)/Quests(1)/Guild(2)/Profile(3)/More(4). Seeded from
+  // Tab order is Home(0)/Mission(1)/Quests(2)/Awards(3)/More(4). Seeded from
   // widget.initialIndex (defaults to Home) in initState below.
   late int _index;
 
@@ -77,15 +83,16 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   // touch Firebase/network state directly in their State's field
   // initializers, which is unsafe to do for tabs the user hasn't opened yet
   // (and, in widget tests without a live Firebase app, throws outright).
-  final List<Widget> _builtTabs = List<Widget>.filled(5, const SizedBox.shrink());
+  final List<Widget> _builtTabs =
+      List<Widget>.filled(5, const SizedBox.shrink());
   final Set<int> _visited = {};
 
-  static const _tabLabels = ['Home', 'Quests', 'Guild', 'Profile', 'More'];
+  static const _tabLabels = ['Home', 'Mission', 'Quests', 'Awards', 'More'];
   static const _tabIcons = [
     Icons.home_outlined,
-    Icons.military_tech_outlined,
-    Icons.groups_outlined,
-    Icons.person_outline,
+    Icons.calendar_month_outlined,
+    Icons.flag_outlined,
+    Icons.workspace_premium_outlined,
     Icons.more_horiz,
   ];
 
@@ -117,14 +124,93 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       case 0:
         return _homeTabBody;
       case 1:
-        return _questsTabBody;
+        return AbundanceMissionsScreen(
+          onOpenDailyMission: () => _push(const UserProgressPage()),
+          onOpenMissionPlan: () => _push(const TodoList()),
+        );
       case 2:
-        return const Leaderboard();
+        return _questsTabBody;
       case 3:
-        return const ProfileSettings();
+        return const AbundanceAchievementsScreen();
       default:
         return const SizedBox.shrink(); // "More" never actually renders.
     }
+  }
+
+  Future<void> _push(Widget page) => Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => page),
+      );
+
+  Future<void> _openDestination(String key) async {
+    Navigator.of(context).pop();
+    switch (key) {
+      case 'guild':
+        await _push(const Leaderboard());
+        return;
+      case 'profile':
+        await _push(AbundanceCharacterScreen(
+          uid: widget.uid,
+          onOpenAccountSettings: () => _push(const ProfileSettings()),
+        ));
+        return;
+      case 'notifications':
+        await _push(NotificationsScreen(userId: widget.uid));
+        return;
+      case 'activity_logs':
+        await Navigator.of(context).pushNamed('/activityLogs');
+        return;
+      case 'sign_out':
+        await _confirmSignOut();
+        return;
+      case 'coach_students':
+      case 'coach_councils':
+      case 'coach_core_tasks':
+        await _push(const CoachDashboardScreen());
+        return;
+    }
+  }
+
+  Future<void> _confirmSignOut() async {
+    final shouldSignOut = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AbundanceColors.surfaceRaised,
+        title: const Text('Log out',
+            style: TextStyle(color: AbundanceColors.foreground)),
+        content: const Text('Are you sure you want to log out?',
+            style: TextStyle(color: AbundanceColors.muted)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
+    );
+    if (shouldSignOut != true) return;
+    await SessionCleanupService.signOut();
+    await AppSessionService.instance.clear();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
+      (_) => false,
+    );
+  }
+
+  void _showMore() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => AbundanceMoreSheet(
+        isCoach: widget.isCoach,
+        onDestination: (key) => _openDestination(key),
+      ),
+    );
   }
 
   void _ensureBuilt(int index) {
@@ -144,7 +230,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
 
   void _onTabTapped(int newIndex) {
     if (newIndex == 4) {
-      BottomSheetWidget.show(context);
+      _showMore();
       return; // stay on the current tab; More is a trigger, not a screen.
     }
     setState(() {
@@ -152,8 +238,6 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       _ensureBuilt(newIndex);
     });
   }
-
-  static const int _questsTabIndex = 1;
 
   PreferredSizeWidget _buildShellHeader() {
     return AppBar(
@@ -170,15 +254,15 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
                   fontWeight: FontWeight.bold,
                   fontSize: 14)),
           Text('THE GAME OF MY LIFE',
-              style: TextStyle(
-                  color: AbundanceColors.primaryGold, fontSize: 10)),
+              style:
+                  TextStyle(color: AbundanceColors.primaryGold, fontSize: 10)),
         ],
       ),
       actions: [
         IconButton(
           icon: const Icon(Icons.notifications_none,
               color: AbundanceColors.foreground),
-          onPressed: () {},
+          onPressed: () => _push(NotificationsScreen(userId: widget.uid)),
         ),
         const SizedBox(width: 8),
       ],
@@ -189,20 +273,12 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AbundanceColors.background,
-      // Only the Quests tab gets the shell's own header. The other four tabs
-      // embed InnerU screens that each bring their own root Scaffold+AppBar
-      // (AbundanceMenteeDashboardScreen, CoachDashboardScreen, Leaderboard,
-      // ProfileSettings), so rendering the shell's header there stacked two
-      // headers on top of each other. This mirrors how Setuppage/
-      // CoachSetuppage in lib/setup_navbar.dart already solve the same
-      // problem (`appBar: index == 2 ? null : AppBar(...)`).
-      //
-      // Neither Quests-tab body has an AppBar of its own — GoalsHubScreen has
-      // no Scaffold at all and CoachQuestsRosterScreen's Scaffold passes no
-      // appBar — so this is the one tab that needs the shell to supply one.
-      appBar: _index == _questsTabIndex ? _buildShellHeader() : null,
+      // The dashboard owns its AppBar. All other in-shell pages use the
+      // shared branded header, avoiding stacked headers.
+      appBar: _index == 0 ? null : _buildShellHeader(),
       body: IndexedStack(index: _index, children: _builtTabs),
       bottomNavigationBar: BottomNavigationBar(
+        key: const ValueKey('abundance-primary-navigation'),
         type: BottomNavigationBarType.fixed,
         backgroundColor: AbundanceColors.surfaceRaised,
         selectedItemColor: AbundanceColors.primaryGold,

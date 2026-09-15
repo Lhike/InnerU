@@ -60,7 +60,8 @@ void main() {
 
     await tester.tap(find.text('Home'));
     await tester.pumpAndSettle();
-    expect(find.text('Home'), findsWidgets); // the tab label itself, still visible
+    expect(
+        find.text('Home'), findsWidgets); // the tab label itself, still visible
   });
 
   testWidgets('coach shell shows the coach roster on the Quests tab',
@@ -84,7 +85,7 @@ void main() {
         // synchronously in a field initializer and crashes with no live
         // Firebase app in this widget-test environment. This is a test-only
         // override, not a change to production behavior.
-        initialIndex: 1,
+        initialIndex: 2,
       ),
     ));
     await tester.pumpAndSettle();
@@ -163,7 +164,7 @@ void main() {
           companyName: 'Abundance',
           isCompanyTheme: true,
         ),
-        initialIndex: 1, // land directly on Quests
+        initialIndex: 2, // land directly on Quests
       ),
     ));
     await tester.pumpAndSettle();
@@ -212,7 +213,7 @@ void main() {
     await tester.tap(find.text('More'));
     await tester.pumpAndSettle();
 
-    // BottomSheetWidget.show opened — its menu tiles are on screen.
+    // The Abundance overflow keeps essential existing account actions.
     expect(find.text('Log out'), findsOneWidget);
     expect(find.text('Activity Logs'), findsOneWidget);
     // The tab underneath is untouched: still Quests, not some 5th "More" body.
@@ -245,6 +246,8 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
+    await tester.tap(find.text('More'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Guild'));
     await tester.pumpAndSettle();
 
@@ -271,7 +274,9 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Profile'));
+    await tester.tap(find.text('More'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Character'));
     await tester.pumpAndSettle();
 
     // ProfileSettings brings its own AppBar; the shell must not add a second.
@@ -335,7 +340,8 @@ void main() {
     expect(find.text('ABUNDANCE 12'), findsNothing);
   });
 
-  testWidgets('initialIndex can never land on the More trigger', (tester) async {
+  testWidgets('initialIndex can never land on the More trigger',
+      (tester) async {
     final service = GoalsService(FakeFirebaseFirestore());
 
     await tester.pumpWidget(MaterialApp(
@@ -349,7 +355,7 @@ void main() {
           isCompanyTheme: true,
         ),
         // 4 is "More" — a bottom-sheet trigger, not a tab body. It must clamp
-        // down to a real tab (3, Profile) instead of showing a blank screen.
+        // down to a real tab (3, Awards) instead of showing a blank screen.
         initialIndex: 4,
         questsAccessResolverOverride: (_) async => true,
       ),

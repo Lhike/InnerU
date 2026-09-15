@@ -90,7 +90,7 @@ void main() {
         tester
             .widget<AbundanceShellScreen>(find.byType(AbundanceShellScreen))
             .initialIndex,
-        1,
+        2,
       );
       // The standard chrome must be gone entirely, not merely hidden behind
       // the shell.
