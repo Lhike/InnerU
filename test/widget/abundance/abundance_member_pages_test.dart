@@ -21,6 +21,7 @@ class _FakeMissionsGateway implements AbundanceMissionsGateway {
     }
   }
   final bool failCompletion;
+  Task? updatedTask;
   final tasks = <Task>[
     Task(
       id: 'm1',
@@ -43,6 +44,7 @@ class _FakeMissionsGateway implements AbundanceMissionsGateway {
   @override
   Future<void> update(Task task) async {
     if (failCompletion) throw Exception('offline');
+    updatedTask = task;
   }
 }
 
@@ -116,6 +118,7 @@ void main() {
   testWidgets('mission menu edits and deletes through the gateway',
       (tester) async {
     final gateway = _FakeMissionsGateway();
+    gateway.tasks.first.scheduledTime = '07:30';
     await tester.pumpWidget(MaterialApp(
       home: AbundanceMissionsScreen(
         gateway: gateway,
@@ -129,11 +132,18 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Edit'));
     await tester.pumpAndSettle();
+    expect(find.textContaining('7:30'), findsWidgets);
+    await tester.tap(find.byKey(const ValueKey('mission-time-field')));
+    await tester.pumpAndSettle();
+    expect(find.byType(TimePickerDialog), findsOneWidget);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
     final titleField = find.byKey(const ValueKey('mission-title-field'));
     await tester.enterText(titleField, 'Read 20 pages');
     await tester.tap(find.text('Save mission'));
     await tester.pumpAndSettle();
     expect(find.text('Read 20 pages'), findsOneWidget);
+    expect(gateway.updatedTask?.scheduledTime, '07:30');
 
     await tester.tap(find.byType(PopupMenuButton<String>));
     await tester.pumpAndSettle();

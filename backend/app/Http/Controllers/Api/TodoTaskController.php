@@ -50,6 +50,7 @@ class TodoTaskController extends Controller
             'tag_index' => ['nullable', 'integer', 'min:0', 'max:3'],
             'is_completed' => ['sometimes', 'boolean'],
             'completed_at' => ['nullable', 'date'],
+            'scheduled_time' => ['nullable', 'date_format:H:i'],
             'completion_dates' => ['nullable', 'array'],
             'sub_tasks' => ['nullable', 'array'],
         ]);
@@ -80,6 +81,7 @@ class TodoTaskController extends Controller
                 'completed_at' => isset($validated['completed_at'])
                     ? Carbon::parse($validated['completed_at'])
                     : null,
+                'scheduled_time' => $validated['scheduled_time'] ?? null,
                 'completion_dates' => $this->normalizeCompletionDates(
                     $validated['completion_dates'] ?? []
                 ),
@@ -107,6 +109,7 @@ class TodoTaskController extends Controller
             'tag_index' => ['nullable', 'integer', 'min:0', 'max:3'],
             'is_completed' => ['sometimes', 'boolean'],
             'completed_at' => ['nullable', 'date'],
+            'scheduled_time' => ['sometimes', 'nullable', 'date_format:H:i'],
             'completion_dates' => ['sometimes', 'nullable', 'array'],
             'sub_tasks' => ['nullable', 'array'],
         ]);
@@ -143,6 +146,9 @@ class TodoTaskController extends Controller
             $todoTask->completed_at = $validated['completed_at'] === null
                 ? null
                 : Carbon::parse($validated['completed_at']);
+        }
+        if (array_key_exists('scheduled_time', $validated)) {
+            $todoTask->scheduled_time = $validated['scheduled_time'];
         }
         if (array_key_exists('completion_dates', $validated)) {
             $todoTask->completion_dates = $this->normalizeCompletionDates(
@@ -217,6 +223,9 @@ class TodoTaskController extends Controller
             'createdAt' => $task->created_at?->toIso8601String(),
             'updatedAt' => $task->updated_at?->toIso8601String(),
             'completedAt' => $task->completed_at?->toIso8601String(),
+            'scheduledTime' => $task->scheduled_time === null
+                ? null
+                : Carbon::parse($task->scheduled_time)->format('H:i'),
             'completionDates' => collect($task->completion_dates ?? [])
                 ->map(fn ($date) => Carbon::parse($date)->toDateString())
                 ->values()

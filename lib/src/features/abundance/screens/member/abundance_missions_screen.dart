@@ -101,6 +101,7 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
     var dueDate = DateUtils.dateOnly(
       existing?.dueDate ?? _selected.add(const Duration(days: 29)),
     );
+    var scheduledTime = existing?.scheduledTime;
     final draft = await showModalBottomSheet<_MissionDraft>(
       context: context,
       isScrollControlled: true,
@@ -202,6 +203,39 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
                   ),
                 ],
               ),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton.icon(
+                      key: const ValueKey('mission-time-field'),
+                      onPressed: () async {
+                        final value = await showTimePicker(
+                          context: sheetContext,
+                          initialTime: _timeOfDay(scheduledTime),
+                        );
+                        if (value != null) {
+                          setSheetState(
+                            () => scheduledTime = _serializeTime(value),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.schedule_outlined),
+                      label: Text(
+                        scheduledTime == null
+                            ? 'Add a time'
+                            : _displayTime(scheduledTime!),
+                      ),
+                    ),
+                  ),
+                  if (scheduledTime != null)
+                    IconButton(
+                      tooltip: 'Clear mission time',
+                      onPressed: () =>
+                          setSheetState(() => scheduledTime = null),
+                      icon: const Icon(Icons.close),
+                    ),
+                ],
+              ),
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
@@ -218,6 +252,7 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
                         tag: tag,
                         startDate: startDate,
                         dueDate: dueDate,
+                        scheduledTime: scheduledTime,
                       ),
                     );
                   },
@@ -242,6 +277,7 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
       startDate: draft.startDate,
       dueDate: draft.dueDate,
       tag: draft.tag,
+      scheduledTime: draft.scheduledTime,
       isCompleted: existing?.isCompleted ?? false,
       createdAt: existing?.createdAt,
       updatedAt: existing?.updatedAt,
@@ -415,6 +451,14 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
                         Text(task.description,
                             style: AbundanceTypography.body.copyWith(
                                 color: AbundanceColors.muted, fontSize: 13)),
+                      if (task.scheduledTime != null)
+                        Text(
+                          _displayTime(task.scheduledTime!),
+                          style: AbundanceTypography.body.copyWith(
+                            color: AbundanceColors.primaryGold,
+                            fontSize: 12,
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -446,6 +490,7 @@ class _MissionDraft {
     required this.tag,
     required this.startDate,
     required this.dueDate,
+    required this.scheduledTime,
   });
 
   final String title;
@@ -453,4 +498,26 @@ class _MissionDraft {
   final TaskTag tag;
   final DateTime startDate;
   final DateTime dueDate;
+  final String? scheduledTime;
+}
+
+TimeOfDay _timeOfDay(String? value) {
+  final parts = value?.split(':') ?? const <String>[];
+  if (parts.length == 2) {
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour != null && minute != null && hour < 24 && minute < 60) {
+      return TimeOfDay(hour: hour, minute: minute);
+    }
+  }
+  return TimeOfDay.now();
+}
+
+String _serializeTime(TimeOfDay value) =>
+    '${value.hour.toString().padLeft(2, '0')}:'
+    '${value.minute.toString().padLeft(2, '0')}';
+
+String _displayTime(String value) {
+  final time = _timeOfDay(value);
+  return DateFormat.jm().format(DateTime(2000, 1, 1, time.hour, time.minute));
 }

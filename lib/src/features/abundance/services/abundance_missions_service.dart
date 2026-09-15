@@ -42,6 +42,7 @@ class InnerUAbundanceMissionsGateway implements AbundanceMissionsGateway {
         'tag_index': task.tag.index,
         'is_completed': task.isCompleted,
         'completed_at': task.completedAt?.toIso8601String(),
+        'scheduled_time': task.scheduledTime,
         'completion_dates':
             task.completionDates.map((date) => date.toIso8601String()).toList(),
         'sub_tasks': task.subTasks.map((item) => item.toJson()).toList(),

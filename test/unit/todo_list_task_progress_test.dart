@@ -188,6 +188,7 @@ void main() {
         description: 'Build the habit step by step',
         startDate: DateTime(2026, 7, 17),
         dueDate: DateTime(2026, 7, 21),
+        scheduledTime: '07:30',
         tag: TaskTag.personal,
         subTasks: [
           TaskSubItem(
@@ -213,6 +214,7 @@ void main() {
       expect(restored.description, original.description);
       expect(restored.startDate, original.startDate);
       expect(restored.tag, original.tag);
+      expect(restored.scheduledTime, '07:30');
       expect(restored.subTasks, hasLength(2));
       expect(restored.subTasks.first.title, 'Plan');
       expect(restored.subTasks.first.isCompleted, isTrue);

@@ -22,13 +22,15 @@ class TodoTaskApiTest extends TestCase
             'description' => 'Start strong and finish by the deadline.',
             'start_date' => '2026-07-01',
             'due_date' => '2026-09-01',
+            'scheduled_time' => '07:30',
             'tag' => 'personal',
             'sub_tasks' => [],
         ]);
 
         $response->assertCreated()
             ->assertJsonPath('task.startDate', '2026-07-01')
-            ->assertJsonPath('task.dueDate', '2026-09-01');
+            ->assertJsonPath('task.dueDate', '2026-09-01')
+            ->assertJsonPath('task.scheduledTime', '07:30');
 
         $taskId = $response->json('task.id');
         $this->assertDatabaseHas('todo_tasks', [
@@ -40,6 +42,7 @@ class TodoTaskApiTest extends TestCase
         $this->assertSame('2026-07-01', $task->start_date?->toDateString());
         $this->assertSame('2026-09-01', $task->due_date?->toDateString());
         $this->assertSame('LONG_TERM', $task->goal_type);
+        $this->assertSame('07:30', $task->scheduled_time);
         $this->assertSame([], $task->completion_dates ?? []);
     }
 

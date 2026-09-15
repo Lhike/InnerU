@@ -196,6 +196,7 @@ class Task {
   DateTime createdAt;
   DateTime? updatedAt;
   DateTime? completedAt;
+  String? scheduledTime;
   List<DateTime> completionDates;
   List<TaskSubItem> subTasks;
 
@@ -211,6 +212,7 @@ class Task {
     DateTime? createdAt,
     this.updatedAt,
     this.completedAt,
+    this.scheduledTime,
     List<DateTime>? completionDates,
     List<TaskSubItem>? subTasks,
   })  : createdAt = createdAt ?? DateTime.now(),
@@ -231,6 +233,7 @@ class Task {
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt?.toIso8601String(),
         'completedAt': completedAt?.toIso8601String(),
+        'scheduledTime': scheduledTime,
         'completionDates':
             completionDates.map((date) => date.toIso8601String()).toList(),
         'subTasks': subTasks.map((subTask) => subTask.toJson()).toList(),
@@ -333,6 +336,8 @@ class Task {
             DateTime.fromMillisecondsSinceEpoch(0),
         updatedAt: _dateFromValue(json['updatedAt']),
         completedAt: _dateFromValue(json['completedAt']),
+        scheduledTime:
+            (json['scheduledTime'] ?? json['scheduled_time'])?.toString(),
         completionDates: _dateListFromValue(
           json['completionDates'] ?? json['completion_dates'],
         ),
@@ -656,8 +661,7 @@ class _TodoListScreenState extends State<TodoListScreen> {
     try {
       final membershipData =
           await CompanyMembershipService.loadForUser(session.id.toString());
-      final useGoalsHub =
-          _isAbundanceCompany(membershipData.activeMembership);
+      final useGoalsHub = _isAbundanceCompany(membershipData.activeMembership);
 
       if (!mounted) return;
       setState(() {

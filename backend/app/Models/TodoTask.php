@@ -19,6 +19,7 @@ class TodoTask extends Model
         'tag',
         'is_completed',
         'completed_at',
+        'scheduled_time',
         'completion_dates',
         'sub_tasks',
     ];
