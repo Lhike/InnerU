@@ -56,7 +56,11 @@ class AbundanceCouncilFallbackController extends Controller
             return response()->json(['councils' => [], 'members' => []]);
         }
 
-        $group = CoachGroup::query()->find($groupId);
+        // Re-apply the active company boundary when resolving an existing
+        // assignment. A stale or imported coach_mentees row must not expose
+        // a council owned by another company.
+        $group = $this->groupsForUser($user)
+            ->firstWhere('id', (string) $groupId);
         if ($group === null) {
             return response()->json(['councils' => [], 'members' => []]);
         }
@@ -141,30 +145,34 @@ class AbundanceCouncilFallbackController extends Controller
             return CoachGroup::query()->whereRaw('1 = 0')->get();
         }
 
-        return CoachGroup::query()
-            ->where(function ($query) use ($companyId, $companyCode, $companyName): void {
-                $hasScope = false;
-                if ($companyId !== '') {
-                    $query->where('company_id', $companyId);
-                    $hasScope = true;
-                }
+        $query = CoachGroup::query();
+        if ($companyId !== '') {
+            // The ID is authoritative. Keep the code fallback only for
+            // legacy rows created before coach_groups gained company_id.
+            $query->where(function ($scope) use ($companyId, $companyCode): void {
+                $scope->where('company_id', $companyId);
                 if ($companyCode !== '') {
-                    if ($hasScope) {
-                        $query->orWhere('company_code', $companyCode);
-                    } else {
-                        $query->where('company_code', $companyCode);
-                    }
-                    $hasScope = true;
+                    $scope->orWhere(function ($legacy) use ($companyCode): void {
+                        $legacy->where(function ($missingId): void {
+                            $missingId->whereNull('company_id')->orWhere('company_id', '');
+                        })->where('company_code', $companyCode);
+                    });
                 }
-                if ($companyName !== '') {
-                    if ($hasScope) {
-                        $query->orWhere('company_name', $companyName);
-                    } else {
-                        $query->where('company_name', $companyName);
-                    }
-                    $hasScope = true;
-                }
-            })
+            });
+        } elseif ($companyCode !== '') {
+            $query->where('company_code', $companyCode);
+        } else {
+            // A name is only a last-resort legacy key, and must not override
+            // a group carrying another company's ID or code.
+            $query->where('company_name', $companyName)
+                ->where(function ($scope): void {
+                    $scope->whereNull('company_id')->orWhere('company_id', '');
+                })->where(function ($scope): void {
+                    $scope->whereNull('company_code')->orWhere('company_code', '');
+                });
+        }
+
+        return $query
             ->orderBy('name')
             ->get();
     }

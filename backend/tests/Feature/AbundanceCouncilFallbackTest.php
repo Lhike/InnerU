@@ -105,6 +105,42 @@ class AbundanceCouncilFallbackTest extends TestCase
             ->assertJsonCount(0, 'councils');
     }
 
+    public function test_guild_does_not_trust_a_cross_company_stale_assignment(): void
+    {
+        $coach = User::factory()->create([
+            'company_code' => 'OTHER',
+            'company_name' => 'Other company',
+            'is_coach' => true,
+            'role' => 'coach',
+        ]);
+        $user = User::factory()->create([
+            'company_code' => 'ABU15DN',
+            'company_name' => 'Abundance 12',
+        ]);
+        $group = CoachGroup::create([
+            'id' => 'other-group',
+            'coach_id' => (string) $coach->id,
+            'name' => 'Other company council',
+            'company_code' => 'OTHER',
+            'company_name' => 'Other company',
+        ]);
+        CoachMentee::create([
+            'coach_id' => (string) $coach->id,
+            'mentee_id' => (string) $user->id,
+            'mentee_name' => $user->name,
+            'mentee_email' => $user->email,
+            'group_id' => $group->id,
+            'group_name' => $group->name,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/abundance/guild')
+            ->assertOk()
+            ->assertJsonCount(0, 'councils')
+            ->assertJsonCount(0, 'members');
+    }
+
     public function test_join_and_leave_update_the_coach_group_membership(): void
     {
         $coach = User::factory()->create([
