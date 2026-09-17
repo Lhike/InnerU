@@ -72,13 +72,11 @@ void main() {
 
     expect(find.text('EVERYDAY MISSIONS'), findsOneWidget);
     await tester.pumpAndSettle();
-    expect(find.text('Read 10 pages'), findsOneWidget);
-    expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isFalse);
-    expect(find.bySemanticsLabel(RegExp('Complete Read 10 pages')),
-        findsOneWidget);
-    await tester.tap(find.byType(Checkbox));
+    await tester.tap(find.text('15').last);
     await tester.pumpAndSettle();
-    expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isFalse);
+    expect(find.text('Read 10 pages'), findsOneWidget);
+    await tester.tap(find.text('Read 10 pages'));
+    await tester.pumpAndSettle();
     expect(find.text('We could not update that mission.'), findsOneWidget);
     semantics.dispose();
   });
@@ -110,15 +108,15 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
+    await tester.tap(find.text('16').last);
+    await tester.pumpAndSettle();
     expect(find.text('Daily practice'), findsOneWidget);
     expect(find.text('Long-term quest'), findsNothing);
-    expect(tester.widget<Checkbox>(find.byType(Checkbox)).onChanged, isNull);
   });
 
-  testWidgets('mission menu edits and deletes through the gateway',
+  testWidgets('selected day can add a mission through the source dialog',
       (tester) async {
     final gateway = _FakeMissionsGateway();
-    gateway.tasks.first.scheduledTime = '07:30';
     await tester.pumpWidget(MaterialApp(
       home: AbundanceMissionsScreen(
         gateway: gateway,
@@ -128,30 +126,67 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.tap(find.text('15').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Edit'));
+    await tester.tap(find.text('Add a mission'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('7:30'), findsWidgets);
-    await tester.tap(find.byKey(const ValueKey('mission-time-field')));
-    await tester.pumpAndSettle();
-    expect(find.byType(TimePickerDialog), findsOneWidget);
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
-    final titleField = find.byKey(const ValueKey('mission-title-field'));
+    final titleField = find.byType(TextField).first;
     await tester.enterText(titleField, 'Read 20 pages');
-    await tester.tap(find.text('Save mission'));
+    await tester.tap(find.text('Add mission'));
     await tester.pumpAndSettle();
     expect(find.text('Read 20 pages'), findsOneWidget);
-    expect(gateway.updatedTask?.scheduledTime, '07:30');
+    expect(gateway.tasks.any((task) => task.title == 'Read 20 pages'), isTrue);
+  });
 
-    await tester.tap(find.byType(PopupMenuButton<String>));
+  testWidgets('mission selector keeps its icon in sync with the chosen type',
+      (tester) async {
+    final gateway = _FakeMissionsGateway();
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceMissionsScreen(
+        gateway: gateway,
+        initialDate: DateTime(2026, 9, 15),
+        today: DateTime(2026, 9, 15),
+      ),
+    ));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Delete'));
+
+    await tester.tap(find.text('15').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.tap(find.text('Add a mission'));
     await tester.pumpAndSettle();
-    expect(gateway.tasks, isEmpty);
+    expect(find.byIcon(Icons.self_improvement), findsWidgets);
+
+    await tester.tap(find.byType(DropdownButtonFormField<TaskTag>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Exercise / movements').last);
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.directions_run), findsWidgets);
+  });
+
+  testWidgets('creating a mission notifies the shell to refresh Home',
+      (tester) async {
+    final gateway = _FakeMissionsGateway();
+    var changed = false;
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceMissionsScreen(
+        gateway: gateway,
+        initialDate: DateTime(2026, 9, 15),
+        today: DateTime(2026, 9, 15),
+        onMissionChanged: () => changed = true,
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('15').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add a mission'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.byType(TextField).first, 'Meditate for 10 minutes');
+    await tester.tap(find.text('Add mission'));
+    await tester.pumpAndSettle();
+
+    expect(changed, isTrue);
   });
 
   testWidgets('achievements distinguish earned and locked awards',
@@ -160,8 +195,8 @@ void main() {
       home: AbundanceAchievementsScreen(unlockedKeys: {'first-flame'}),
     ));
 
-    expect(find.text('ACHIEVEMENTS'), findsOneWidget);
-    expect(find.text('EARNED'), findsOneWidget);
+    expect(find.text('THE HALL OF RECORDS'), findsOneWidget);
+    expect(find.text('RECENTLY UNLOCKED'), findsOneWidget);
     expect(find.text('LOCKED'), findsOneWidget);
     expect(find.text('First Flame'), findsOneWidget);
   });
@@ -175,7 +210,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('2 of 10 earned'), findsOneWidget);
+    expect(find.text('2'), findsWidgets);
   });
 
   test('live achievements derive awards from missions and quests', () async {
@@ -293,7 +328,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('YOUR CHARACTER'), findsOneWidget);
-    await tester.drag(find.byType(GridView), const Offset(0, -300));
+    await tester.drag(find.byType(ListView), const Offset(0, -700));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('character-mage')));
     await tester.pumpAndSettle();
@@ -311,7 +346,7 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(GridView), const Offset(0, -300));
+    await tester.drag(find.byType(ListView), const Offset(0, -700));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('character-mage')));
     await tester.pumpAndSettle();

@@ -98,7 +98,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Quests'), findsWidgets);
+    expect(find.textContaining('QUESTS'), findsWidgets);
     // The assertion above is satisfiable by a false positive: the
     // access-DENIED gate panel's copy also contains the word "Quests", so
     // this guard additionally proves access was actually GRANTED (the gate
@@ -208,12 +208,11 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    // Filter to a category the member holds no quest in. The filter chip's
-    // label is "<category>  <count>" -- matched exactly so this cannot
-    // accidentally tap the category's tile in the summary grid instead.
-    await tester.ensureVisible(find.text('Professional  0'));
+    // Filter to a category the member holds no quest in. A12 uses compact
+    // category glyphs in the filter row; the professional glyph is ▣.
+    await tester.ensureVisible(find.text('▣  0'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Professional  0'));
+    await tester.tap(find.text('▣  0'));
     await tester.pumpAndSettle();
 
     expect(find.text('No quests in this category yet'), findsOneWidget);

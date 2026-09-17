@@ -27,6 +27,8 @@ use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\StepSubmissionController;
 use App\Http\Controllers\Api\AccountabilityMeetingController;
 use App\Http\Controllers\Api\AnalyticsEmployeeScoreController;
+use App\Http\Controllers\Api\AbundanceA12SessionController;
+use App\Http\Controllers\Api\AbundanceCouncilFallbackController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', fn () => response()->json([
@@ -49,6 +51,11 @@ Route::prefix('auth')->group(function (): void {
 });
 
 Route::middleware('auth:sanctum')->group(function (): void {
+    Route::post('/abundance/a12/session', AbundanceA12SessionController::class);
+    Route::get('/abundance/councils', [AbundanceCouncilFallbackController::class, 'councils']);
+    Route::get('/abundance/guild', [AbundanceCouncilFallbackController::class, 'guild']);
+    Route::post('/abundance/guild/join', [AbundanceCouncilFallbackController::class, 'join']);
+    Route::post('/abundance/guild/leave', [AbundanceCouncilFallbackController::class, 'leave']);
     Route::get('/me', [ProfileController::class, 'show']);
     Route::patch('/me', [ProfileController::class, 'update']);
     Route::delete('/me', [AuthController::class, 'destroy']);

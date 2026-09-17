@@ -70,4 +70,11 @@ return [
         'hash_config_path' => env('FIREBASE_HASH_CONFIG_PATH', storage_path('app/firestore-snapshot/hash-config.json')),
     ],
 
+    'abundance_a12' => [
+        'url' => env('ABUNDANCE_A12_API_URL', 'https://a14-api.valenin.com/api/v1'),
+        'secret' => env('ABUNDANCE_A12_BRIDGE_SECRET'),
+        'connect_timeout' => (int) env('ABUNDANCE_A12_CONNECT_TIMEOUT', 3),
+        'timeout' => (int) env('ABUNDANCE_A12_TIMEOUT', 8),
+    ],
+
 ];

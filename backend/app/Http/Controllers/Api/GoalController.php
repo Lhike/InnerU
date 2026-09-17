@@ -716,8 +716,53 @@ class GoalController extends Controller
         return round(($remaining / $periods) * 100) / 100;
     }
 
+    /** @return array{dailyTarget: float, weeklyTarget: float} */
+    private function dailyAndWeeklyTargets(Goal $goal): array
+    {
+        $target = (float) $goal->target_value;
+        $remaining = max(0, $target - (float) $goal->current_value);
+        if ($target <= 0 || $remaining <= 0 || $goal->target_date === null) {
+            return ['dailyTarget' => 0.0, 'weeklyTarget' => 0.0];
+        }
+
+        $daysRemaining = max(
+            1,
+            (int) now()->startOfDay()->diffInDays(
+                $goal->target_date->copy()->startOfDay(),
+                false,
+            ),
+        );
+        // NONE is treated as a daily cadence, matching the InnerU mobile
+        // goal screen for milestone-style goals with a deadline.
+        $periodDays = max(1, $this->periodDays((string) $goal->target_period));
+        $periodsRemaining = max(1, intdiv($daysRemaining, $periodDays));
+        $amount = round($remaining / $periodsRemaining, 2);
+
+        $lastLoggedDate = GoalMerit::query()
+            ->where('goal_id', $goal->id)
+            ->orderByDesc('date')
+            ->value('date');
+        $nextDueInDays = 0;
+        if ($lastLoggedDate !== null) {
+            $daysSinceLastLog = max(
+                0,
+                (int) Carbon::parse((string) $lastLoggedDate)
+                    ->startOfDay()
+                    ->diffInDays(now()->startOfDay(), false),
+            );
+            $nextDueInDays = max(0, max(1, $periodDays) - $daysSinceLastLog);
+        }
+
+        $dailyTarget = $nextDueInDays > 0 ? 0.0 : min($remaining, $amount);
+        $dueThisWeek = (int) ceil(7 / max(1, $periodDays));
+        $weeklyTarget = min($remaining, $dueThisWeek * $amount);
+
+        return ['dailyTarget' => $dailyTarget, 'weeklyTarget' => $weeklyTarget];
+    }
+
     private function mapGoal(Goal $goal): array
     {
+        $schedule = $this->dailyAndWeeklyTargets($goal);
         return [
             'id' => (string) $goal->id,
             'userId' => (string) $goal->user_id,
@@ -733,6 +778,8 @@ class GoalController extends Controller
             'direction' => $goal->direction,
             'targetValue' => (float) $goal->target_value,
             'currentValue' => (float) $goal->current_value,
+            'dailyTarget' => $schedule['dailyTarget'],
+            'weeklyTarget' => $schedule['weeklyTarget'],
             'unit' => $goal->unit ?? '',
             'startDate' => $goal->start_date?->toIso8601String(),
             'targetDate' => $goal->target_date?->toIso8601String(),

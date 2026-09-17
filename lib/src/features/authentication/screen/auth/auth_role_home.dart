@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/adminscreen/admin_dashboard.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/abundance_post_auth_gate.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/company_loading/company_loading_screen.dart';
 import 'package:selfcare_projects/setup_navbar.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
@@ -34,15 +35,24 @@ class AuthRoleHome extends StatelessWidget {
     );
     final companyGate = CompanyLoadingGate(
       uid: session.id.toString(),
-      builder: (context, initialCompanyTheme) => isCoach
-          ? CoachSetuppage(
-              defaultScreen: defaultScreen,
-              initialCompanyTheme: initialCompanyTheme,
-            )
-          : Setuppage(
-              defaultScreen: defaultScreen,
-              initialCompanyTheme: initialCompanyTheme,
-            ),
+      builder: (context, initialCompanyTheme) {
+        final shell = isCoach
+            ? CoachSetuppage(
+                defaultScreen: defaultScreen,
+                initialCompanyTheme: initialCompanyTheme,
+              )
+            : Setuppage(
+                defaultScreen: defaultScreen,
+                initialCompanyTheme: initialCompanyTheme,
+              );
+        return AbundancePostAuthGate(
+          uid: session.id.toString(),
+          initialName: session.name,
+          companyTheme: initialCompanyTheme,
+          isCoach: isCoach,
+          child: shell,
+        );
+      },
     );
 
     if (isAdmin) {

@@ -113,6 +113,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   Widget get _homeTabBody => AbundanceMenteeDashboardScreen(
         initialCompanyTheme: widget.companyTheme,
         service: widget.service,
+        onOpenMissions: () => _onTabTapped(1),
       );
 
   Widget _tabBodyFor(int index) {
@@ -120,7 +121,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       case 0:
         return _homeTabBody;
       case 1:
-        return const AbundanceMissionsScreen();
+        return AbundanceMissionsScreen(onMissionChanged: _refreshHomeTab);
       case 2:
         return _questsTabBody;
       case 3:
@@ -140,7 +141,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
           loader: gateway.load,
         );
       case 4:
-        return const AbundanceGuildScreen();
+        return AbundanceGuildScreen(onSignOut: _confirmSignOut);
       case 5:
         return AbundanceCharacterScreen(
           uid: widget.uid,
@@ -164,7 +165,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   Future<void> _openDestination(String key) async {
     switch (key) {
       case 'guild':
-        await _push(const AbundanceGuildScreen());
+        await _push(AbundanceGuildScreen(onSignOut: _confirmSignOut));
         return;
       case 'profile':
         await _push(
@@ -397,6 +398,13 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         _builtTabs[3] = _tabBodyFor(3);
       }
       _ensureBuilt(newIndex);
+    });
+  }
+
+  void _refreshHomeTab() {
+    if (!mounted || !_visited.contains(0)) return;
+    setState(() {
+      _builtTabs[0] = _tabBodyFor(0);
     });
   }
 

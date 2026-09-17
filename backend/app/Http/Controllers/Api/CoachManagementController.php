@@ -398,6 +398,31 @@ class CoachManagementController extends Controller
             ->unique()
             ->values();
 
+        // Keep the relationship context alongside each coach.  The mobile
+        // Abundance experience needs to know whether the mentee already has a
+        // council (and which one) so Profile can render the source app's
+        // “Change” state instead of always showing “Join council”.  Existing
+        // consumers only read the coach identity fields, so these additions
+        // are backwards-compatible.
+        $assignmentsByCoach = CoachMentee::query()
+            ->where('mentee_id', (string) $user->id)
+            ->orderBy('created_at')
+            ->get()
+            ->groupBy(fn (CoachMentee $assignment) => (string) $assignment->coach_id);
+        $groupsById = CoachGroup::query()
+            ->whereIn(
+                'id',
+                $assignmentsByCoach
+                    ->flatten()
+                    ->pluck('group_id')
+                    ->filter()
+                    ->map(static fn ($id) => (string) $id)
+                    ->unique()
+                    ->values(),
+            )
+            ->get()
+            ->keyBy(fn (CoachGroup $group) => (string) $group->id);
+
         $coachesById = User::query()
             ->whereIn('id', $coachIds)
             ->get()
@@ -406,14 +431,27 @@ class CoachManagementController extends Controller
         $coaches = $coachIds
             ->map(fn (string $coachId) => $coachesById->get($coachId))
             ->filter()
-            ->map(fn (User $coach) => [
-                'id' => (string) $coach->id,
-                'name' => $coach->name,
-                'email' => $coach->email,
-                'number' => $coach->number,
-                'bio' => $coach->bio,
-                'profilePic' => $coach->profile_pic,
-            ])
+            ->map(function (User $coach) use ($assignmentsByCoach, $groupsById): array {
+                $assignment = $assignmentsByCoach
+                    ->get((string) $coach->id, collect())
+                    ->first();
+                $groupId = trim((string) ($assignment?->group_id ?? ''));
+                $group = $groupId !== '' ? $groupsById->get($groupId) : null;
+
+                return [
+                    'id' => (string) $coach->id,
+                    'name' => $coach->name,
+                    'email' => $coach->email,
+                    'number' => $coach->number,
+                    'bio' => $coach->bio,
+                    'profilePic' => $coach->profile_pic,
+                    'groupId' => $groupId !== '' ? $groupId : null,
+                    'groupName' => $assignment?->group_name ?: $group?->name,
+                    'groupMemberCount' => $group !== null
+                        ? CoachMentee::query()->where('group_id', $group->id)->count()
+                        : null,
+                ];
+            })
             ->values();
 
         return response()->json(['coaches' => $coaches]);

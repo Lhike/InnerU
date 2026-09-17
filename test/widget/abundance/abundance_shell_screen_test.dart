@@ -4,26 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/abundance_shell_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_character_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_missions_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_tutorial_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/mentee/abundance_mentee_dashboard_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/mentee/goals_hub_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
 import 'package:selfcare_projects/src/services/company_theme_service.dart';
 import 'package:selfcare_projects/src/services/app_session_service.dart';
-
-/// [GoalsService.fetchCoachGoalsRoster] always calls the real network API —
-/// unlike `watchGoals` (used by the mentee Quests tab), it has no
-/// legacy-Firestore branch for test mode. A bare `GoalsService` constructed
-/// against a [FakeFirebaseFirestore] would hit a real HTTP call that fails in
-/// the test harness, and [CoachQuestsRosterScreen] shows a perpetual spinner
-/// on any Future error (not just while loading) — so `pumpAndSettle` would
-/// never settle. This fake mirrors the same pattern already used in
-/// `coach_quests_roster_screen_test.dart` to keep the coach roster fetch
-/// synchronous and test-safe.
-class _FakeCoachGoalsService extends GoalsService {
-  _FakeCoachGoalsService() : super(null);
-
-  @override
-  Future<List<CoachMenteeGoals>> fetchCoachGoalsRoster() async =>
-      const <CoachMenteeGoals>[];
-}
 
 void main() {
   setUp(() {
@@ -126,9 +114,8 @@ void main() {
         find.text('Home'), findsWidgets); // the tab label itself, still visible
   });
 
-  testWidgets('coach shell shows the coach roster on the Quests tab',
-      (tester) async {
-    final service = _FakeCoachGoalsService();
+  testWidgets('coach shell keeps the member Quests tab', (tester) async {
+    final service = GoalsService(FakeFirebaseFirestore());
 
     await tester.pumpWidget(MaterialApp(
       home: AbundanceShellScreen(
@@ -140,23 +127,15 @@ void main() {
           companyName: 'Abundance',
           isCompanyTheme: true,
         ),
-        // The shell's real default landing tab is Home (0), matching every
-        // A12 reference screenshot. This test overrides that to land on
-        // Quests instead, purely to avoid building CoachDashboardScreen
-        // (the coach-mode Home tab), which touches FirebaseFirestore.instance
-        // synchronously in a field initializer and crashes with no live
-        // Firebase app in this widget-test environment. This is a test-only
-        // override, not a change to production behavior.
+        // Source Coach accounts keep the member Quests tab; coach tools are
+        // opened from the overflow menu instead.
         initialIndex: 2,
+        questsAccessResolverOverride: (_) async => true,
       ),
     ));
     await tester.pumpAndSettle();
 
-    // Landed directly on the Quests tab (via initialIndex above), so the
-    // roster is visible without any tap here — tapping the "Quests" nav
-    // label would be ambiguous anyway once its content is showing, since
-    // CoachQuestsRosterScreen renders its own "Quests" heading too.
-    expect(find.textContaining('No students yet'), findsOneWidget);
+    expect(find.byType(GoalsHubScreen), findsOneWidget);
   });
 
   testWidgets(
@@ -447,6 +426,84 @@ void main() {
       find.byType(BottomNavigationBar),
     );
     expect(nav.currentIndex, 4);
+  });
+
+  testWidgets('profile menu sign out opens the logout confirmation',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      AbundanceTutorialScreen.completionKey('42'): true,
+    });
+    await AppSessionService.instance.setSession(const AppSession(
+      id: 42,
+      token: 'test-token',
+      name: 'Cookie Milo',
+      email: 'cookie@example.test',
+      role: 'user',
+      isCoach: false,
+      companyCode: 'ABU15DN',
+      companyName: 'Abundance',
+    ));
+    addTearDown(() async => AppSessionService.instance.clear());
+
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceShellScreen(
+        isCoach: false,
+        service: GoalsService(FakeFirebaseFirestore()),
+        uid: '42',
+        companyTheme: CompanyThemeData.standard.copyWith(
+          companyCode: 'ABU15DN',
+          companyName: 'Abundance',
+          isCompanyTheme: true,
+        ),
+        initialIndex: 5,
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AbundanceCharacterScreen), findsOneWidget);
+    expect(find.text('ABUNDANCE 12'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('abundance-header-profile-menu')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sign out'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Are you sure you want to log out?'), findsOneWidget);
+  });
+
+  testWidgets('home mission calendar keeps the A12 shell navigation visible',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceShellScreen(
+        isCoach: false,
+        service: GoalsService(FakeFirebaseFirestore()),
+        uid: 'u1',
+        companyTheme: CompanyThemeData.standard.copyWith(
+          companyCode: 'ABU15DN',
+          companyName: 'Abundance',
+          isCompanyTheme: true,
+        ),
+        questsAccessResolverOverride: (_) async => true,
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final dashboard = tester.widget<AbundanceMenteeDashboardScreen>(
+      find.byType(AbundanceMenteeDashboardScreen),
+    );
+    expect(dashboard.onOpenMissions, isNotNull);
+
+    dashboard.onOpenMissions!();
+    await tester.pumpAndSettle();
+
+    final navigation = tester.widget<BottomNavigationBar>(
+      find.byType(BottomNavigationBar),
+    );
+    expect(navigation.currentIndex, 1);
+    expect(find.text('ABUNDANCE 12'), findsOneWidget);
+    expect(find.byType(AbundanceMissionsScreen), findsOneWidget);
   });
 
   testWidgets('revisiting Awards reloads progress earned in other tabs',

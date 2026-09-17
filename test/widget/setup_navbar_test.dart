@@ -97,7 +97,7 @@ void main() {
       expect(find.byType(CurvedNavigationBar), findsNothing);
     });
 
-    testWidgets('matches on the company name alone, not just the code',
+    testWidgets('does not match on the company name alone',
         (tester) async {
       await tester.pumpWidget(MaterialApp(
         home: Setuppage(
@@ -107,7 +107,8 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      expect(find.byType(AbundanceShellScreen), findsOneWidget);
+      expect(find.byType(AbundanceShellScreen), findsNothing);
+      expect(find.byType(CurvedNavigationBar), findsOneWidget);
     });
 
     testWidgets(

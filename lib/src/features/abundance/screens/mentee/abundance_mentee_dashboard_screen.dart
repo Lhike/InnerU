@@ -10,6 +10,7 @@ import 'package:selfcare_projects/src/features/abundance/domain/day_keys.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/domain.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/scoring.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.dart';
+import 'package:selfcare_projects/src/features/abundance/theme/abundance_mission_presentation.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_typography.dart';
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_header_profile_button.dart';
@@ -62,10 +63,12 @@ class AbundanceMenteeDashboardScreen extends StatefulWidget {
     super.key,
     this.initialCompanyTheme,
     this.service,
+    this.onOpenMissions,
   });
 
   final CompanyThemeData? initialCompanyTheme;
   final GoalsService? service;
+  final VoidCallback? onOpenMissions;
 
   @override
   State<AbundanceMenteeDashboardScreen> createState() =>
@@ -773,11 +776,13 @@ class _AbundanceMenteeDashboardScreenState
                       _A12MissionPanel(
                         tasks: data.tasks,
                         selectedDay: DateUtils.dateOnly(DateTime.now()),
-                        onOpenMissions: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const AbundanceMissionsScreen(),
-                          ),
-                        ),
+                        onOpenMissions: widget.onOpenMissions ??
+                            () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const AbundanceMissionsScreen(),
+                                  ),
+                                ),
                         onToggleMission: _toggleMission,
                       ),
                       const SizedBox(height: 16),
@@ -1406,7 +1411,7 @@ class _A12MissionPanelState extends State<_A12MissionPanel> {
               physics: const NeverScrollableScrollPhysics(),
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,
-              childAspectRatio: .95,
+              childAspectRatio: 1.2,
               children: [
                 for (final task in today)
                   _A12MissionTile(
@@ -1445,12 +1450,12 @@ class _A12MissionTile extends StatelessWidget {
     final completed = todo.taskHasCompletionOnDate(task, selectedDay);
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: AbundanceColors.surfaceSunken,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: completed
                 ? AbundanceColors.scoreExcellent
@@ -1460,35 +1465,41 @@ class _A12MissionTile extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(
-              _missionIconFor(task),
-              color: completed
-                  ? AbundanceColors.scoreExcellent
-                  : _missionColorFor(task),
-              size: 34,
-            ),
-            const SizedBox(height: 10),
-            Text(
-              task.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: AbundanceTypography.title.copyWith(
-                fontSize: 14,
-                decoration: completed ? TextDecoration.lineThrough : null,
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    _missionIconFor(task),
+                    color: completed
+                        ? AbundanceColors.scoreExcellent
+                        : _missionColorFor(task),
+                    size: 28,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    task.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: AbundanceTypography.title.copyWith(
+                      fontSize: 13,
+                      decoration: completed ? TextDecoration.lineThrough : null,
+                    ),
+                  ),
+                  if (task.scheduledTime != null)
+                    Text(
+                      task.scheduledTime!,
+                      style: AbundanceTypography.body.copyWith(
+                        color: AbundanceColors.muted,
+                        fontSize: 11,
+                        height: 1.35,
+                      ),
+                    ),
+                ],
               ),
             ),
-            if (task.scheduledTime != null)
-              Text(
-                task.scheduledTime!,
-                style: AbundanceTypography.body.copyWith(
-                  color: AbundanceColors.muted,
-                  fontSize: 11,
-                  height: 1.35,
-                ),
-              ),
-            const SizedBox(height: 8),
-            const Spacer(),
+            const SizedBox(height: 4),
             Row(
               children: [
                 Text(
@@ -1501,6 +1512,7 @@ class _A12MissionTile extends StatelessWidget {
                   color: completed
                       ? AbundanceColors.scoreExcellent
                       : AbundanceColors.border,
+                  size: 18,
                 ),
               ],
             ),
@@ -1512,23 +1524,19 @@ class _A12MissionTile extends StatelessWidget {
 }
 
 IconData _missionIconFor(todo.Task task) {
-  final title = task.title.toLowerCase();
-  if (title.contains('meditat')) return Icons.psychology_outlined;
-  if (title.contains('exercis') || title.contains('move')) {
-    return Icons.directions_run;
-  }
-  if (title.contains('learn') || title.contains('read')) {
-    return Icons.menu_book_outlined;
-  }
-  return Icons.auto_awesome;
+  return task.tag.abundanceMissionIcon;
 }
 
 Color _missionColorFor(todo.Task task) {
-  final title = task.title.toLowerCase();
-  if (title.contains('exercis') || title.contains('move')) {
-    return AbundanceColors.accentCyan;
+  switch (task.tag) {
+    case todo.TaskTag.none:
+    case todo.TaskTag.personal:
+      return AbundanceColors.accentCyan;
+    case todo.TaskTag.professional:
+      return AbundanceColors.primaryGold;
+    case todo.TaskTag.contribution:
+      return const Color(0xFF9A64FF);
   }
-  return const Color(0xFF9A64FF);
 }
 
 class _A12GoalsPanel extends StatelessWidget {
@@ -1548,6 +1556,7 @@ class _A12GoalsPanel extends StatelessWidget {
       title: 'GOALS',
       action: 'VIEW ALL',
       onAction: onOpenGoals,
+      flat: true,
       child: visible.isEmpty
           ? Text(
               'Your quests appear here after onboarding.',
@@ -1659,6 +1668,7 @@ class _A12AchievementShelf extends StatelessWidget {
         action:
             '${achievements.where((a) => a.unlocked).length} of 15 earned ›',
         onAction: onOpenAwards,
+        flat: true,
         child: SizedBox(
           height: 112,
           child: ListView.separated(
@@ -1707,6 +1717,7 @@ class _A12HomeQuote extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _A12Panel(
         title: 'THE GAME OF MY LIFE',
+        flat: true,
         child: Text(
           'THE KINGDOM OF YOUR LIFE IS NOT GIVEN TO YOU. IT IS BUILT BY YOUR DAILY CHOICES.',
           style: AbundanceTypography.body.copyWith(
@@ -1726,20 +1737,24 @@ class _A12Panel extends StatelessWidget {
     this.action,
     this.onAction,
     this.headerTrailing,
+    this.flat = false,
   });
   final String title;
   final String? action;
   final VoidCallback? onAction;
   final Widget? headerTrailing;
+  final bool flat;
   final Widget child;
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AbundanceColors.surfaceRaised,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AbundanceColors.border),
-        ),
+        padding: flat ? EdgeInsets.zero : const EdgeInsets.all(16),
+        decoration: flat
+            ? null
+            : BoxDecoration(
+                color: AbundanceColors.surfaceRaised,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: AbundanceColors.border),
+              ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

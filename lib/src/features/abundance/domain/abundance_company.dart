@@ -1,14 +1,12 @@
-/// Whether a company (by its InnerU `code`/`name` fields) is the Abundance
-/// company this Quests redesign is scoped to. This is the single source of
-/// truth for that check — see the design spec's "Existing gating bug"
-/// section for why three separate ad hoc heuristics used to answer this
-/// question differently.
+/// Whether the authenticated user's active InnerU company is Abundance.
+///
+/// The company code is authoritative. Display names are deliberately ignored
+/// because they are mutable labels and cannot establish tenant membership.
 class AbundanceCompany {
   const AbundanceCompany._();
 
   static bool matches(String? code, String? name) {
     final normalizedCode = (code ?? '').trim().toUpperCase();
-    final normalizedName = (name ?? '').trim().toUpperCase();
-    return normalizedCode == 'ABU15DN' || normalizedName == 'ABUNDANCE';
+    return normalizedCode == 'ABU15DN';
   }
 }

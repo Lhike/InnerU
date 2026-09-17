@@ -122,7 +122,11 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
               title: const Text('CHARACTER SHEET',
                   style: AbundanceTypography.eyebrow),
             )
-          : const AbundanceHeaderBar(),
+          : AbundanceHeaderBar(
+              onSelected: (value) {
+                if (value == 'sign_out') widget.onSignOut?.call();
+              },
+            ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
         children: [

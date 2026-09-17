@@ -12,10 +12,16 @@ import 'package:selfcare_projects/src/services/auth_service.dart';
 /// InnerU's generic page AppBar.
 class AbundanceHeaderBar extends StatelessWidget
     implements PreferredSizeWidget {
-  const AbundanceHeaderBar({super.key, this.onNotifications, this.onMenu});
+  const AbundanceHeaderBar({
+    super.key,
+    this.onNotifications,
+    this.onMenu,
+    this.onSelected,
+  });
 
   final VoidCallback? onNotifications;
   final VoidCallback? onMenu;
+  final ValueChanged<String>? onSelected;
 
   @override
   Size get preferredSize => const Size.fromHeight(72);
@@ -85,6 +91,10 @@ class AbundanceHeaderBar extends StatelessWidget
           displayName: session?.name ?? '',
           email: session?.email ?? '',
           onSelected: (value) {
+            if (onSelected != null) {
+              onSelected!(value);
+              return;
+            }
             if (value == 'notifications') onNotifications?.call();
             if (value == 'more') onMenu?.call();
           },

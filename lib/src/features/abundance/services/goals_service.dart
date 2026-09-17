@@ -9,6 +9,7 @@ import 'package:selfcare_projects/src/features/abundance/domain/domain.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/scoring.dart';
 import 'package:selfcare_projects/src/services/api_client.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_api_transport.dart';
 
 DateTime _parseDate(Object? value) {
   if (value == null) return DateTime.now();
@@ -35,6 +36,8 @@ class GoalSummary {
     required this.startDate,
     required this.targetDate,
     required this.completedAt,
+    this.dailyTarget,
+    this.weeklyTarget,
   });
 
   factory GoalSummary.fromJson(Map<String, dynamic> json) {
@@ -59,6 +62,8 @@ class GoalSummary {
       completedAt: json['completedAt'] == null
           ? null
           : DateTime.tryParse(json['completedAt'].toString()),
+      dailyTarget: (json['dailyTarget'] as num?)?.toDouble(),
+      weeklyTarget: (json['weeklyTarget'] as num?)?.toDouble(),
     );
   }
 
@@ -80,6 +85,12 @@ class GoalSummary {
   final DateTime startDate;
   final DateTime targetDate;
   final DateTime? completedAt;
+
+  /// Server-calculated schedule values used by the compact Home goal preview.
+  /// Older Firestore records do not carry these fields, so callers fall back
+  /// to the local period calculation when they are null.
+  final double? dailyTarget;
+  final double? weeklyTarget;
 
   double? get score => scoreGoal(ScorableGoal(
         status: status,
@@ -261,10 +272,13 @@ List<GoalCategory> requiredGoalGaps(List<GoalSummary> goals) {
 }
 
 class GoalsService {
-  GoalsService([FirebaseFirestore? legacyFirestore])
-      : _legacyFirestore = legacyFirestore;
+  GoalsService([
+    FirebaseFirestore? legacyFirestore,
+    AbundanceApiTransport? api,
+  ])  : _legacyFirestore = legacyFirestore,
+        _api = api ?? InnerUAbundanceApiTransport();
 
-  final ApiClient _api = ApiClient.instance;
+  final AbundanceApiTransport _api;
   final FirebaseFirestore? _legacyFirestore;
 
   String? get _token => AuthService.instance.currentSession?.token;

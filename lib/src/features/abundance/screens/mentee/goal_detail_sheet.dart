@@ -74,21 +74,33 @@ class _GoalDetailSheetState extends State<GoalDetailSheet> {
   }
 
   double _todayTarget(GoalSummary goal) {
-    if (goal.dailyTarget != null) return goal.dailyTarget!;
-    if (goal.goalType != GoalType.merit || goal.targetValue <= 0) {
-      return goal.targetValue;
-    }
-    final periodDays = math.max(1, goal.targetPeriod.days);
-    return goal.periodTarget / periodDays;
+    if (goal.dailyTarget != null) return math.max(0, goal.dailyTarget!);
+    return _derivedSchedule(goal).daily;
   }
 
   double _weekTarget(GoalSummary goal) {
-    if (goal.weeklyTarget != null) return goal.weeklyTarget!;
-    if (goal.goalType != GoalType.merit || goal.targetValue <= 0) {
-      return goal.targetValue;
+    if (goal.weeklyTarget != null) return math.max(0, goal.weeklyTarget!);
+    return _derivedSchedule(goal).weekly;
+  }
+
+  ({double daily, double weekly}) _derivedSchedule(GoalSummary goal) {
+    final remaining = _remaining(goal);
+    if (remaining <= 0 || goal.targetValue <= 0) {
+      return (daily: 0, weekly: 0);
     }
+
+    // Match InnerU's mobile goal pacing: divide the remaining work across
+    // the remaining cadence periods, then show the amount due today and in
+    // the next seven days. NONE means a daily cadence for this calculation.
+    final daysRemaining = math.max(1, goal.daysUntilDue);
     final periodDays = math.max(1, goal.targetPeriod.days);
-    return goal.periodTarget * 7 / periodDays;
+    final periodsRemaining = math.max(1, daysRemaining ~/ periodDays);
+    final amount =
+        double.parse((remaining / periodsRemaining).toStringAsFixed(2));
+    final daily = math.min(remaining, amount);
+    final dueThisWeek = (7 / periodDays).ceil();
+    final weekly = math.min(remaining, dueThisWeek * amount);
+    return (daily: daily, weekly: weekly);
   }
 
   double _remaining(GoalSummary goal) {
@@ -102,33 +114,14 @@ class _GoalDetailSheetState extends State<GoalDetailSheet> {
       goal.unit.trim().isEmpty ? '' : ' ${goal.unit.trim().toUpperCase()}';
 
   Future<void> _editCurrentValue(GoalSummary goal) async {
-    final controller = TextEditingController(text: _number(goal.currentValue));
     final value = await showDialog<double>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: AbundanceColors.surfaceRaised,
-        title: const Text('Change current value'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: 'Current value${_unit(goal)}'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext)
-                .pop(double.tryParse(controller.text.trim())),
-            child: const Text('Save'),
-          ),
-        ],
+      builder: (_) => _CurrentValueDialog(
+        initialValue: _number(goal.currentValue),
+        unit: _unit(goal),
       ),
     );
-    controller.dispose();
-    if (value == null) return;
+    if (!mounted || value == null) return;
     await _saveCurrentValue(goal, value);
   }
 
@@ -387,7 +380,13 @@ class _TargetCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: AbundanceTypography.body.copyWith(fontSize: 14)),
+          Text(
+            label,
+            style: AbundanceTypography.body.copyWith(
+              color: AbundanceColors.foreground,
+              fontSize: 14,
+            ),
+          ),
           const Spacer(),
           Text(
             '$display$unit',
@@ -398,6 +397,75 @@ class _TargetCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CurrentValueDialog extends StatefulWidget {
+  const _CurrentValueDialog({required this.initialValue, required this.unit});
+
+  final String initialValue;
+  final String unit;
+
+  @override
+  State<_CurrentValueDialog> createState() => _CurrentValueDialogState();
+}
+
+class _CurrentValueDialogState extends State<_CurrentValueDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AbundanceColors.surfaceRaised,
+      title: Text(
+        'Change current value',
+        style: AbundanceTypography.title.copyWith(fontSize: 18),
+      ),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        style: const TextStyle(color: Colors.black87),
+        decoration: InputDecoration(
+          labelText: 'Current value${widget.unit}',
+          labelStyle: const TextStyle(color: Colors.black87),
+          floatingLabelStyle: const TextStyle(color: Colors.black87),
+          filled: true,
+          fillColor: Colors.white,
+          enabledBorder: OutlineInputBorder(
+            borderSide: BorderSide(color: AbundanceColors.accentCyan),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderSide: BorderSide(color: AbundanceColors.accentCyan, width: 2),
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context)
+              .pop(double.tryParse(_controller.text.trim())),
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }
@@ -418,22 +486,22 @@ class _LogTodayCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
       decoration: BoxDecoration(
         color: AbundanceColors.surfaceRaised,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AbundanceColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Log for today',
-              style: AbundanceTypography.title.copyWith(fontSize: 22)),
-          const SizedBox(height: 8),
+              style: AbundanceTypography.title.copyWith(fontSize: 19)),
+          const SizedBox(height: 6),
           Text('Enter what you did today.',
               style: AbundanceTypography.body
-                  .copyWith(color: AbundanceColors.muted)),
-          const SizedBox(height: 14),
+                  .copyWith(color: AbundanceColors.muted, fontSize: 13)),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
@@ -442,14 +510,19 @@ class _LogTodayCard extends StatelessWidget {
                   controller: controller,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(hintText: '0'),
+                  decoration: const InputDecoration(
+                    hintText: '0',
+                    isDense: true,
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
               Text(unit.trim(), style: AbundanceTypography.body),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
             child: FilledButton(
@@ -457,9 +530,9 @@ class _LogTodayCard extends StatelessWidget {
               style: FilledButton.styleFrom(
                 backgroundColor: AbundanceColors.primaryGold,
                 foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 15),
+                padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18)),
+                    borderRadius: BorderRadius.circular(14)),
               ),
               child: Text(saving ? 'Saving…' : 'Log today'),
             ),

@@ -11,7 +11,9 @@ import 'package:selfcare_projects/src/features/abundance/widgets/abundance_heade
 /// data surface, but applies the source app's "Allies" title for this route.
 /// The default leaderboard title remains unchanged for every other company.
 class AbundanceGuildScreen extends StatefulWidget {
-  const AbundanceGuildScreen({super.key});
+  const AbundanceGuildScreen({super.key, this.onSignOut});
+
+  final VoidCallback? onSignOut;
 
   Widget buildLeaderboard() => const Leaderboard(appBarTitle: 'Allies');
 
@@ -60,11 +62,13 @@ class _AbundanceGuildScreenState extends State<AbundanceGuildScreen> {
           return Leaderboard(
             appBarTitle: 'Allies',
             onLeaveCouncil: _leaveCouncil,
+            onSignOut: widget.onSignOut,
           );
         }
         return _NoCouncilView(
           onJoin: () => _showJoinCouncil(context),
           onRetry: () => setState(() => _councilFuture = _loadCouncil()),
+          onSignOut: widget.onSignOut,
         );
       },
     );
@@ -247,10 +251,15 @@ class _AbundanceGuildScreenState extends State<AbundanceGuildScreen> {
 }
 
 class _NoCouncilView extends StatelessWidget {
-  const _NoCouncilView({required this.onJoin, required this.onRetry});
+  const _NoCouncilView({
+    required this.onJoin,
+    required this.onRetry,
+    this.onSignOut,
+  });
 
   final VoidCallback onJoin;
   final VoidCallback onRetry;
+  final VoidCallback? onSignOut;
 
   @override
   Widget build(BuildContext context) {
@@ -262,7 +271,11 @@ class _NoCouncilView extends StatelessWidget {
               foregroundColor: AbundanceColors.foreground,
               title: const Text('Allies'),
             )
-          : const AbundanceHeaderBar(),
+          : AbundanceHeaderBar(
+              onSelected: (value) {
+                if (value == 'sign_out') onSignOut?.call();
+              },
+            ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 28, 16, 32),
         children: [

@@ -9,10 +9,9 @@ void main() {
       expect(AbundanceCompany.matches('  ABU15DN  ', 'Some Other Name'), isTrue);
     });
 
-    test('matches the exact name, case-insensitively and trimmed', () {
-      expect(AbundanceCompany.matches('OTHERCODE', 'Abundance'), isTrue);
-      expect(AbundanceCompany.matches('OTHERCODE', 'abundance'), isTrue);
-      expect(AbundanceCompany.matches('OTHERCODE', '  ABUNDANCE  '), isTrue);
+    test('does not trust a display name without the authoritative code', () {
+      expect(AbundanceCompany.matches('OTHERCODE', 'Abundance'), isFalse);
+      expect(AbundanceCompany.matches(null, 'ABUNDANCE'), isFalse);
     });
 
     test('does not match near-miss codes or names', () {

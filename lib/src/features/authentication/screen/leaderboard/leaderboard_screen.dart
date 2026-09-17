@@ -13,6 +13,7 @@ import 'package:selfcare_projects/src/services/app_route_observer.dart';
 import 'package:selfcare_projects/src/services/leaderboard_api_service.dart';
 import 'package:selfcare_projects/src/services/company_theme_service.dart';
 import 'package:selfcare_projects/src/services/image_storage_service.dart';
+import 'package:selfcare_projects/src/features/abundance/widgets/abundance_header_profile_button.dart';
 
 class UserActivity {
   const UserActivity({
@@ -203,10 +204,19 @@ class Leaderboard extends StatefulWidget {
     super.key,
     this.isLoading = true,
     this.debugLoader,
+    this.appBarTitle = 'Leaderboard',
+    this.onLeaveCouncil,
+    this.onSignOut,
   });
 
   final bool isLoading;
   final Future<LeaderboardApiSnapshot> Function()? debugLoader;
+
+  /// Optional branded title for an isolated company route. The default keeps
+  /// every existing InnerU leaderboard unchanged.
+  final String appBarTitle;
+  final Future<void> Function()? onLeaveCouncil;
+  final VoidCallback? onSignOut;
 
   @override
   State<Leaderboard> createState() => _LeaderboardState();
@@ -517,43 +527,51 @@ class _LeaderboardState extends State<Leaderboard>
             ),
             child: Scaffold(
               backgroundColor: companyTheme.backgroundColor,
-              appBar: AppBar(
-                elevation: 0,
-                backgroundColor:
-                    companyTheme.isDark ? companyTheme.surfaceColor : null,
-                foregroundColor:
-                    companyTheme.isDark ? companyTheme.inkColor : null,
-                surfaceTintColor: Colors.transparent,
-                title: const Text('Leaderboard'),
-                actions: [
-                  IconButton(
-                    key: const ValueKey('leaderboard-info-button'),
-                    icon: const Icon(Icons.help_outline_rounded),
-                    tooltip: 'How scoring works',
-                    onPressed: () =>
-                        _showLeaderboardInfo(context, companyTheme),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.refresh),
-                    onPressed: _refreshLeaderboard,
-                  ),
-                  IconButton(
-                    icon:
-                        const Icon(CupertinoIcons.line_horizontal_3, size: 28),
-                    onPressed: () {
-                      Navigator.pushNamed(context, '/profile');
-                    },
-                  ),
-                ],
-                bottom: TabBar(
-                  isScrollable: true,
-                  indicatorColor: companyTheme.primaryColor,
-                  tabs: [
-                    const Tab(text: 'Company'),
-                    const Tab(text: 'Groups'),
-                  ],
-                ),
-              ),
+              appBar: widget.appBarTitle == 'Allies' &&
+                      AuthService.instance.currentSession != null
+                  ? AbundanceHeaderBar(
+                      onSelected: (value) {
+                        if (value == 'sign_out') widget.onSignOut?.call();
+                      },
+                    )
+                  : AppBar(
+                      elevation: 0,
+                      backgroundColor: companyTheme.isDark
+                          ? companyTheme.surfaceColor
+                          : null,
+                      foregroundColor:
+                          companyTheme.isDark ? companyTheme.inkColor : null,
+                      surfaceTintColor: Colors.transparent,
+                      title: Text(widget.appBarTitle),
+                      actions: [
+                        IconButton(
+                          key: const ValueKey('leaderboard-info-button'),
+                          icon: const Icon(Icons.help_outline_rounded),
+                          tooltip: 'How scoring works',
+                          onPressed: () =>
+                              _showLeaderboardInfo(context, companyTheme),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.refresh),
+                          onPressed: _refreshLeaderboard,
+                        ),
+                        IconButton(
+                          icon: const Icon(CupertinoIcons.line_horizontal_3,
+                              size: 28),
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/profile');
+                          },
+                        ),
+                      ],
+                      bottom: TabBar(
+                        isScrollable: true,
+                        indicatorColor: companyTheme.primaryColor,
+                        tabs: [
+                          const Tab(text: 'Company'),
+                          const Tab(text: 'Groups'),
+                        ],
+                      ),
+                    ),
               body: Column(
                 children: [
                   if (_leaderboardPeriodStart != null &&
@@ -577,23 +595,35 @@ class _LeaderboardState extends State<Leaderboard>
                             )
                           : TabBarView(
                               children: [
-                                _A12LeaderboardBoard(
-                                  key: const ValueKey('company'),
-                                  entries: _a12Entries,
-                                  isLoading: _isA12Loading,
-                                  theme: companyTheme,
-                                  currentUserId: AuthService
-                                          .instance.currentSession?.id
-                                          .toString() ??
-                                      '',
-                                  showRankLabels: _isAbundanceCompany,
-                                  title: 'Company leaderboard',
-                                  onEntryTap: (entry) => _showScoreBreakdown(
-                                    context,
-                                    entry,
-                                    companyTheme,
-                                  ),
-                                ),
+                                widget.appBarTitle == 'Allies'
+                                    ? _AbundanceAlliesBoard(
+                                        entries: _a12Entries,
+                                        isLoading: _isA12Loading,
+                                        theme: companyTheme,
+                                        currentUserId: AuthService
+                                                .instance.currentSession?.id
+                                                .toString() ??
+                                            '',
+                                        onLeaveCouncil: widget.onLeaveCouncil,
+                                      )
+                                    : _A12LeaderboardBoard(
+                                        key: const ValueKey('company'),
+                                        entries: _a12Entries,
+                                        isLoading: _isA12Loading,
+                                        theme: companyTheme,
+                                        currentUserId: AuthService
+                                                .instance.currentSession?.id
+                                                .toString() ??
+                                            '',
+                                        showRankLabels: _isAbundanceCompany,
+                                        title: 'Company leaderboard',
+                                        onEntryTap: (entry) =>
+                                            _showScoreBreakdown(
+                                          context,
+                                          entry,
+                                          companyTheme,
+                                        ),
+                                      ),
                                 _GroupLeaderboardsBoard(
                                   groups: _groupLeaderboards,
                                   allMenteeEntries: _isCoachUser
@@ -2359,6 +2389,341 @@ class _AllUsersLeaderboardBoardState extends State<_AllUsersLeaderboardBoard> {
       ],
     );
   }
+}
+
+/// The Abundance “Allies” board is intentionally separate from the shared
+/// InnerU leaderboard. It keeps the source council vocabulary and controls
+/// (Top performers, Your rank, search, period and filters) without changing
+/// the experience rendered for other companies.
+class _AbundanceAlliesBoard extends StatefulWidget {
+  const _AbundanceAlliesBoard({
+    required this.entries,
+    required this.isLoading,
+    required this.theme,
+    required this.currentUserId,
+    this.onLeaveCouncil,
+  });
+
+  final List<A12LeaderboardEntry> entries;
+  final bool isLoading;
+  final CompanyThemeData theme;
+  final String currentUserId;
+  final Future<void> Function()? onLeaveCouncil;
+
+  @override
+  State<_AbundanceAlliesBoard> createState() => _AbundanceAlliesBoardState();
+}
+
+class _AbundanceAlliesBoardState extends State<_AbundanceAlliesBoard> {
+  final _search = TextEditingController();
+  String _period = 'All Time';
+  bool _hideZero = false;
+  bool _studentsOnly = false;
+  bool _activeQuestsOnly = false;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = widget.entries.where((entry) {
+      final matchesSearch = _search.text.trim().isEmpty ||
+          entry.name.toLowerCase().contains(_search.text.trim().toLowerCase());
+      final matchesZero = !_hideZero || entry.score.overallScore > 0;
+      // The API does not currently expose a role flag on leaderboard rows;
+      // team membership is the closest server-provided student discriminator.
+      final matchesStudents = !_studentsOnly || entry.teamName != null;
+      final matchesActiveQuests =
+          !_activeQuestsOnly || entry.activity.todoListCount > 0;
+      return matchesSearch &&
+          matchesZero &&
+          matchesStudents &&
+          matchesActiveQuests;
+    }).toList();
+    final top = [...filtered]
+      ..sort((a, b) => b.score.overallScore.compareTo(a.score.overallScore));
+    final current = filtered.where((e) => e.userId == widget.currentUserId);
+    final currentEntry = current.isNotEmpty
+        ? current.first
+        : (top.isNotEmpty ? top.first : null);
+    final ink = widget.theme.inkColor;
+    final muted = widget.theme.mutedInkColor;
+    final panel = widget.theme.surfaceColor;
+    final gold = const Color(0xFFF2BD3F);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
+      children: [
+        Text('ALLIES',
+            style: TextStyle(
+                color: ink,
+                fontSize: 30,
+                fontWeight: FontWeight.w800,
+                fontFamily: 'Georgia')),
+        const SizedBox(height: 6),
+        Text('Champions of growth. Inspiring others by leading the way.',
+            style: TextStyle(color: muted, fontSize: 16, height: 1.4)),
+        if (widget.onLeaveCouncil != null) ...[
+          const SizedBox(height: 14),
+          Align(
+            alignment: Alignment.centerRight,
+            child: OutlinedButton(
+              onPressed: () => widget.onLeaveCouncil!(),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: ink,
+                side: BorderSide(color: widget.theme.primaryColor),
+              ),
+              child: const Text('Leave council'),
+            ),
+          ),
+        ],
+        const SizedBox(height: 18),
+        _AlliesPanel(
+          title: 'TOP PERFORMERS',
+          panel: panel,
+          border: gold,
+          child: top.isEmpty
+              ? Text('No allies to display yet.',
+                  style: TextStyle(color: muted))
+              : Wrap(
+                  alignment: WrapAlignment.spaceEvenly,
+                  spacing: 18,
+                  runSpacing: 14,
+                  children: [
+                    for (final entry in top.take(3))
+                      _TopAlly(entry: entry, gold: gold, ink: ink, muted: muted)
+                  ],
+                ),
+        ),
+        const SizedBox(height: 16),
+        if (currentEntry != null)
+          _AlliesPanel(
+            title: 'YOUR RANK',
+            panel: panel,
+            border: widget.theme.primaryColor,
+            child: Row(
+              children: [
+                CircleAvatar(
+                    backgroundColor: widget.theme.primaryColor,
+                    foregroundColor: Colors.black,
+                    child: Text('${currentEntry.leaderboardRank}')),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: Text(currentEntry.name,
+                        style: TextStyle(
+                            color: ink,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700))),
+                Text('${currentEntry.score.overallScore.round()}%',
+                    style: TextStyle(
+                        color: ink,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                        fontFamily: 'Georgia')),
+              ],
+            ),
+          ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            OutlinedButton(
+                onPressed: () {},
+                style: OutlinedButton.styleFrom(
+                    foregroundColor: gold, side: BorderSide(color: gold)),
+                child: const Text('Overall')),
+            const SizedBox(width: 10),
+            Expanded(
+                child: TextField(
+                    controller: _search,
+                    onChanged: (_) => setState(() {}),
+                    style: TextStyle(color: ink),
+                    decoration: InputDecoration(
+                        hintText: 'Search allies',
+                        hintStyle: TextStyle(color: muted),
+                        prefixIcon: Icon(Icons.search, color: muted),
+                        filled: true,
+                        fillColor: panel,
+                        border: const OutlineInputBorder()))),
+            const SizedBox(width: 10),
+            OutlinedButton(
+                onPressed: () => setState(() {}),
+                style: OutlinedButton.styleFrom(
+                    foregroundColor: ink,
+                    side: BorderSide(color: widget.theme.primaryColor)),
+                child: const Text('Search')),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(children: [
+          PopupMenuButton<String>(
+              onSelected: (value) => setState(() => _period = value),
+              itemBuilder: (_) => [
+                    for (final value in ['This Week', 'This Month', 'All Time'])
+                      PopupMenuItem(value: value, child: Text(value))
+                  ],
+              child: _AlliesControl(
+                  label: _period,
+                  icon: Icons.calendar_month_outlined,
+                  color: ink,
+                  panel: panel)),
+          const SizedBox(width: 10),
+          PopupMenuButton<String>(
+              onSelected: (value) => setState(() {
+                    _hideZero = value == 'Hide zero scores';
+                    _studentsOnly = value == 'Students only';
+                    _activeQuestsOnly = value == 'Has active quests';
+                  }),
+              itemBuilder: (_) => [
+                    const PopupMenuItem(
+                        value: 'Hide zero scores',
+                        child: Text('Hide zero scores')),
+                    const PopupMenuItem(
+                        value: 'Students only', child: Text('Students only')),
+                    const PopupMenuItem(
+                        value: 'Has active quests',
+                        child: Text('Has active quests'))
+                  ],
+              child: _AlliesControl(
+                  label: 'Filters',
+                  icon: Icons.tune,
+                  color: ink,
+                  panel: panel)),
+        ]),
+        const SizedBox(height: 16),
+        _AlliesPanel(
+            title: 'Company leaderboard',
+            panel: panel,
+            border: widget.theme.primaryColor,
+            child: Column(children: [
+              for (final entry in filtered)
+                _AllyRow(entry: entry, ink: ink, muted: muted, gold: gold)
+            ])),
+      ],
+    );
+  }
+}
+
+class _AlliesPanel extends StatelessWidget {
+  const _AlliesPanel(
+      {required this.title,
+      required this.panel,
+      required this.border,
+      required this.child});
+  final String title;
+  final Color panel;
+  final Color border;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+          color: panel,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: border.withValues(alpha: .55))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title,
+            style: TextStyle(
+                color: border,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2)),
+        const SizedBox(height: 14),
+        child
+      ]));
+}
+
+class _TopAlly extends StatelessWidget {
+  const _TopAlly(
+      {required this.entry,
+      required this.gold,
+      required this.ink,
+      required this.muted});
+  final A12LeaderboardEntry entry;
+  final Color gold;
+  final Color ink;
+  final Color muted;
+  @override
+  Widget build(BuildContext context) => Column(children: [
+        CircleAvatar(
+            radius: 32,
+            backgroundColor: Colors.black26,
+            foregroundColor: ink,
+            child: Text(
+                entry.name.isEmpty
+                    ? '?'
+                    : entry.name.substring(0, 1).toUpperCase(),
+                style: const TextStyle(fontSize: 24, fontFamily: 'Georgia'))),
+        const SizedBox(height: 6),
+        Text(entry.name,
+            style: TextStyle(color: ink, fontWeight: FontWeight.w700)),
+        Text('${entry.score.overallScore.round()}%',
+            style: TextStyle(
+                color: gold, fontSize: 18, fontWeight: FontWeight.w800))
+      ]);
+}
+
+class _AlliesControl extends StatelessWidget {
+  const _AlliesControl(
+      {required this.label,
+      required this.icon,
+      required this.color,
+      required this.panel});
+  final String label;
+  final IconData icon;
+  final Color color;
+  final Color panel;
+  @override
+  Widget build(BuildContext context) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+      decoration: BoxDecoration(
+          color: panel,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: .35))),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, color: color, size: 18),
+        const SizedBox(width: 8),
+        Text(label, style: TextStyle(color: color)),
+        const SizedBox(width: 6),
+        Icon(Icons.keyboard_arrow_down, color: color, size: 18)
+      ]));
+}
+
+class _AllyRow extends StatelessWidget {
+  const _AllyRow(
+      {required this.entry,
+      required this.ink,
+      required this.muted,
+      required this.gold});
+  final A12LeaderboardEntry entry;
+  final Color ink;
+  final Color muted;
+  final Color gold;
+  @override
+  Widget build(BuildContext context) => Container(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: BoxDecoration(
+          border:
+              Border(bottom: BorderSide(color: muted.withValues(alpha: .18)))),
+      child: Row(children: [
+        CircleAvatar(
+            backgroundColor: Colors.black26,
+            foregroundColor: ink,
+            child: Text('${entry.leaderboardRank}')),
+        const SizedBox(width: 10),
+        Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(entry.name,
+              style: TextStyle(color: ink, fontWeight: FontWeight.w700)),
+          Text('Life Power · ${entry.rank.name}',
+              style: TextStyle(color: muted, fontSize: 12))
+        ])),
+        Text('${entry.score.overallScore.round()}%',
+            style: TextStyle(
+                color: gold, fontWeight: FontWeight.w800, fontSize: 18))
+      ]));
 }
 
 class _A12LeaderboardBoard extends StatefulWidget {

@@ -91,6 +91,20 @@ const List<AbundanceDestination> _coachDestinations = <AbundanceDestination>[
     kind: AbundanceDestinationKind.overflow,
     coachOnly: true,
   ),
+  AbundanceDestination(
+    key: 'coach_quests',
+    label: 'Quest List',
+    icon: Icons.flag_outlined,
+    kind: AbundanceDestinationKind.overflow,
+    coachOnly: true,
+  ),
+  AbundanceDestination(
+    key: 'coach_directory',
+    label: 'Coaches',
+    icon: Icons.auto_awesome_outlined,
+    kind: AbundanceDestinationKind.overflow,
+    coachOnly: true,
+  ),
 ];
 
 List<AbundanceDestination> abundanceNavigationFor({required bool isCoach}) =>

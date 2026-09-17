@@ -10,6 +10,7 @@ import 'package:selfcare_projects/src/features/authentication/screen/todo_list.d
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/steptracker_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/abundance_company.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/abundance_shell_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_api_transport.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
 import 'package:selfcare_projects/src/models/bottom_sheet.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
@@ -129,7 +130,7 @@ class _SetuppageState extends State<Setuppage> {
     if (AbundanceCompany.matches(theme.companyCode, theme.companyName)) {
       return AbundanceShellScreen(
         isCoach: false,
-        service: GoalsService(),
+        service: GoalsService(null, A12ApiTransport()),
         uid: AuthService.instance.currentUserId ?? '',
         companyTheme: theme,
         // Abundance only exposes Dashboard/Home and Goals/Quests from the
@@ -285,7 +286,7 @@ class _CoachSetuppageState extends State<CoachSetuppage> {
     if (AbundanceCompany.matches(theme.companyCode, theme.companyName)) {
       return AbundanceShellScreen(
         isCoach: true,
-        service: GoalsService(),
+        service: GoalsService(null, A12ApiTransport()),
         uid: AuthService.instance.currentUserId ?? '',
         companyTheme: theme,
         initialIndex: _requestedScreen.safeAbundanceShellIndex,
