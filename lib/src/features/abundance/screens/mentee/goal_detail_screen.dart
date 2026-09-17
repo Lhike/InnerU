@@ -1,5 +1,9 @@
 import 'dart:async';
 
+// These private cards remain available for the legacy detail layout but are
+// intentionally not mounted by the compact A12 layout.
+// ignore_for_file: unused_element
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/domain.dart';

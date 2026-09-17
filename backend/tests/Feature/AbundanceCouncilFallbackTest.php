@@ -61,6 +61,50 @@ class AbundanceCouncilFallbackTest extends TestCase
             ->assertJsonPath('councils.0.isCurrent', false);
     }
 
+    public function test_councils_never_cross_company_or_no_company_boundaries(): void
+    {
+        $coach = User::factory()->create([
+            'company_code' => 'ABU15DN',
+            'company_name' => 'Abundance 12',
+            'is_coach' => true,
+            'role' => 'coach',
+        ]);
+        CoachGroup::create([
+            'id' => 'abundance-group',
+            'coach_id' => (string) $coach->id,
+            'name' => 'Abundance council',
+            'company_code' => 'ABU15DN',
+            'company_name' => 'Abundance 12',
+        ]);
+        CoachGroup::create([
+            'id' => 'other-group',
+            'coach_id' => (string) $coach->id,
+            'name' => 'Other company council',
+            'company_code' => 'OTHER',
+            'company_name' => 'Other company',
+        ]);
+
+        $sameCompany = User::factory()->create(['company_code' => 'ABU15DN']);
+        Sanctum::actingAs($sameCompany);
+        $this->getJson('/api/abundance/councils')
+            ->assertOk()
+            ->assertJsonCount(1, 'councils')
+            ->assertJsonPath('councils.0.id', 'abundance-group');
+
+        $noCompany = User::factory()->create([
+            'company_code' => null,
+            'company_name' => null,
+            'company_id' => null,
+            'active_company_code' => null,
+            'active_company_name' => null,
+            'active_company_id' => null,
+        ]);
+        Sanctum::actingAs($noCompany);
+        $this->getJson('/api/abundance/councils')
+            ->assertOk()
+            ->assertJsonCount(0, 'councils');
+    }
+
     public function test_join_and_leave_update_the_coach_group_membership(): void
     {
         $coach = User::factory()->create([

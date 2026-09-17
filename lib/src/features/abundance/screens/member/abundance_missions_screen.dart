@@ -323,9 +323,10 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
                               final picked = await showTimePicker(
                                   context: dialogContext,
                                   initialTime: _timeOfDay(scheduledTime));
-                              if (picked != null)
+                              if (picked != null) {
                                 setDialogState(() =>
                                     scheduledTime = _serializeTime(picked));
+                              }
                             },
                             icon: const Icon(Icons.access_time,
                                 color: AbundanceColors.muted),
@@ -357,8 +358,9 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
                                     // (as well as the API-backed gateway) do
                                     // not produce a duplicate checklist row.
                                     final refreshed = await _gateway.load();
-                                    if (mounted)
+                                    if (mounted) {
                                       setState(() => _tasks = refreshed);
+                                    }
                                     widget.onMissionChanged?.call();
                                     // The source keeps the selected-day modal
                                     // open after creating a mission and returns
@@ -375,11 +377,12 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
                                       });
                                     }
                                   } catch (_) {
-                                    if (mounted)
+                                    if (mounted) {
                                       ScaffoldMessenger.of(this.context)
                                           .showSnackBar(const SnackBar(
                                               content: Text(
                                                   'We could not create that mission.')));
+                                    }
                                   }
                                 })),
                       ],

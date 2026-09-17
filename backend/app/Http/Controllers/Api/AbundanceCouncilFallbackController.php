@@ -134,6 +134,13 @@ class AbundanceCouncilFallbackController extends Controller
         $companyCode = $this->activeValue($user->active_company_code, $user->company_code);
         $companyName = $this->activeValue($user->active_company_name, $user->company_name);
 
+        // A user without a company must never receive another company's
+        // councils. This is deliberately an empty query rather than an
+        // unscoped fallback, because the endpoint is company-partitioned.
+        if ($companyId === '' && $companyCode === '' && $companyName === '') {
+            return CoachGroup::query()->whereRaw('1 = 0')->get();
+        }
+
         return CoachGroup::query()
             ->where(function ($query) use ($companyId, $companyCode, $companyName): void {
                 $hasScope = false;
@@ -156,9 +163,6 @@ class AbundanceCouncilFallbackController extends Controller
                         $query->where('company_name', $companyName);
                     }
                     $hasScope = true;
-                }
-                if (! $hasScope) {
-                    $query->whereNotNull('id');
                 }
             })
             ->orderBy('name')

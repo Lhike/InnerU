@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Support\Carbon;
 use Illuminate\Database\Eloquent\Model;
 
 class TodoTask extends Model
@@ -33,6 +34,16 @@ class TodoTask extends Model
         'completion_dates' => 'array',
         'sub_tasks' => 'array',
     ];
+
+    /**
+     * PostgreSQL returns TIME columns with seconds while SQLite commonly
+     * returns the value exactly as submitted. Keep the API/model contract
+     * stable across both databases for every InnerU company.
+     */
+    public function getScheduledTimeAttribute($value): ?string
+    {
+        return $value === null ? null : Carbon::parse($value)->format('H:i');
+    }
 
     public $incrementing = false;
 
