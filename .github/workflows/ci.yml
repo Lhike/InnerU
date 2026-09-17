@@ -123,4 +123,7 @@ jobs:
         run: flutter analyze
 
       - name: Test
-        run: flutter test
+        # A number of legacy widget tests share Firebase/auth singletons.
+        # Keep CI deterministic instead of allowing file-level isolates to
+        # race those process-wide fakes.
+        run: flutter test --concurrency=1
