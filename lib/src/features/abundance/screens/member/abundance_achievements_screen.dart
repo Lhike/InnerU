@@ -31,6 +31,14 @@ const _awards = <_AwardDefinition>[
       'high-performer', 'High Performer', 'Raise your Life Power.'),
   _AwardDefinition(
       'abundance-elite', 'Abundance Elite', 'Reach the highest standard.'),
+  _AwardDefinition(
+      'tended-ground', 'Tended Ground', 'Complete a personal quest.'),
+  _AwardDefinition(
+      'forged-craft', 'Forged Craft', 'Complete a professional quest.'),
+  _AwardDefinition(
+      'given-freely', 'Given Freely', 'Complete a contribution quest.'),
+  _AwardDefinition('immovable', 'Immovable', 'Keep a 20-day streak.'),
+  _AwardDefinition('examine-life', 'Examined Life', 'Reflect on your days.'),
 ];
 
 class AbundanceAchievementsScreen extends StatefulWidget {
@@ -101,31 +109,57 @@ class _AbundanceAchievementsScreenState
   }
 
   Widget _content(Set<String> unlockedKeys) {
-    final earned = _awards.where((award) => unlockedKeys.contains(award.key));
-    final locked = _awards.where((award) => !unlockedKeys.contains(award.key));
+    final earned = _awards
+        .where((award) => unlockedKeys.contains(award.key))
+        .toList(growable: false);
+    final locked = _awards
+        .where((award) => !unlockedKeys.contains(award.key))
+        .toList(growable: false);
+    final discipline = _awards.sublist(0, 5);
+    final realms = _awards.sublist(10, 13);
+    final quests = _awards.sublist(5, 8);
+    final lifePower = _awards.sublist(8, 10);
     final list = ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 104),
       children: [
-        const Text('ACHIEVEMENTS', style: AbundanceTypography.eyebrow),
+        const Text('THE HALL OF RECORDS', style: AbundanceTypography.eyebrow),
         const SizedBox(height: 6),
-        const Text('Your legacy', style: AbundanceTypography.display),
-        const SizedBox(height: 8),
-        Text(
-          '${earned.length} of ${_awards.length} earned',
-          style:
-              AbundanceTypography.body.copyWith(color: AbundanceColors.muted),
+        const Text(
+          'Achievements',
+          style: TextStyle(
+            color: AbundanceColors.foreground,
+            fontFamily: AbundanceTypography.displayFamily,
+            fontSize: 28,
+            fontWeight: FontWeight.w700,
+          ),
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 8),
+        const Text(
+          'Proof of the days you showed up. Every relic is earned, never given.',
+          style: TextStyle(
+              color: AbundanceColors.muted, fontSize: 13, height: 1.46),
+        ),
+        const SizedBox(height: 16),
+        _SummaryRow(
+            unlocked: earned.length, inProgress: 0, locked: locked.length),
         if (earned.isNotEmpty) ...[
-          const Text('EARNED', style: AbundanceTypography.eyebrow),
+          const SizedBox(height: 16),
+          const Text('RECENTLY UNLOCKED', style: AbundanceTypography.eyebrow),
           const SizedBox(height: 10),
-          ...earned.map((award) => _AwardCard(award: award, unlocked: true)),
-          const SizedBox(height: 18),
+          _AwardGrid(awards: earned, unlockedKeys: unlockedKeys),
         ],
-        const Text('LOCKED', style: AbundanceTypography.eyebrow),
-        const SizedBox(height: 10),
-        ...locked.map((award) => _AwardCard(award: award, unlocked: false)),
+        for (final section in <({String title, List<_AwardDefinition> awards})>[
+          (title: 'DISCIPLINE', awards: discipline),
+          (title: 'THE THREE REALMS', awards: realms),
+          (title: 'QUESTS', awards: quests),
+          (title: 'LIFE POWER', awards: lifePower),
+        ]) ...[
+          const SizedBox(height: 16),
+          Text(section.title, style: AbundanceTypography.eyebrow),
+          const SizedBox(height: 10),
+          _AwardGrid(awards: section.awards, unlockedKeys: unlockedKeys),
+        ],
       ],
     );
     return ColoredBox(
@@ -147,35 +181,140 @@ class _AwardCard extends StatelessWidget {
     return Opacity(
       opacity: unlocked ? 1 : .52,
       child: AbundanceCard(
-        margin: const EdgeInsets.only(bottom: 10),
-        child: Row(
+        margin: EdgeInsets.zero,
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             SizedBox(
-              width: 68,
-              height: 68,
+              width: 52,
+              height: 52,
               child: unlocked
-                  ? Image.asset(abundanceAchievementAssets[award.key]!)
-                  : const Icon(Icons.lock_outline,
-                      color: AbundanceColors.muted, size: 34),
+                  ? Image.asset(abundanceAchievementAssets[award.key]!,
+                      fit: BoxFit.contain)
+                  : const _LockedRelic(),
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(award.name, style: AbundanceTypography.title),
-                  const SizedBox(height: 4),
-                  Text(
-                    award.description,
-                    style: AbundanceTypography.body
-                        .copyWith(color: AbundanceColors.muted, fontSize: 13),
-                  ),
-                ],
-              ),
+            const SizedBox(height: 8),
+            Text(
+              award.name,
+              style: AbundanceTypography.title.copyWith(fontSize: 15),
+              textAlign: TextAlign.center,
             ),
+            const SizedBox(height: 4),
+            Text(
+              award.description,
+              style: AbundanceTypography.body
+                  .copyWith(color: AbundanceColors.muted, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(unlocked ? 'UNLOCKED' : 'LOCKED',
+                style: TextStyle(
+                  color: unlocked
+                      ? AbundanceColors.accentCyan
+                      : AbundanceColors.muted,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.1,
+                )),
           ],
         ),
       ),
     );
   }
+}
+
+class _AwardGrid extends StatelessWidget {
+  const _AwardGrid({required this.awards, required this.unlockedKeys});
+  final List<_AwardDefinition> awards;
+  final Set<String> unlockedKeys;
+
+  @override
+  Widget build(BuildContext context) => GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: awards.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          childAspectRatio: .92,
+        ),
+        itemBuilder: (_, index) => _AwardCard(
+          award: awards[index],
+          unlocked: unlockedKeys.contains(awards[index].key),
+        ),
+      );
+}
+
+class _SummaryRow extends StatelessWidget {
+  const _SummaryRow(
+      {required this.unlocked, required this.inProgress, required this.locked});
+  final int unlocked;
+  final int inProgress;
+  final int locked;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          _SummaryStat(
+              value: unlocked,
+              label: 'UNLOCKED',
+              color: AbundanceColors.accentCyan),
+          const SizedBox(width: 8),
+          _SummaryStat(
+              value: inProgress,
+              label: 'IN PROGRESS',
+              color: AbundanceColors.primaryGold),
+          const SizedBox(width: 8),
+          _SummaryStat(
+              value: locked, label: 'LOCKED', color: AbundanceColors.muted),
+        ],
+      );
+}
+
+class _SummaryStat extends StatelessWidget {
+  const _SummaryStat(
+      {required this.value, required this.label, required this.color});
+  final int value;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+        child: AbundanceCard(
+          margin: EdgeInsets.zero,
+          padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 4),
+          child: Column(children: [
+            Text('$value',
+                style: TextStyle(
+                    color: color,
+                    fontFamily: AbundanceTypography.displayFamily,
+                    fontSize: 20)),
+            const SizedBox(height: 3),
+            Text(label,
+                style: const TextStyle(
+                    color: AbundanceColors.muted,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: .6)),
+          ]),
+        ),
+      );
+}
+
+class _LockedRelic extends StatelessWidget {
+  const _LockedRelic();
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+            color: AbundanceColors.surfaceSunken,
+            shape: BoxShape.circle,
+            border: Border.all(color: AbundanceColors.border, width: 2)),
+        child: const Center(
+            child: Text('▣',
+                style: TextStyle(color: AbundanceColors.muted, fontSize: 20))),
+      );
 }
