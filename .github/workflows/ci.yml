@@ -126,4 +126,17 @@ jobs:
         # A number of legacy widget tests share Firebase/auth singletons.
         # Keep CI deterministic instead of allowing file-level isolates to
         # race those process-wide fakes.
-        run: flutter test --concurrency=1
+        run: |
+          set +e
+          flutter test --concurrency=1 --reporter expanded 2>&1 | tee flutter-test.log
+          test_status=${PIPESTATUS[0]}
+          echo "Flutter test exit status: ${test_status}"
+          exit "${test_status}"
+
+      - name: Upload Flutter test log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-test-log
+          path: flutter-test.log
+          if-no-files-found: error
