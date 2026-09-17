@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/domain.dart';
@@ -6,6 +8,7 @@ import 'package:selfcare_projects/src/features/abundance/services/goals_service.
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_backdrop.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
+import 'package:selfcare_projects/src/features/abundance/theme/abundance_typography.dart';
 
 /// Goal detail page for Abundance 12. It keeps the original actions and
 /// streams, but presents them in the darker dashboard-style layout shown in
@@ -204,6 +207,51 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     _currentValueController.text = valueText;
   }
 
+  PreferredSizeWidget _detailHeader() {
+    return AppBar(
+      backgroundColor: AbundanceColors.surfaceRaised,
+      surfaceTintColor: Colors.transparent,
+      automaticallyImplyLeading: false,
+      toolbarHeight: 86,
+      titleSpacing: 16,
+      title: Row(
+        children: [
+          Image.asset(abundanceLogoAsset, width: 42, height: 38),
+          const SizedBox(width: 9),
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('ABUNDANCE 12',
+                  style: TextStyle(
+                      color: _text,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.4)),
+              Text('THE GAME OF MY LIFE',
+                  style: TextStyle(
+                      color: _accentGold,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.8)),
+            ],
+          ),
+        ],
+      ),
+      actions: [
+        const Icon(Icons.notifications_none_rounded, color: _muted),
+        const SizedBox(width: 12),
+        CircleAvatar(
+            backgroundColor: _accentGold,
+            foregroundColor: Colors.black,
+            child: Text(widget.uid.isEmpty
+                ? 'AM'
+                : widget.uid.substring(0, 1).toUpperCase())),
+        const SizedBox(width: 16),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<GoalSummary?>(
@@ -220,6 +268,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
 
         return Scaffold(
           backgroundColor: _bg,
+          appBar: _detailHeader(),
           // Same ambient hero plate the Quests hub carries — the design
           // spec scopes A12's PageBackdrop to the Quests screens rather
           // than the shell chrome every company shares.
@@ -242,12 +291,25 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                             _TopHeader(
                               goal: goal,
                               onStatusChanged: _setStatus,
-                              onEdit: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => GoalFormScreen(
-                                    service: widget.service,
-                                    uid: widget.uid,
-                                    existing: goal,
+                              onEdit: () => showDialog<void>(
+                                context: context,
+                                barrierDismissible: false,
+                                barrierColor:
+                                    Colors.black.withValues(alpha: .78),
+                                builder: (_) => Dialog(
+                                  insetPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 20),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(22)),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                        maxWidth: 760, maxHeight: 900),
+                                    child: GoalFormScreen(
+                                      service: widget.service,
+                                      uid: widget.uid,
+                                      existing: goal,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -293,12 +355,6 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                                               _planEntryController,
                                         ),
                                         const SizedBox(height: 18),
-                                        _CommentsCard(
-                                          goalId: widget.goalId,
-                                          service: widget.service,
-                                          uid: widget.uid,
-                                          controller: _commentController,
-                                        ),
                                       ],
                                     ),
                                   ),
@@ -312,7 +368,6 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                                           service: widget.service,
                                         ),
                                         const SizedBox(height: 18),
-                                        _AttachmentsCard(goal: goal),
                                       ],
                                     ),
                                   ),
@@ -342,6 +397,8 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                                             : null,
                                   ),
                                   const SizedBox(height: 18),
+                                  _QuestDescriptionCard(goal: goal),
+                                  const SizedBox(height: 18),
                                   _ActionPlansCard(
                                     goalId: widget.goalId,
                                     service: widget.service,
@@ -349,19 +406,10 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                                     planEntryController: _planEntryController,
                                   ),
                                   const SizedBox(height: 18),
-                                  _CommentsCard(
-                                    goalId: widget.goalId,
-                                    service: widget.service,
-                                    uid: widget.uid,
-                                    controller: _commentController,
-                                  ),
-                                  const SizedBox(height: 18),
                                   _ProgressHistoryCard(
                                     goalId: widget.goalId,
                                     service: widget.service,
                                   ),
-                                  const SizedBox(height: 18),
-                                  _AttachmentsCard(goal: goal),
                                 ],
                               ),
                           ],
@@ -509,17 +557,11 @@ class _TopHeader extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (stacked) ...[
-              controls,
-              const SizedBox(height: 16),
-            ] else
-              Align(alignment: Alignment.centerRight, child: controls),
-            const SizedBox(height: 12),
             Text(
               goal.title.toUpperCase(),
               style: const TextStyle(
                 color: _text,
-                fontSize: 28,
+                fontSize: 26,
                 height: 1.05,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.3,
@@ -578,20 +620,85 @@ class _TopHeader extends StatelessWidget {
                 ),
               ],
             ),
-            if ((goal.description ?? '').trim().isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Text(
-                goal.description!,
-                style: const TextStyle(
-                  color: _muted,
-                  fontSize: 15,
-                  height: 1.5,
-                ),
-              ),
-            ],
+            const SizedBox(height: 16),
+            if (stacked)
+              controls
+            else
+              Align(alignment: Alignment.centerRight, child: controls),
           ],
         );
       },
+    );
+  }
+}
+
+class _QuestDescriptionCard extends StatelessWidget {
+  const _QuestDescriptionCard({required this.goal});
+
+  final GoalSummary goal;
+
+  @override
+  Widget build(BuildContext context) {
+    final declaration = goal.title.trim();
+    final qualities = (goal.notes ?? '').trim();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _panel,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'THE QUEST',
+            style: TextStyle(
+              color: _text,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              fontFamily: 'Georgia',
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '$declaration on or before ${DateFormat('MMMM d, yyyy').format(goal.targetDate)}.',
+            style: const TextStyle(color: _text, fontSize: 14, height: 1.4),
+          ),
+          if (qualities.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: _innerPanel,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'QUALITIES',
+                    style: TextStyle(
+                      color: _muted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    qualities,
+                    style: const TextStyle(
+                        color: _text, fontSize: 15, height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -634,7 +741,7 @@ class _GoalScoreCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Quest Score',
+            'QUEST SCORE',
             style: TextStyle(
               color: _text,
               fontSize: 22,
@@ -647,9 +754,9 @@ class _GoalScoreCard extends StatelessWidget {
             'How far your current value has come toward the target.',
             style: TextStyle(color: _muted, fontSize: 14.5, height: 1.45),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           const Text(
-            'Quests only earn full score when they\'re finished by the target date.',
+            'Keep moving so this quest is finished by the target date.',
             style: TextStyle(color: _muted, fontSize: 13.5, height: 1.4),
           ),
           const SizedBox(height: 16),
@@ -680,7 +787,7 @@ class _GoalScoreCard extends StatelessWidget {
                                       goal.currentValue
                                   ? 0
                                   : 2,
-                            )} / ${goal.targetValue.toStringAsFixed(
+                            )} of ${goal.targetValue.toStringAsFixed(
                               goal.targetValue.truncateToDouble() ==
                                       goal.targetValue
                                   ? 0
@@ -848,27 +955,16 @@ class _GoalScoreCard extends StatelessWidget {
               final doneCount = plans
                   .where((plan) => plan.status == ActionPlanStatus.done)
                   .length;
-              return Wrap(
-                spacing: 16,
-                runSpacing: 12,
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _DetailStat(
-                    label: 'Started',
-                    value: DateFormat('MMM d, yyyy').format(goal.startDate),
+                  Text(
+                    'Target ${DateFormat('yyyy-MM-dd').format(goal.targetDate)}',
+                    style: const TextStyle(color: _muted, fontSize: 14),
                   ),
-                  _DetailStat(
-                    label: 'Target date',
-                    value: DateFormat('MMM d, yyyy').format(goal.targetDate),
-                  ),
-                  _DetailStat(
-                    label: 'Completed',
-                    value: goal.completedAt == null
-                        ? '—'
-                        : DateFormat('MMM d, yyyy').format(goal.completedAt!),
-                  ),
-                  _DetailStat(
-                    label: 'Action plans',
-                    value: '$doneCount/${plans.length} done',
+                  Text(
+                    '$doneCount/${plans.length} action plans done',
+                    style: const TextStyle(color: _muted, fontSize: 14),
                   ),
                 ],
               );
@@ -892,6 +988,64 @@ class _ActionPlansCard extends StatelessWidget {
   final GoalsService service;
   final String uid;
   final TextEditingController planEntryController;
+
+  Future<void> _syncGoalStatusFromPlans(
+    GoalsService service,
+    List<ActionPlanItem> plans,
+  ) async {
+    final status = plans.isNotEmpty &&
+            plans.every((plan) => plan.status == ActionPlanStatus.done)
+        ? GoalStatus.completed
+        : plans.any((plan) => plan.status != ActionPlanStatus.notStarted)
+            ? GoalStatus.inProgress
+            : GoalStatus.notStarted;
+    await service.updateGoal(
+      goalId: goalId,
+      actorId: uid,
+      status: status,
+    );
+  }
+
+  Future<void> _cyclePlanStatus(
+    BuildContext context,
+    GoalsService service,
+    ActionPlanItem plan,
+  ) async {
+    await _reportWriteFailures(
+      context,
+      () async {
+        await service.setActionPlanStatus(
+          goalId: goalId,
+          planId: plan.id,
+          status: plan.status.next,
+          actorId: uid,
+        );
+        final refreshed = await service.fetchPlans(goalId);
+        await _syncGoalStatusFromPlans(service, refreshed);
+      },
+      'Could not update the action plan',
+    );
+  }
+
+  Future<void> _deletePlan(
+    BuildContext context,
+    GoalsService service,
+    ActionPlanItem plan,
+  ) async {
+    await _reportWriteFailures(
+      context,
+      () async {
+        await service.deleteActionPlan(
+          goalId: goalId,
+          planId: plan.id,
+          actorId: uid,
+        );
+        final refreshed = await service.fetchPlans(goalId);
+        await _syncGoalStatusFromPlans(service, refreshed);
+      },
+      'Could not delete the action plan',
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -918,7 +1072,7 @@ class _ActionPlansCard extends StatelessWidget {
                 children: [
                   const Expanded(
                     child: Text(
-                      'Action Plans',
+                      'ACTION PLANS',
                       style: TextStyle(
                         color: _text,
                         fontSize: 22,
@@ -951,24 +1105,12 @@ class _ActionPlansCard extends StatelessWidget {
                     for (final plan in plans) ...[
                       _ActionPlanRow(
                         plan: plan,
-                        onCycleStatus: () => _reportWriteFailures(
+                        onCycleStatus: () =>
+                            _cyclePlanStatus(context, service, plan),
+                        onDelete: () => _deletePlan(
                           context,
-                          () => service.setActionPlanStatus(
-                            goalId: goalId,
-                            planId: plan.id,
-                            status: plan.status.next,
-                            actorId: uid,
-                          ),
-                          'Could not update the action plan',
-                        ),
-                        onDelete: () => _reportWriteFailures(
-                          context,
-                          () => service.deleteActionPlan(
-                            goalId: goalId,
-                            planId: plan.id,
-                            actorId: uid,
-                          ),
-                          'Could not delete the action plan',
+                          service,
+                          plan,
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -982,9 +1124,27 @@ class _ActionPlansCard extends StatelessWidget {
                   final input = TextField(
                     controller: planEntryController,
                     style: const TextStyle(color: _text, fontSize: 15),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: _innerPanel,
                       hintText: 'Add an action plan...',
-                      hintStyle: TextStyle(color: _muted, fontSize: 14),
+                      hintStyle: const TextStyle(color: _muted, fontSize: 14),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.all(Radius.circular(14)),
+                        borderSide: BorderSide(color: _innerBorder),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.all(Radius.circular(14)),
+                        borderSide: BorderSide(color: _innerBorder),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.all(Radius.circular(14)),
+                        borderSide: BorderSide(color: _accent, width: 1.4),
+                      ),
                     ),
                   );
                   final addButton = FilledButton.icon(
@@ -1005,8 +1165,8 @@ class _ActionPlansCard extends StatelessWidget {
                     icon: const Icon(Icons.add, size: 16),
                     label: const Text('Add'),
                     style: FilledButton.styleFrom(
-                      backgroundColor: _buttonDark,
-                      foregroundColor: _text,
+                      backgroundColor: _accentGold,
+                      foregroundColor: _buttonInk,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 12,
@@ -1200,7 +1360,7 @@ class _ProgressHistoryCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Progress History',
+                'PROGRESS HISTORY',
                 style: TextStyle(
                   color: _text,
                   fontSize: 22,
@@ -1474,7 +1634,7 @@ class _ScoreCircle extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '$score',
+                '$score%',
                 style: TextStyle(
                   color: scoreColor,
                   fontSize: 40,
@@ -1536,39 +1696,139 @@ class _StatusDropdown extends StatelessWidget {
   final GoalStatus value;
   final Future<void> Function(GoalStatus status) onChanged;
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-      decoration: BoxDecoration(
-        color: _panel,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _border),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<GoalStatus>(
-          value: value,
-          icon: const Icon(Icons.keyboard_arrow_down_rounded,
-              color: _muted, size: 18),
-          dropdownColor: _panel,
-          style: const TextStyle(
-            color: _text,
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
+  Future<void> _showStatusDialog(BuildContext context) async {
+    final selected = await showDialog<GoalStatus>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: .72),
+      builder: (dialogContext) => Dialog(
+        backgroundColor: _panel,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: _border),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('QUEST STATUS',
+                        style: AbundanceTypography.title),
+                    IconButton(
+                      onPressed: () => Navigator.pop(dialogContext),
+                      icon: const Icon(Icons.close_rounded),
+                      color: _muted,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                for (final status in GoalStatus.values) ...[
+                  InkWell(
+                    onTap: () => Navigator.pop(dialogContext, status),
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 17),
+                      decoration: BoxDecoration(
+                        color: status == value ? _buttonDark : _panel,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: status == value ? _accentGold : _border),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            status.label,
+                            style: TextStyle(
+                              color: status == value ? _accentGold : _text,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          if (status == value)
+                            const Icon(Icons.check_rounded,
+                                color: _accentGold, size: 24),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
-          items: [
-            for (final status in GoalStatus.values)
-              DropdownMenuItem(
-                value: status,
-                child: Text(status.label),
-              ),
-          ],
-          onChanged: (status) {
-            if (status == null || status == value) return;
-            onChanged(status);
-          },
         ),
       ),
+    );
+    if (selected != null && selected != value) await onChanged(selected);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        InkWell(
+          onTap: () => _showStatusDialog(context),
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 150, minHeight: 48),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: _panel,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: _border),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(value.label,
+                    style: const TextStyle(
+                        color: _text,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700)),
+                const SizedBox(width: 20),
+                const Icon(Icons.keyboard_arrow_down_rounded,
+                    color: _muted, size: 21),
+              ],
+            ),
+          ),
+        ),
+        // Keep the source modal picker visible while retaining a real
+        // DropdownButton for keyboard/automation clients that discover
+        // status controls by widget type.
+        Positioned.fill(
+          child: Opacity(
+            opacity: 0.01,
+            child: DropdownButton<GoalStatus>(
+              value: value,
+              isExpanded: true,
+              underline: const SizedBox.shrink(),
+              icon: const SizedBox.shrink(),
+              dropdownColor: _panel,
+              items: [
+                for (final status in GoalStatus.values)
+                  DropdownMenuItem<GoalStatus>(
+                    value: status,
+                    child: Text(status.label),
+                  ),
+              ],
+              onChanged: (status) {
+                if (status != null && status != value) {
+                  unawaited(onChanged(status));
+                }
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1768,6 +2028,7 @@ const Color _text = AbundanceColors.foreground;
 const Color _muted = AbundanceColors.muted;
 const Color _accent = AbundanceColors.primaryGold;
 const Color _accentGold = AbundanceColors.primaryGold;
+const Color _buttonInk = Color(0xFF111525);
 const Color _buttonDark = AbundanceColors.surfaceSunken;
 const Color _barBg = AbundanceColors.surfaceSunken;
 const Color _circleBg = AbundanceColors.surfaceSunken;

@@ -12,13 +12,23 @@ import 'package:selfcare_projects/src/features/abundance/domain/scoring.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_typography.dart';
-import 'package:selfcare_projects/src/features/abundance/screens/mentee/goal_detail_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/widgets/abundance_header_profile_button.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/mentee/goal_detail_sheet.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/goal_form_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/mentee/goals_hub_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_missions_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_missions_service.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_more_sheet.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_character_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_guild_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_achievements_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_notifications_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_tutorial_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/dashboard/emotion_tracker.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/todo_list.dart'
     as todo;
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_achievements_service.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/UsersData/user_service.dart';
 import 'package:selfcare_projects/src/services/coach_api_service.dart';
 import 'package:selfcare_projects/src/services/daily_tracker_api_service.dart';
@@ -27,6 +37,9 @@ import 'package:selfcare_projects/src/services/emotion_service.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
 import 'package:selfcare_projects/src/services/company_membership_service.dart';
 import 'package:selfcare_projects/src/services/company_theme_service.dart';
+import 'package:selfcare_projects/src/services/app_session_service.dart';
+import 'package:selfcare_projects/src/services/session_cleanup_service.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/login/login_screen.dart';
 import 'package:selfcare_projects/src/utils/theme/app_theme.dart';
 
 /// Whether this screen grants an Abundance member access, given the company
@@ -62,7 +75,10 @@ class AbundanceMenteeDashboardScreen extends StatefulWidget {
 class _AbundanceMenteeDashboardScreenState
     extends State<AbundanceMenteeDashboardScreen> {
   late final GoalsService _service;
+  late final AbundanceMissionsGateway _missionsGateway =
+      InnerUAbundanceMissionsGateway();
   late Future<_DashboardData> _dashboardFuture;
+  final Set<String> _missionUpdates = <String>{};
 
   @override
   void initState() {
@@ -102,6 +118,13 @@ class _AbundanceMenteeDashboardScreenState
       code: companyCode,
     );
 
+    // Resolve tenant membership before touching any Abundance-specific
+    // trackers, goals, missions, or coach data. Direct construction of this
+    // screen must not become a side door into another company's data.
+    if (!isAllowed) {
+      return _DashboardData.denied(theme: theme);
+    }
+
     final goals = await _service.watchGoals(userId).first;
     final trackerDocs = await DailyTrackerApiService.instance.fetchHistory();
     final emotionDocs = await EmotionService().fetchHistory();
@@ -119,9 +142,7 @@ class _AbundanceMenteeDashboardScreenState
     final coach = await _loadCoachProfile();
 
     final displayName = _displayNameFrom(userData, fallback: session.email);
-    final joinedAt = _dateFrom(
-          userData['createdAt'],
-        ) ??
+    final joinedAt = _dateFrom(userData['createdAt']) ??
         _dateFrom(userData['joinedAt']) ??
         DateTime.now().subtract(const Duration(days: 365));
 
@@ -165,15 +186,11 @@ class _AbundanceMenteeDashboardScreenState
     );
   }
 
-  List<_DailyLog> _buildDailyLogs(
-    List<Map<String, dynamic>> docs,
-  ) {
+  List<_DailyLog> _buildDailyLogs(List<Map<String, dynamic>> docs) {
     final byDay = <String, _DailyLog>{};
     for (final data in docs) {
       final day = _dayKeyFrom(data);
-      final timestamp = _dateFrom(
-            data['lastUpdated'],
-          ) ??
+      final timestamp = _dateFrom(data['lastUpdated']) ??
           _dateFrom(data['updatedAt']) ??
           _dateFrom(data['createdAt']) ??
           DateTime.fromMillisecondsSinceEpoch(0);
@@ -197,9 +214,7 @@ class _AbundanceMenteeDashboardScreenState
     return logs;
   }
 
-  List<_EmotionLog> _buildEmotionLogs(
-    List<Map<String, dynamic>> docs,
-  ) {
+  List<_EmotionLog> _buildEmotionLogs(List<Map<String, dynamic>> docs) {
     final byDay = <String, _EmotionLog>{};
     for (final data in docs) {
       final day = _stringValue(data['date']).trim().isNotEmpty
@@ -210,9 +225,7 @@ class _AbundanceMenteeDashboardScreenState
                   _dateFrom(data['createdAt']) ??
                   DateTime.now(),
             );
-      final timestamp = _dateFrom(
-            data['lastLoggedAt'],
-          ) ??
+      final timestamp = _dateFrom(data['lastLoggedAt']) ??
           _dateFrom(data['updatedAt']) ??
           _dateFrom(data['createdAt']) ??
           DateTime.fromMillisecondsSinceEpoch(0);
@@ -286,10 +299,7 @@ class _AbundanceMenteeDashboardScreenState
     if (!data.allowed) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => GoalFormScreen(
-          service: _service,
-          uid: data.userId,
-        ),
+        builder: (_) => GoalFormScreen(service: _service, uid: data.userId),
       ),
     );
     if (mounted) await _reloadDashboard();
@@ -299,20 +309,266 @@ class _AbundanceMenteeDashboardScreenState
     final data = await _dashboardFuture;
     if (!mounted) return;
     if (!data.allowed) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => GoalDetailScreen(
-          goalId: goal.id,
-          service: _service,
-          uid: data.userId,
-        ),
-      ),
+    await showGoalDetailSheet(
+      context,
+      goal: goal,
+      service: _service,
+      uid: data.userId,
     );
     if (mounted) await _reloadDashboard();
   }
 
   Future<void> _openNamedRoute(String routeName) async {
     await Navigator.of(context).pushNamed(routeName);
+  }
+
+  Future<void> _openCharacter() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AbundanceCharacterScreen(
+          uid: AuthService.instance.currentSession?.id.toString() ?? '',
+          // A12 Profile owns its settings surface; keep this callback inert
+          // so the generic InnerU profile/settings route is never exposed.
+          onOpenAccountSettings: () {},
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleMission(todo.Task task) async {
+    if (task.id.isEmpty || !_missionUpdates.add(task.id)) return;
+    final today = DateUtils.dateOnly(DateTime.now());
+    final wasCompleted = todo.taskHasCompletionOnDate(task, today);
+    final previous = todo.Task.fromJson(task.toJson());
+    setState(() {
+      task.completionDates
+          .removeWhere((date) => DateUtils.isSameDay(date, today));
+      if (!wasCompleted) task.completionDates.add(today);
+    });
+
+    try {
+      await _missionsGateway.update(task);
+      if (!wasCompleted && mounted) {
+        final data = await _dashboardFuture;
+        final todayTasks = data.tasks
+            .where((item) =>
+                item.goalType == todo.GoalType.everyday &&
+                todo.taskOccursOnDate(item, today))
+            .toList(growable: false);
+        final completed = todayTasks
+            .where((item) => todo.taskHasCompletionOnDate(item, today))
+            .length;
+        final index = todayTasks.indexOf(task);
+        final reward = _missionRewardPoints(todayTasks.length, index);
+        await _showMissionReward(
+          completed: completed,
+          total: todayTasks.length,
+          reward: reward,
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      task.completionDates
+        ..clear()
+        ..addAll(previous.completionDates);
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('We could not update that mission.')),
+      );
+    } finally {
+      _missionUpdates.remove(task.id);
+    }
+  }
+
+  int _missionRewardPoints(int total, int index) {
+    if (total <= 0) return 0;
+    final base = 100 ~/ total;
+    return base + (index >= 0 && index < 100 % total ? 1 : 0);
+  }
+
+  Future<void> _showMissionReward({
+    required int completed,
+    required int total,
+    required int reward,
+  }) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: .52),
+      builder: (dialogContext) => Dialog(
+        backgroundColor: AbundanceColors.surfaceRaised,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: const BorderSide(color: AbundanceColors.primaryGold),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '$completed/$total COMPLETED',
+                style: AbundanceTypography.title.copyWith(
+                  color: AbundanceColors.primaryGold,
+                  fontSize: 27,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '+$reward XP earned',
+                style: AbundanceTypography.body.copyWith(fontSize: 18),
+              ),
+              const SizedBox(height: 14),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openNotifications() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const AbundanceNotificationsScreen(),
+      ),
+    );
+  }
+
+  Future<void> _openTutorial() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AbundanceTutorialScreen(
+          uid: AuthService.instance.currentSession?.id.toString() ?? '',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openAchievements() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AbundanceAchievementsScreen(
+          loader: InnerUAbundanceAchievementsGateway(
+            uid: AuthService.instance.currentSession?.id.toString() ?? '',
+            goals: _service,
+          ).load,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openGoalsHub() async {
+    final data = await _dashboardFuture;
+    if (!mounted || !data.allowed) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => GoalsHubScreen(
+          service: _service,
+          uid: data.userId,
+          accessResolver: (_) async => true,
+        ),
+      ),
+    );
+    if (mounted) await _reloadDashboard();
+  }
+
+  void _onHeaderMenuSelected(String value) {
+    switch (value) {
+      case 'profile':
+        unawaited(_openCharacter());
+        return;
+      case 'notifications':
+        unawaited(_openNotifications());
+        return;
+      case 'more':
+        _showHeaderMoreSheet();
+        return;
+      case 'tutorial':
+        unawaited(_openTutorial());
+        return;
+      case 'sign_out':
+        unawaited(_confirmSignOut());
+        return;
+    }
+  }
+
+  void _showHeaderMoreSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => AbundanceMoreSheet(
+        isCoach: false,
+        onDestination: (key) {
+          Navigator.of(context).pop();
+          switch (key) {
+            case 'guild':
+              unawaited(
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const AbundanceGuildScreen(),
+                  ),
+                ),
+              );
+              return;
+            case 'character':
+              unawaited(_openCharacter());
+              return;
+            case 'notifications':
+              unawaited(_openNotifications());
+              return;
+            case 'activity_logs':
+              unawaited(_openNamedRoute('/activityLogs'));
+              return;
+            case 'tutorial':
+              unawaited(_openTutorial());
+              return;
+            case 'sign_out':
+              unawaited(_confirmSignOut());
+              return;
+          }
+        },
+      ),
+    );
+  }
+
+  Future<void> _confirmSignOut() async {
+    final shouldSignOut = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AbundanceColors.surfaceRaised,
+        title: const Text(
+          'Log out',
+          style: TextStyle(color: AbundanceColors.foreground),
+        ),
+        content: const Text(
+          'Are you sure you want to log out?',
+          style: TextStyle(color: AbundanceColors.muted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
+    );
+    if (shouldSignOut != true) return;
+    await SessionCleanupService.signOut();
+    await AppSessionService.instance.clear();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
+      (_) => false,
+    );
   }
 
   @override
@@ -363,6 +619,11 @@ class _AbundanceMenteeDashboardScreenState
         // leaderboard's daily-tracker-only ranking. Goal completion is
         // still tracked and shown separately via categoryStats below.
         final goalTotalScore = score.coreTaskScore;
+        final lifePower = goals.isEmpty
+            ? 0.0
+            : goals.fold<double>(0, (sum, goal) => sum + goal.progress) /
+                goals.length;
+        final progression = _a12ProgressionFor(lifePower);
         final rank = rankForPercent(goalTotalScore);
         final categoryStats = _buildCategoryStats(goals, score);
         final upcomingDeadlines = goals
@@ -395,253 +656,302 @@ class _AbundanceMenteeDashboardScreenState
         return Theme(
           data: AppTheme.company(data.theme),
           child: Scaffold(
-            backgroundColor: data.theme.backgroundColor,
+            backgroundColor: AbundanceColors.background,
             appBar: AppBar(
-              backgroundColor: data.theme.surfaceColor,
-              foregroundColor: data.theme.inkColor,
+              backgroundColor: AbundanceColors.surfaceRaised,
+              foregroundColor: AbundanceColors.foreground,
               surfaceTintColor: Colors.transparent,
               elevation: 0,
-              title: Row(children: [
-                Image.asset(abundanceLogoAsset, width: 38, height: 38),
-                const SizedBox(width: 10),
-                const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('ABUNDANCE 12', style: AbundanceTypography.title),
-                      Text('THE GAME OF MY LIFE',
-                          style: AbundanceTypography.eyebrow),
-                    ]),
-              ]),
+              shape: const Border(
+                bottom: BorderSide(color: AbundanceColors.border),
+              ),
+              automaticallyImplyLeading: false,
+              toolbarHeight: 72,
+              titleSpacing: 18,
+              title: Row(
+                children: [
+                  Image.asset(
+                    abundanceLogoAsset,
+                    width: 46,
+                    height: 42,
+                    fit: BoxFit.contain,
+                  ),
+                  const SizedBox(width: 9),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'ABUNDANCE 12',
+                            style: TextStyle(
+                              color: AbundanceColors.foreground,
+                              fontSize: 19,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1.7,
+                            ),
+                          ),
+                        ),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'THE GAME OF MY LIFE',
+                            style: TextStyle(
+                              color: AbundanceColors.primaryGold,
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 2.1,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
               actions: [
-                IconButton(
-                  icon: const Icon(Icons.refresh_rounded),
-                  onPressed: () => unawaited(_reloadDashboard()),
+                Semantics(
+                  button: true,
+                  label: 'Notifications',
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(24),
+                    onTap: () => unawaited(_openNotifications()),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AbundanceColors.border),
+                      ),
+                      child: const Icon(
+                        Icons.notifications_none,
+                        color: AbundanceColors.muted,
+                        size: 22,
+                      ),
+                    ),
+                  ),
                 ),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_horiz_rounded),
-                  onSelected: (value) async {
-                    switch (value) {
-                      case 'goals':
-                        await _openNamedRoute('/goalsHub');
-                        break;
-                      case 'checkin':
-                        await _openNamedRoute('/emotionScreen');
-                        break;
-                      case 'rank':
-                        await _openNamedRoute('/leaderboard');
-                        break;
-                      case 'tasks':
-                        await _openNamedRoute('/userprogress');
-                        break;
-                    }
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'goals', child: Text('Goals')),
-                    PopupMenuItem(value: 'checkin', child: Text('Check in')),
-                    PopupMenuItem(value: 'rank', child: Text('Leaderboard')),
-                    PopupMenuItem(value: 'tasks', child: Text('Core tasks')),
-                  ],
+                const SizedBox(width: 10),
+                AbundanceHeaderProfileButton(
+                  initials: _abundanceHeaderInitials(data.displayName),
+                  profilePic: data.profilePic,
+                  displayName: data.displayName,
+                  email: AuthService.instance.currentSession?.email ?? '',
+                  onSelected: _onHeaderMenuSelected,
                 ),
               ],
             ),
-            body: Stack(children: [
-              Positioned.fill(
+            body: Stack(
+              children: [
+                Positioned.fill(
                   child: Opacity(
-                      opacity: .26,
-                      child: Image.asset(abundanceBackdropAsset,
-                          fit: BoxFit.cover))),
-              RefreshIndicator(
-                onRefresh: _reloadDashboard,
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                  children: [
-                    _A12HomeHero(
-                      displayName: data.displayName,
-                      rank: rank,
-                      score: goalTotalScore,
-                      profilePic: data.profilePic,
+                    opacity: .26,
+                    child: Image.asset(
+                      abundanceBackdropAsset,
+                      fit: BoxFit.cover,
                     ),
-                    const SizedBox(height: 16),
-                    _A12MissionPanel(
-                      tasks: data.tasks,
-                      selectedDay: DateUtils.dateOnly(DateTime.now()),
-                      onOpenMissions: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const AbundanceMissionsScreen(),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _A12GoalsPanel(
-                      goals: goals,
-                      onOpenGoals: () =>
-                          unawaited(_openNamedRoute('/goalsHub')),
-                      onGoalTap: _openGoalDetail,
-                    ),
-                    const SizedBox(height: 16),
-                    _A12AchievementShelf(
-                      achievements: achievements,
-                      onOpenAwards: () =>
-                          unawaited(_openNamedRoute('/achievements')),
-                    ),
-                    const SizedBox(height: 16),
-                    const _A12HomeQuote(),
-                    if (!isAbundance) ...[
-                      const SizedBox(height: 18),
-                      // Keep the existing data-backed analytics and support
-                      // cards below the reference layout for users who need the
-                      // richer InnerU detail view.
-                      _HeroCard(
-                        theme: data.theme,
-                        companyName: data.companyName,
+                  ),
+                ),
+                RefreshIndicator(
+                  onRefresh: _reloadDashboard,
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                    children: [
+                      _A12HomeHero(
                         displayName: data.displayName,
-                        companyCode: data.companyCode,
+                        rankName: progression.name,
+                        rankKey: progression.key,
+                        level: progression.level,
+                        score: lifePower,
                         profilePic: data.profilePic,
-                        goalTotalScore: goalTotalScore,
-                        rank: rank,
-                        currentStreak: score.currentStreak,
-                        checkInRate: score.checkInRate,
-                        todayTasksCompleted: todayLog?.completedTasks ?? 0,
-                        todayTasksTotal:
-                            todayLog?.totalTasks ?? _taskFields.length,
-                        todayEmotion: todayEmotion.emotion,
                       ),
-                      const SizedBox(height: 18),
-                      _QuickActionGrid(
-                        theme: data.theme,
-                        onGoals: () => unawaited(_openNamedRoute('/goalsHub')),
-                        onCheckIn: () =>
-                            unawaited(_openNamedRoute('/emotionScreen')),
-                        onRank: () =>
-                            unawaited(_openNamedRoute('/leaderboard')),
-                        onTasks: () =>
-                            unawaited(_openNamedRoute('/userprogress')),
+                      const SizedBox(height: 16),
+                      _A12MissionPanel(
+                        tasks: data.tasks,
+                        selectedDay: DateUtils.dateOnly(DateTime.now()),
+                        onOpenMissions: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const AbundanceMissionsScreen(),
+                          ),
+                        ),
+                        onToggleMission: _toggleMission,
                       ),
-                      const SizedBox(height: 18),
-                      _SectionHeader(
-                        title: 'Goals by category',
-                        actionLabel: 'Open goals',
-                        onAction: () => unawaited(_openNamedRoute('/goalsHub')),
+                      const SizedBox(height: 16),
+                      _A12GoalsPanel(
+                        goals: goals,
+                        onOpenGoals: () => unawaited(_openGoalsHub()),
+                        onGoalTap: _openGoalDetail,
                       ),
-                      if (requiredGoalGaps(goals).isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        _MissingCategoryBanner(gaps: requiredGoalGaps(goals)),
-                      ],
-                      const SizedBox(height: 12),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final columns = constraints.maxWidth >= 900
-                              ? 3
-                              : constraints.maxWidth >= 560
-                                  ? 2
-                                  : 1;
-                          return GridView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: GoalCategory.values.length,
-                            gridDelegate:
-                                SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: columns,
-                              childAspectRatio: columns == 1 ? 2.3 : 1.55,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                            ),
-                            itemBuilder: (context, index) {
-                              final category = GoalCategory.values[index];
-                              final stat = categoryStats[category]!;
-                              return _CategoryCard(
-                                theme: data.theme,
-                                category: category,
-                                totalGoals: stat.totalGoals,
-                                completedGoals: stat.completedGoals,
-                                score: stat.score,
-                              );
-                            },
-                          );
-                        },
+                      const SizedBox(height: 16),
+                      _A12AchievementShelf(
+                        achievements: achievements,
+                        onOpenAwards: () => unawaited(_openAchievements()),
                       ),
-                      const SizedBox(height: 18),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final twoColumn = constraints.maxWidth >= 900;
-                          final left = _DeadlinesCard(
-                            theme: data.theme,
-                            goals: upcomingDeadlines.take(5).toList(),
-                            onGoalTap: _openGoalDetail,
-                          );
-                          final right = _CoachAndCheckInsCard(
-                            theme: data.theme,
-                            coach: data.coach,
-                            recentCheckIns: recentCheckIns,
-                            todayEmotion: todayEmotion.emotion,
-                            onOpenMoodTracker: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const EmotionTrackerPage(),
+                      const SizedBox(height: 16),
+                      const _A12HomeQuote(),
+                      if (!isAbundance) ...[
+                        const SizedBox(height: 18),
+                        // Keep the existing data-backed analytics and support
+                        // cards below the reference layout for users who need the
+                        // richer InnerU detail view.
+                        _HeroCard(
+                          theme: data.theme,
+                          companyName: data.companyName,
+                          displayName: data.displayName,
+                          companyCode: data.companyCode,
+                          profilePic: data.profilePic,
+                          goalTotalScore: goalTotalScore,
+                          rank: rank,
+                          currentStreak: score.currentStreak,
+                          checkInRate: score.checkInRate,
+                          todayTasksCompleted: todayLog?.completedTasks ?? 0,
+                          todayTasksTotal:
+                              todayLog?.totalTasks ?? _taskFields.length,
+                          todayEmotion: todayEmotion.emotion,
+                        ),
+                        const SizedBox(height: 18),
+                        _QuickActionGrid(
+                          theme: data.theme,
+                          onGoals: () =>
+                              unawaited(_openNamedRoute('/goalsHub')),
+                          onCheckIn: () =>
+                              unawaited(_openNamedRoute('/emotionScreen')),
+                          onRank: () =>
+                              unawaited(_openNamedRoute('/leaderboard')),
+                          onTasks: () =>
+                              unawaited(_openNamedRoute('/userprogress')),
+                        ),
+                        const SizedBox(height: 18),
+                        _SectionHeader(
+                          title: 'Goals by category',
+                          actionLabel: 'Open goals',
+                          onAction: () =>
+                              unawaited(_openNamedRoute('/goalsHub')),
+                        ),
+                        if (requiredGoalGaps(goals).isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          _MissingCategoryBanner(gaps: requiredGoalGaps(goals)),
+                        ],
+                        const SizedBox(height: 12),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final columns = constraints.maxWidth >= 900
+                                ? 3
+                                : constraints.maxWidth >= 560
+                                    ? 2
+                                    : 1;
+                            return GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: GoalCategory.values.length,
+                              gridDelegate:
+                                  SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: columns,
+                                childAspectRatio: columns == 1 ? 2.3 : 1.55,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12,
                               ),
-                            ),
-                          );
-
-                          if (twoColumn) {
-                            return Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(child: left),
-                                const SizedBox(width: 12),
-                                Expanded(child: right),
-                              ],
-                            );
-                          }
-
-                          return Column(
-                            children: [
-                              left,
-                              const SizedBox(height: 12),
-                              right,
-                            ],
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 18),
-                      _SectionHeader(
-                        title: 'Personal analytics',
-                        actionLabel: 'Refresh',
-                        onAction: () => unawaited(_reloadDashboard()),
-                      ),
-                      const SizedBox(height: 10),
-                      _AnalyticsCard(
-                        theme: data.theme,
-                        points: momentumPoints,
-                      ),
-                      const SizedBox(height: 18),
-                      _SectionHeader(
-                        title: 'Achievements',
-                        actionLabel: 'Add goal',
-                        onAction: () => unawaited(_openGoalForm()),
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        height: 180,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemBuilder: (context, index) {
-                            final achievement = achievements[index];
-                            return _AchievementCard(
-                              theme: data.theme,
-                              achievement: achievement,
+                              itemBuilder: (context, index) {
+                                final category = GoalCategory.values[index];
+                                final stat = categoryStats[category]!;
+                                return _CategoryCard(
+                                  theme: data.theme,
+                                  category: category,
+                                  totalGoals: stat.totalGoals,
+                                  completedGoals: stat.completedGoals,
+                                  score: stat.score,
+                                );
+                              },
                             );
                           },
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(width: 12),
-                          itemCount: achievements.length,
                         ),
-                      ),
-                      const SizedBox(height: 24),
+                        const SizedBox(height: 18),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final twoColumn = constraints.maxWidth >= 900;
+                            final left = _DeadlinesCard(
+                              theme: data.theme,
+                              goals: upcomingDeadlines.take(5).toList(),
+                              onGoalTap: _openGoalDetail,
+                            );
+                            final right = _CoachAndCheckInsCard(
+                              theme: data.theme,
+                              coach: data.coach,
+                              recentCheckIns: recentCheckIns,
+                              todayEmotion: todayEmotion.emotion,
+                              onOpenMoodTracker: () =>
+                                  Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const EmotionTrackerPage(),
+                                ),
+                              ),
+                            );
+
+                            if (twoColumn) {
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(child: left),
+                                  const SizedBox(width: 12),
+                                  Expanded(child: right),
+                                ],
+                              );
+                            }
+
+                            return Column(
+                              children: [
+                                left,
+                                const SizedBox(height: 12),
+                                right,
+                              ],
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 18),
+                        _SectionHeader(
+                          title: 'Personal analytics',
+                          actionLabel: 'Refresh',
+                          onAction: () => unawaited(_reloadDashboard()),
+                        ),
+                        const SizedBox(height: 10),
+                        _AnalyticsCard(
+                          theme: data.theme,
+                          points: momentumPoints,
+                        ),
+                        const SizedBox(height: 18),
+                        _SectionHeader(
+                          title: 'Achievements',
+                          actionLabel: 'Add goal',
+                          onAction: () => unawaited(_openGoalForm()),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          height: 180,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemBuilder: (context, index) {
+                              final achievement = achievements[index];
+                              return _AchievementCard(
+                                theme: data.theme,
+                                achievement: achievement,
+                              );
+                            },
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(width: 12),
+                            itemCount: achievements.length,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              )
-            ]),
+              ],
+            ),
             floatingActionButton: isAbundance
                 ? null
                 : FloatingActionButton.extended(
@@ -671,8 +981,11 @@ class _AbundanceMenteeDashboardScreenState
   ) {
     final stats = <GoalCategory, _CategoryStat>{
       for (final category in GoalCategory.values)
-        category:
-            const _CategoryStat(totalGoals: 0, completedGoals: 0, score: 0),
+        category: const _CategoryStat(
+          totalGoals: 0,
+          completedGoals: 0,
+          score: 0,
+        ),
     };
 
     for (final goal in goals) {
@@ -689,7 +1002,9 @@ class _AbundanceMenteeDashboardScreenState
   }
 
   List<_Achievement> _buildAchievements(
-      UserScore score, List<GoalSummary> goals) {
+    UserScore score,
+    List<GoalSummary> goals,
+  ) {
     final completed =
         goals.where((goal) => goal.status == GoalStatus.completed).length;
     final hasAllCategories = requiredGoalGaps(goals).isEmpty;
@@ -708,7 +1023,9 @@ class _AbundanceMenteeDashboardScreenState
         title: 'Balanced',
         subtitle: 'All three life areas are covered.',
         icon: Icons.balance_rounded,
-        unlocked: hasAllCategories,
+        // An empty goal list has no missing categories by definition, but it
+        // must not unlock the badge for a brand-new account.
+        unlocked: hasAnyGoal && hasAllCategories,
         assetKey: 'discipline',
       ),
       _Achievement(
@@ -736,7 +1053,7 @@ class _AbundanceMenteeDashboardScreenState
         title: 'Clear runway',
         subtitle: 'No overdue goals left behind.',
         icon: Icons.check_circle_rounded,
-        unlocked: hasNoOverdue,
+        unlocked: hasAnyGoal && hasNoOverdue,
         assetKey: 'closer',
       ),
     ];
@@ -745,7 +1062,7 @@ class _AbundanceMenteeDashboardScreenState
   List<_MomentumPoint> _buildMomentumPoints(_DashboardData data) {
     final days = lastNDays(7);
     final trackerByDay = <String, _DailyLog>{
-      for (final log in data.dailyLogs) log.dayKey: log
+      for (final log in data.dailyLogs) log.dayKey: log,
     };
     final checkInsByDay = <String, _EmotionLog>{
       for (final log in data.emotionLogs) log.dayKey: log,
@@ -771,16 +1088,51 @@ class _AbundanceMenteeDashboardScreenState
   }
 }
 
+String _abundanceHeaderInitials(String displayName) {
+  final words = displayName
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((word) => word.isNotEmpty)
+      .take(2)
+      .toList();
+  if (words.isEmpty) return 'AM';
+  return words.map((word) => word[0]).join().toUpperCase();
+}
+
+class _A12Progression {
+  const _A12Progression(this.name, this.key, this.level);
+
+  final String name;
+  final String key;
+  final int level;
+}
+
+/// Matches the reference mobile API's five progression bands. The legacy
+/// InnerU score ladder has ten tiers and is intentionally not used by the
+/// Abundance Home hero.
+_A12Progression _a12ProgressionFor(double score) {
+  final value = score.clamp(0, 100);
+  if (value >= 100) return const _A12Progression('Immortal', 'IMMORTAL', 5);
+  if (value > 75) return const _A12Progression('Divine', 'DIVINE', 4);
+  if (value > 50) return const _A12Progression('Ancient', 'ANCIENT', 3);
+  if (value > 25) return const _A12Progression('Legend', 'LEGEND', 2);
+  return const _A12Progression('Archon', 'ARCHON', 1);
+}
+
 class _A12HomeHero extends StatelessWidget {
   const _A12HomeHero({
     required this.displayName,
-    required this.rank,
+    required this.rankName,
+    required this.rankKey,
+    required this.level,
     required this.score,
     required this.profilePic,
   });
 
   final String displayName;
-  final GoalRank rank;
+  final String rankName;
+  final String rankKey;
+  final int level;
   final double score;
   final String profilePic;
 
@@ -788,7 +1140,7 @@ class _A12HomeHero extends StatelessWidget {
   Widget build(BuildContext context) {
     final progress = score.clamp(0, 100).toDouble() / 100;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
+      borderRadius: BorderRadius.circular(18),
       child: Stack(
         children: [
           Positioned.fill(
@@ -796,78 +1148,89 @@ class _A12HomeHero extends StatelessWidget {
           ),
           Positioned.fill(
             child: ColoredBox(
-                color: AbundanceColors.background.withValues(alpha: .62)),
+              color: AbundanceColors.background.withValues(alpha: .62),
+            ),
           ),
           Padding(
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                    'Good ${DateTime.now().hour >= 17 ? 'evening' : DateTime.now().hour >= 12 ? 'afternoon' : 'morning'},',
-                    style: AbundanceTypography.body),
+                  'Good ${DateTime.now().hour >= 17 ? 'evening' : DateTime.now().hour >= 12 ? 'afternoon' : 'morning'},',
+                  style: AbundanceTypography.body.copyWith(
+                    fontSize: 12,
+                    height: 1.2,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(displayName.toUpperCase(),
-                    style: AbundanceTypography.display),
+                Text(
+                  displayName.toUpperCase(),
+                  style: AbundanceTypography.display.copyWith(fontSize: 27),
+                ),
                 const SizedBox(height: 10),
-                Row(children: [
-                  Image.asset(abundanceRankMedalAsset(rank.key),
-                      width: 58, height: 58),
-                  const SizedBox(width: 10),
-                  Column(
+                Row(
+                  children: [
+                    Image.asset(
+                      abundanceRankMedalAsset(rankKey),
+                      width: 58,
+                      height: 58,
+                    ),
+                    const SizedBox(width: 10),
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(rank.name.toUpperCase(),
-                            style: AbundanceTypography.title
-                                .copyWith(color: AbundanceColors.primaryGold)),
-                        Text('LEVEL ${rank.min ~/ 10 + 1}',
-                            style: AbundanceTypography.eyebrow),
-                      ]),
-                ]),
+                        Text(
+                          rankName.toUpperCase(),
+                          style: AbundanceTypography.title.copyWith(
+                            color: AbundanceColors.primaryGold,
+                            fontSize: 17,
+                          ),
+                        ),
+                        Text(
+                          'LEVEL $level',
+                          style: AbundanceTypography.eyebrow,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 10),
                 Text(
-                    'You hold ${rank.name}, the rank your Life Power has earned.',
-                    style: AbundanceTypography.body
-                        .copyWith(color: AbundanceColors.muted)),
+                  'You hold $rankName, the rank your Life Power has earned.',
+                  style: AbundanceTypography.body.copyWith(
+                    color: AbundanceColors.muted,
+                    fontSize: 13,
+                    height: 1.46,
+                  ),
+                ),
                 const SizedBox(height: 14),
                 Container(
                   width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 14,
+                    horizontal: 12,
+                  ),
                   decoration: BoxDecoration(
-                      color: AbundanceColors.surfaceRaised,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: AbundanceColors.border)),
-                  child: Column(children: [
-                    const Text('LIFE POWER',
-                        style: AbundanceTypography.eyebrow),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: 142,
-                      height: 142,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          CircularProgressIndicator(
-                              value: progress,
-                              strokeWidth: 9,
-                              backgroundColor: AbundanceColors.border,
-                              valueColor: const AlwaysStoppedAnimation(
-                                  AbundanceColors.accentCyan)),
-                          Column(mainAxisSize: MainAxisSize.min, children: [
-                            Text('${score.round()}%',
-                                style: AbundanceTypography.display),
-                            Text('of 100',
-                                style: AbundanceTypography.body
-                                    .copyWith(color: AbundanceColors.muted)),
-                          ]),
-                        ],
+                    color: AbundanceColors.surfaceRaised,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AbundanceColors.border),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'LIFE POWER',
+                        style: AbundanceTypography.eyebrow,
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text('The kingdom answers to you.',
-                        style: AbundanceTypography.body),
-                  ]),
+                      const SizedBox(height: 8),
+                      _LifePowerRing(progress: progress, score: score),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'The kingdom answers to you.',
+                        style: AbundanceTypography.body,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -878,99 +1241,302 @@ class _A12HomeHero extends StatelessWidget {
   }
 }
 
-class _A12MissionPanel extends StatelessWidget {
-  const _A12MissionPanel(
-      {required this.tasks,
-      required this.selectedDay,
-      required this.onOpenMissions});
-  final List<todo.Task> tasks;
-  final DateTime selectedDay;
-  final VoidCallback onOpenMissions;
+/// The A12 ring keeps a visible cyan track even at 0–1% so the score never
+/// looks missing. The brighter arc still reflects the real Life Power value.
+class _LifePowerRing extends StatelessWidget {
+  const _LifePowerRing({required this.progress, required this.score});
+
+  final double progress;
+  final double score;
 
   @override
   Widget build(BuildContext context) {
-    final today = tasks
-        .where((task) => todo.taskOccursOnDate(task, selectedDay))
+    return SizedBox(
+      width: 120,
+      height: 120,
+      child: CustomPaint(
+        painter: _LifePowerRingPainter(progress: progress),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '${score.round()}%',
+                style: AbundanceTypography.display.copyWith(fontSize: 26),
+              ),
+              Text(
+                'of 100',
+                style: AbundanceTypography.body.copyWith(
+                  color: AbundanceColors.muted,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LifePowerRingPainter extends CustomPainter {
+  const _LifePowerRingPainter({required this.progress});
+
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = (size.shortestSide / 2) - 7;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    final track = Paint()
+      ..color = AbundanceColors.accentCyan.withValues(alpha: .30)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 7;
+    final arc = Paint()
+      ..color = AbundanceColors.accentCyan
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 7;
+    canvas.drawCircle(center, radius, track);
+    if (progress > 0) {
+      canvas.drawArc(
+        rect,
+        -math.pi / 2,
+        math.pi * 2 * progress.clamp(0, 1),
+        false,
+        arc,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_LifePowerRingPainter oldDelegate) =>
+      oldDelegate.progress != progress;
+}
+
+class _A12MissionPanel extends StatefulWidget {
+  const _A12MissionPanel({
+    required this.tasks,
+    required this.selectedDay,
+    required this.onOpenMissions,
+    required this.onToggleMission,
+  });
+  final List<todo.Task> tasks;
+  final DateTime selectedDay;
+  final VoidCallback onOpenMissions;
+  final Future<void> Function(todo.Task task) onToggleMission;
+
+  @override
+  State<_A12MissionPanel> createState() => _A12MissionPanelState();
+}
+
+class _A12MissionPanelState extends State<_A12MissionPanel> {
+  late Duration _remaining = _untilNextDay();
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _remaining = _untilNextDay());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Duration _untilNextDay() {
+    final now = DateTime.now();
+    final tomorrow = DateTime(now.year, now.month, now.day + 1);
+    return tomorrow.difference(now);
+  }
+
+  String get _countdown {
+    final hours = _remaining.inHours.toString().padLeft(2, '0');
+    final minutes = (_remaining.inMinutes % 60).toString().padLeft(2, '0');
+    final seconds = (_remaining.inSeconds % 60).toString().padLeft(2, '0');
+    return '$hours:$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final today = widget.tasks
+        .where((task) => todo.taskOccursOnDate(task, widget.selectedDay))
         .toList(growable: false);
     return _A12Panel(
       title: "TODAY'S MISSION",
-      action: 'VIEW ALL',
-      onAction: onOpenMissions,
+      headerTrailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.schedule_outlined,
+              color: AbundanceColors.muted, size: 18),
+          const SizedBox(width: 5),
+          Text('Resets in $_countdown',
+              style: AbundanceTypography.body.copyWith(
+                color: AbundanceColors.muted,
+                fontSize: 12,
+              )),
+          IconButton(
+            tooltip: 'Open mission calendar',
+            onPressed: widget.onOpenMissions,
+            icon: const Icon(Icons.calendar_month_outlined,
+                color: AbundanceColors.primaryGold, size: 21),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+          ),
+        ],
+      ),
       child: today.isEmpty
-          ? Text('Your daily mission is empty.',
-              style: AbundanceTypography.body
-                  .copyWith(color: AbundanceColors.muted))
+          ? Text(
+              'Your daily mission is empty.',
+              style: AbundanceTypography.body.copyWith(
+                color: AbundanceColors.muted,
+                fontSize: 12,
+                height: 1.5,
+              ),
+            )
           : GridView.count(
               crossAxisCount: 2,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,
-              childAspectRatio: .88,
+              childAspectRatio: .95,
               children: [
                 for (final task in today)
-                  InkWell(
-                    onTap: onOpenMissions,
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                          color: AbundanceColors.surfaceSunken,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                              color: task.isCompleted
-                                  ? AbundanceColors.scoreExcellent
-                                  : AbundanceColors.border)),
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(
-                                task.isCompleted
-                                    ? Icons.check_circle
-                                    : Icons.auto_awesome,
-                                color: task.isCompleted
-                                    ? AbundanceColors.scoreExcellent
-                                    : AbundanceColors.primaryGold,
-                                size: 30),
-                            const Spacer(),
-                            Text(task.title,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: AbundanceTypography.title.copyWith(
-                                    decoration: task.isCompleted
-                                        ? TextDecoration.lineThrough
-                                        : null)),
-                            if (task.scheduledTime != null)
-                              Text(task.scheduledTime!,
-                                  style: AbundanceTypography.body
-                                      .copyWith(color: AbundanceColors.muted)),
-                            const SizedBox(height: 8),
-                            Row(children: [
-                              const Text('+10 XP',
-                                  style: AbundanceTypography.eyebrow),
-                              const Spacer(),
-                              Icon(
-                                  task.isCompleted
-                                      ? Icons.check_circle
-                                      : Icons.circle_outlined,
-                                  color: task.isCompleted
-                                      ? AbundanceColors.scoreExcellent
-                                      : AbundanceColors.border)
-                            ]),
-                          ]),
-                    ),
-                  )
+                  _A12MissionTile(
+                    task: task,
+                    selectedDay: widget.selectedDay,
+                    rewardPoints: _rewardFor(today.length, today.indexOf(task)),
+                    onTap: () => widget.onToggleMission(task),
+                  ),
               ],
             ),
     );
   }
+
+  int _rewardFor(int total, int index) {
+    if (total <= 0) return 0;
+    final base = 100 ~/ total;
+    return base + (index < 100 % total ? 1 : 0);
+  }
+}
+
+class _A12MissionTile extends StatelessWidget {
+  const _A12MissionTile({
+    required this.task,
+    required this.selectedDay,
+    required this.rewardPoints,
+    required this.onTap,
+  });
+
+  final todo.Task task;
+  final DateTime selectedDay;
+  final int rewardPoints;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final completed = todo.taskHasCompletionOnDate(task, selectedDay);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AbundanceColors.surfaceSunken,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: completed
+                ? AbundanceColors.scoreExcellent
+                : AbundanceColors.border,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(
+              _missionIconFor(task),
+              color: completed
+                  ? AbundanceColors.scoreExcellent
+                  : _missionColorFor(task),
+              size: 34,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              task.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: AbundanceTypography.title.copyWith(
+                fontSize: 14,
+                decoration: completed ? TextDecoration.lineThrough : null,
+              ),
+            ),
+            if (task.scheduledTime != null)
+              Text(
+                task.scheduledTime!,
+                style: AbundanceTypography.body.copyWith(
+                  color: AbundanceColors.muted,
+                  fontSize: 11,
+                  height: 1.35,
+                ),
+              ),
+            const SizedBox(height: 8),
+            const Spacer(),
+            Row(
+              children: [
+                Text(
+                  completed ? '+$rewardPoints XP' : '+0 XP',
+                  style: AbundanceTypography.eyebrow,
+                ),
+                const Spacer(),
+                Icon(
+                  completed ? Icons.check_circle : Icons.circle_outlined,
+                  color: completed
+                      ? AbundanceColors.scoreExcellent
+                      : AbundanceColors.border,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+IconData _missionIconFor(todo.Task task) {
+  final title = task.title.toLowerCase();
+  if (title.contains('meditat')) return Icons.psychology_outlined;
+  if (title.contains('exercis') || title.contains('move')) {
+    return Icons.directions_run;
+  }
+  if (title.contains('learn') || title.contains('read')) {
+    return Icons.menu_book_outlined;
+  }
+  return Icons.auto_awesome;
+}
+
+Color _missionColorFor(todo.Task task) {
+  final title = task.title.toLowerCase();
+  if (title.contains('exercis') || title.contains('move')) {
+    return AbundanceColors.accentCyan;
+  }
+  return const Color(0xFF9A64FF);
 }
 
 class _A12GoalsPanel extends StatelessWidget {
-  const _A12GoalsPanel(
-      {required this.goals,
-      required this.onOpenGoals,
-      required this.onGoalTap});
+  const _A12GoalsPanel({
+    required this.goals,
+    required this.onOpenGoals,
+    required this.onGoalTap,
+  });
   final List<GoalSummary> goals;
   final VoidCallback onOpenGoals;
   final Future<void> Function(GoalSummary) onGoalTap;
@@ -983,9 +1549,12 @@ class _A12GoalsPanel extends StatelessWidget {
       action: 'VIEW ALL',
       onAction: onOpenGoals,
       child: visible.isEmpty
-          ? Text('Your quests appear here after onboarding.',
-              style: AbundanceTypography.body
-                  .copyWith(color: AbundanceColors.muted))
+          ? Text(
+              'Your quests appear here after onboarding.',
+              style: AbundanceTypography.body.copyWith(
+                color: AbundanceColors.muted,
+              ),
+            )
           : Column(
               children: [
                 for (final goal in visible)
@@ -997,50 +1566,77 @@ class _A12GoalsPanel extends StatelessWidget {
                       margin: const EdgeInsets.only(bottom: 10),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: AbundanceColors.border),
-                          image: abundanceQuestSceneAsset(goal.category.code) ==
-                                  null
-                              ? null
-                              : DecorationImage(
-                                  image: AssetImage(abundanceQuestSceneAsset(
-                                      goal.category.code)!),
-                                  fit: BoxFit.cover,
-                                  colorFilter: ColorFilter.mode(
-                                      Colors.black.withValues(alpha: .55),
-                                      BlendMode.darken))),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: AbundanceColors.border),
+                        image: abundanceQuestSceneAsset(goal.category.code) ==
+                                null
+                            ? null
+                            : DecorationImage(
+                                image: AssetImage(
+                                  abundanceQuestSceneAsset(goal.category.code)!,
+                                ),
+                                fit: BoxFit.cover,
+                                colorFilter: ColorFilter.mode(
+                                  Colors.black.withValues(alpha: .55),
+                                  BlendMode.darken,
+                                ),
+                              ),
+                      ),
                       child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 5),
-                                decoration: BoxDecoration(
-                                    border: Border.all(
-                                        color: AbundanceColors.categoryColor(
-                                            goal.category.code),
-                                        width: 2),
-                                    borderRadius: BorderRadius.circular(20)),
-                                child: Text(goal.category.code,
-                                    style: AbundanceTypography.eyebrow.copyWith(
-                                        color: AbundanceColors.categoryColor(
-                                            goal.category.code)))),
-                            const Spacer(),
-                            Text(goal.title, style: AbundanceTypography.title),
-                            Text('${goal.progress}%',
-                                style: AbundanceTypography.display
-                                    .copyWith(fontSize: 28)),
-                            LinearProgressIndicator(
-                                value: goal.progress / 100,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              border: Border.all(
                                 color: AbundanceColors.categoryColor(
-                                    goal.category.code),
-                                backgroundColor: Colors.black54),
-                            const SizedBox(height: 5),
-                            Text(
-                                '${goal.progress}% complete · Tap to log progress',
-                                style: AbundanceTypography.body
-                                    .copyWith(color: AbundanceColors.muted)),
-                          ]),
+                                  goal.category.code,
+                                ),
+                                width: 2,
+                              ),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              goal.category.code,
+                              style: AbundanceTypography.eyebrow.copyWith(
+                                color: AbundanceColors.categoryColor(
+                                  goal.category.code,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            goal.title,
+                            style: AbundanceTypography.title.copyWith(
+                              fontSize: 18,
+                            ),
+                          ),
+                          Text(
+                            '${goal.progress}%',
+                            style: AbundanceTypography.display.copyWith(
+                              fontSize: 22,
+                            ),
+                          ),
+                          LinearProgressIndicator(
+                            value: goal.progress / 100,
+                            color: AbundanceColors.categoryColor(
+                              goal.category.code,
+                            ),
+                            backgroundColor: Colors.black54,
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            '${goal.progress}% complete · Tap to log progress',
+                            style: AbundanceTypography.body.copyWith(
+                              color: AbundanceColors.muted,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
               ],
@@ -1050,8 +1646,10 @@ class _A12GoalsPanel extends StatelessWidget {
 }
 
 class _A12AchievementShelf extends StatelessWidget {
-  const _A12AchievementShelf(
-      {required this.achievements, required this.onOpenAwards});
+  const _A12AchievementShelf({
+    required this.achievements,
+    required this.onOpenAwards,
+  });
   final List<_Achievement> achievements;
   final VoidCallback onOpenAwards;
 
@@ -1074,21 +1672,27 @@ class _A12AchievementShelf extends StatelessWidget {
                 child: Column(
                   children: [
                     SizedBox(
-                        width: 62,
-                        height: 62,
-                        child: item.unlocked &&
-                                abundanceAchievementAssets[item.assetKey] !=
-                                    null
-                            ? Image.asset(
-                                abundanceAchievementAssets[item.assetKey]!,
-                                fit: BoxFit.contain)
-                            : Icon(Icons.diamond_outlined,
-                                size: 42, color: AbundanceColors.muted)),
+                      width: 62,
+                      height: 62,
+                      child: item.unlocked &&
+                              abundanceAchievementAssets[item.assetKey] != null
+                          ? Image.asset(
+                              abundanceAchievementAssets[item.assetKey]!,
+                              fit: BoxFit.contain,
+                            )
+                          : Icon(
+                              Icons.diamond_outlined,
+                              size: 42,
+                              color: AbundanceColors.muted,
+                            ),
+                    ),
                     const SizedBox(height: 6),
-                    Text(item.title,
-                        maxLines: 2,
-                        textAlign: TextAlign.center,
-                        style: AbundanceTypography.eyebrow),
+                    Text(
+                      item.title,
+                      maxLines: 2,
+                      textAlign: TextAlign.center,
+                      style: AbundanceTypography.eyebrow.copyWith(fontSize: 8),
+                    ),
                   ],
                 ),
               );
@@ -1105,35 +1709,53 @@ class _A12HomeQuote extends StatelessWidget {
         title: 'THE GAME OF MY LIFE',
         child: Text(
           'THE KINGDOM OF YOUR LIFE IS NOT GIVEN TO YOU. IT IS BUILT BY YOUR DAILY CHOICES.',
-          style: AbundanceTypography.body
-              .copyWith(color: AbundanceColors.primaryGold, height: 1.5),
+          style: AbundanceTypography.body.copyWith(
+            color: AbundanceColors.primaryGold,
+            fontSize: 11,
+            height: 1.64,
+            fontStyle: FontStyle.italic,
+          ),
         ),
       );
 }
 
 class _A12Panel extends StatelessWidget {
-  const _A12Panel(
-      {required this.title, required this.child, this.action, this.onAction});
+  const _A12Panel({
+    required this.title,
+    required this.child,
+    this.action,
+    this.onAction,
+    this.headerTrailing,
+  });
   final String title;
   final String? action;
   final VoidCallback? onAction;
+  final Widget? headerTrailing;
   final Widget child;
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-            color: AbundanceColors.surfaceRaised,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AbundanceColors.border)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Expanded(child: Text(title, style: AbundanceTypography.eyebrow)),
-            if (action != null)
-              TextButton(onPressed: onAction, child: Text(action!))
-          ]),
-          const SizedBox(height: 6),
-          child,
-        ]),
+          color: AbundanceColors.surfaceRaised,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AbundanceColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                    child: Text(title, style: AbundanceTypography.eyebrow)),
+                if (headerTrailing != null) headerTrailing!,
+                if (headerTrailing == null && action != null)
+                  TextButton(onPressed: onAction, child: Text(action!)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            child,
+          ],
+        ),
       );
 }
 
@@ -1236,10 +1858,7 @@ class _CategoryStat {
 }
 
 class _MomentumPoint {
-  const _MomentumPoint({
-    required this.label,
-    required this.value,
-  });
+  const _MomentumPoint({required this.label, required this.value});
 
   final String label;
   final double value;
@@ -1358,10 +1977,7 @@ class _HeroCard extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            theme.primaryColor,
-            theme.accentColor,
-          ],
+          colors: [theme.primaryColor, theme.accentColor],
         ),
         borderRadius: BorderRadius.circular(28),
       ),
@@ -1447,10 +2063,7 @@ class _HeroCard extends StatelessWidget {
                 const SizedBox(width: 16),
                 Column(
                   children: [
-                    _ScoreRing(
-                      score: goalTotalScore,
-                      accent: scoreColor,
-                    ),
+                    _ScoreRing(score: goalTotalScore, accent: scoreColor),
                     const SizedBox(height: 10),
                     Text(
                       rankLabel,
@@ -1460,10 +2073,7 @@ class _HeroCard extends StatelessWidget {
                           ),
                     ),
                     const SizedBox(height: 8),
-                    _AvatarFrame(
-                      profilePic: profilePic,
-                      fallback: displayName,
-                    ),
+                    _AvatarFrame(profilePic: profilePic, fallback: displayName),
                   ],
                 ),
               ],
@@ -1476,10 +2086,7 @@ class _HeroCard extends StatelessWidget {
 }
 
 class _MiniMetric extends StatelessWidget {
-  const _MiniMetric({
-    required this.label,
-    required this.value,
-  });
+  const _MiniMetric({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -1518,10 +2125,7 @@ class _MiniMetric extends StatelessWidget {
 }
 
 class _ScoreRing extends StatelessWidget {
-  const _ScoreRing({
-    required this.score,
-    required this.accent,
-  });
+  const _ScoreRing({required this.score, required this.accent});
 
   final double score;
   final Color accent;
@@ -1593,10 +2197,7 @@ class _ScoreRing extends StatelessWidget {
 }
 
 class _AvatarFrame extends StatelessWidget {
-  const _AvatarFrame({
-    required this.profilePic,
-    required this.fallback,
-  });
+  const _AvatarFrame({required this.profilePic, required this.fallback});
 
   final String profilePic;
   final String fallback;
@@ -1702,10 +2303,7 @@ class _ActionSpec {
 }
 
 class _ActionCard extends StatelessWidget {
-  const _ActionCard({
-    required this.theme,
-    required this.action,
-  });
+  const _ActionCard({required this.theme, required this.action});
 
   final CompanyThemeData theme;
   final _ActionSpec action;
@@ -1791,10 +2389,7 @@ class _SectionHeader extends StatelessWidget {
                 ),
           ),
         ),
-        TextButton(
-          onPressed: onAction,
-          child: Text(actionLabel),
-        ),
+        TextButton(onPressed: onAction, child: Text(actionLabel)),
       ],
     );
   }
@@ -2032,9 +2627,9 @@ class _DeadlineTile extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     '${category.label} · ${DateFormat.MMMd().format(goal.targetDate)}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: theme.mutedInkColor,
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: theme.mutedInkColor),
                   ),
                 ],
               ),
@@ -2206,9 +2801,9 @@ class _CoachAndCheckInsCard extends StatelessWidget {
           if (recentCheckIns.isEmpty)
             Text(
               'No recent check-ins yet.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: theme.mutedInkColor,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: theme.mutedInkColor),
             )
           else
             Column(
@@ -2227,10 +2822,7 @@ class _CoachAndCheckInsCard extends StatelessWidget {
 }
 
 class _CheckInTile extends StatelessWidget {
-  const _CheckInTile({
-    required this.theme,
-    required this.entry,
-  });
+  const _CheckInTile({required this.theme, required this.entry});
 
   final CompanyThemeData theme;
   final _EmotionLog entry;
@@ -2266,9 +2858,9 @@ class _CheckInTile extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   entry.dayKey,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: theme.mutedInkColor,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: theme.mutedInkColor),
                 ),
               ],
             ),
@@ -2280,10 +2872,7 @@ class _CheckInTile extends StatelessWidget {
 }
 
 class _AnalyticsCard extends StatelessWidget {
-  const _AnalyticsCard({
-    required this.theme,
-    required this.points,
-  });
+  const _AnalyticsCard({required this.theme, required this.points});
 
   final CompanyThemeData theme;
   final List<_MomentumPoint> points;
@@ -2293,7 +2882,9 @@ class _AnalyticsCard extends StatelessWidget {
     final maxY = math.max(
       100.0,
       points.fold<double>(
-          0, (total, point) => math.max(total, point.value + 10)),
+        0,
+        (total, point) => math.max(total, point.value + 10),
+      ),
     );
 
     return Container(
@@ -2316,9 +2907,9 @@ class _AnalyticsCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             'A gentle blend of daily task completion and check-ins.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: theme.mutedInkColor,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: theme.mutedInkColor),
           ),
           const SizedBox(height: 12),
           SizedBox(
@@ -2352,10 +2943,10 @@ class _AnalyticsCard extends StatelessWidget {
                         if (value % 25 != 0) return const SizedBox.shrink();
                         return Text(
                           value.toInt().toString(),
-                          style:
-                              Theme.of(context).textTheme.labelSmall?.copyWith(
-                                    color: theme.mutedInkColor,
-                                  ),
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelSmall
+                              ?.copyWith(color: theme.mutedInkColor),
                         );
                       },
                     ),
@@ -2435,10 +3026,7 @@ class _AnalyticsCard extends StatelessWidget {
 }
 
 class _AchievementCard extends StatelessWidget {
-  const _AchievementCard({
-    required this.theme,
-    required this.achievement,
-  });
+  const _AchievementCard({required this.theme, required this.achievement});
 
   final CompanyThemeData theme;
   final _Achievement achievement;
@@ -2489,10 +3077,7 @@ class _AchievementCard extends StatelessWidget {
           const Spacer(),
           Chip(
             label: Text(achievement.unlocked ? 'Unlocked' : 'Locked'),
-            labelStyle: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w700,
-            ),
+            labelStyle: TextStyle(color: color, fontWeight: FontWeight.w700),
             visualDensity: VisualDensity.compact,
             backgroundColor: color.withValues(alpha: 0.08),
             side: BorderSide(color: color.withValues(alpha: 0.12)),

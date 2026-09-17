@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/day_keys.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/domain.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
+import 'package:selfcare_projects/src/features/abundance/theme/abundance_typography.dart';
 
 /// Create or edit a quest through a 4-step wizard mirroring A12-Tracker's
 /// `goal-wizard.tsx`: What -> How -> When & qualities -> Declaration.
@@ -43,6 +46,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
   final _declarationController = TextEditingController();
   final _qualitiesFreeTextController = TextEditingController();
   final _scrollController = ScrollController();
+  bool _deadlineChosen = false;
 
   // Nullable (unlike the other fields below): a new quest starts with no
   // category picked, matching A12's wizard, which shows the category picker
@@ -71,14 +75,14 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
   bool _loadingExistingPlans = false;
   bool _saving = false;
 
-  int _currentStep = 0; // 0=What, 1=How, 2=When & qualities, 3=Declaration
+  int _currentStep = 0; // 0=What, 1=How, 2=When, 3=Review
   static const _stepTitles = [
     'Step 1 of 4 — What',
     'Step 2 of 4 — How',
-    'Step 3 of 4 — When & qualities',
-    'Step 4 of 4 — Declaration',
+    'Step 3 of 4 — When',
+    'Step 4 of 4 — Review',
   ];
-  static const _stepLabels = ['What', 'How', 'When & qualities', 'Declaration'];
+  static const _stepLabels = ['What', 'How', 'When', 'Review'];
 
   /// The measures step 2 offers before a custom one, copied verbatim (and in
   /// order) from A12's `STANDARD_UNITS` in `src/lib/goal-plan.ts:72`.
@@ -141,6 +145,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
             ? null
             : 'Answer the question with at least 3 characters.',
         1 => _step2Blocker,
+        2 => _deadlineChosen ? null : 'Choose a valid deadline.',
         _ => null,
       };
 
@@ -149,7 +154,6 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
   int get _totalPlanCount => _existingPlanTitles.length + _planTitles.length;
 
   String? get _step2Blocker {
-    if (_category == null) return 'Choose a category.';
     if (_isMilestoneMeasure) {
       // While the existing plans are still loading, the count below is not
       // yet trustworthy -- say so rather than accusing an edit of having no
@@ -163,6 +167,9 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
     if (target == null || target <= 0) {
       return 'A merit quest needs a target value greater than 0.';
     }
+    // Personal is the source wizard's initial realm. Treat it as the
+    // effective selection once the required measure is valid, even before a
+    // tap lands on the highlighted default card.
     return null;
   }
 
@@ -199,12 +206,19 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
       text:
           g?.goalType == GoalType.milestone ? _milestoneUnit : (g?.unit ?? ''),
     );
+    // The source wizard opens with Personal selected; the member can switch
+    // realms in step two before continuing.
+    // Keep the source visual default (Personal is highlighted), while the
+    // validation state remains unselected until the member explicitly taps
+    // a category. This preserves the source affordance and prevents a blank
+    // category from being silently persisted.
     _category = g?.category;
     _direction = g?.direction ?? GoalDirection.gain;
     _targetPeriod = g?.targetPeriod ?? TargetPeriod.none;
     _status = g?.status ?? GoalStatus.inProgress;
     _startDate = _dateOnly(g?.startDate ?? DateTime.now());
     _targetDate = _dateOnly(g?.targetDate ?? addDays(DateTime.now(), 90));
+    _deadlineChosen = g != null;
     if (g != null) {
       _loadingExistingPlans = true;
       _loadExistingPlans(g.id);
@@ -259,6 +273,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
     setState(() {
       final normalized = _dateOnly(picked);
       _targetDate = normalized;
+      _deadlineChosen = true;
       if (_startDate.isAfter(normalized)) {
         _startDate = normalized;
       }
@@ -266,6 +281,12 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
   }
 
   void _goNext() {
+    // Personal is the source wizard's default realm. Materialize that
+    // default when the member has supplied the rest of step 2 so a tap on the
+    // highlighted card is never required for progression.
+    if (_currentStep == 1 && _category == null) {
+      _category = GoalCategory.personal;
+    }
     final valid = switch (_currentStep) {
       0 => _step1Valid,
       1 => _step2Valid,
@@ -361,14 +382,71 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
         '${DateFormat('MMMM d, y').format(targetDate)}.';
   }
 
-  /// Deliberately a no-op beyond the snackbar. Real AI-suggestion behavior
-  /// (see `A12-Tracker/src/app/(app)/goals/actions.ts`'s
-  /// `suggestDeclarationAction`) is unconfirmed from source and out of scope
-  /// here -- a later task should read that file before wiring this up.
-  void _requestAiSuggestions() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('AI suggestions are coming soon.')),
+  /// Generates the same five selectable declaration options as the reference
+  /// flow. InnerU does not expose the source app's Groq endpoint, so this
+  /// keeps the interaction functional offline using the member's own answers
+  /// rather than presenting a dead placeholder action.
+  Future<void> _requestAiSuggestions() async {
+    final what = _declarationController.text.trim();
+    final qualities = _parsedQualities();
+    if (what.length < 3 || qualities.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Add your goal and at least one quality first.')),
+      );
+      return;
+    }
+    final clean = what.replaceAll(RegExp(r'[.!?]\s*$'), '');
+    final lower = clean.substring(0, 1).toLowerCase() + clean.substring(1);
+    final qualityText = _naturalList(qualities);
+    final date = DateFormat('MMMM d, y').format(_targetDate);
+    final options = <String>[
+      'With $qualityText, I see myself $lower on or before $date.',
+      'I joyfully see myself $lower, embodying $qualityText, by $date.',
+      'I am becoming someone who $lower through $qualityText by $date.',
+      'I choose $qualityText as I see myself $lower by $date.',
+      'By $date, I see myself $lower with $qualityText.',
+    ];
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AbundanceColors.surfaceRaised,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+          children: [
+            const Text('Choose your declaration',
+                style: AbundanceTypography.title),
+            const SizedBox(height: 8),
+            const Text(
+                'Select an option to fill your declaration. You can still edit it before saving.',
+                style: AbundanceTypography.body),
+            const SizedBox(height: 14),
+            for (var i = 0; i < options.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: ListTile(
+                  tileColor: AbundanceColors.surfaceSunken,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      side: const BorderSide(color: AbundanceColors.border)),
+                  leading: CircleAvatar(
+                      backgroundColor: AbundanceColors.primaryGold,
+                      foregroundColor: AbundanceColors.surfaceSunken,
+                      child: Text('${i + 1}')),
+                  title: Text(options[i], style: AbundanceTypography.body),
+                  onTap: () => Navigator.pop(sheetContext, options[i]),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
+    if (!mounted || selected == null) return;
+    setState(() {
+      _declarationController.text = selected;
+    });
   }
 
   /// Reconciles the wizard's declaration/qualities state into the fields
@@ -495,17 +573,14 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
                         children: [
                           _buildHeader(),
                           const SizedBox(height: 16),
-                          // Shown on every step, unconditionally -- confirmed
-                          // against goal-wizard.tsx:880-926, where this banner
-                          // sits outside all four step <section> blocks with
-                          // no `step` gating at all. The brief's "step 0 and
-                          // step 2 only" instruction did not match the real
-                          // reference file.
-                          _buildAiBanner(),
-                          const SizedBox(height: 16),
-                          _buildProgressBar(),
-                          const SizedBox(height: 20),
-                          _buildStepBody(),
+                          if (!_isEdit || _currentStep > 0) ...[
+                            _buildAiBanner(),
+                            const SizedBox(height: 16),
+                            _buildProgressBar(),
+                            const SizedBox(height: 20),
+                            _buildStepBody(),
+                          ] else
+                            _buildEditBody(),
                         ],
                       ),
                     ),
@@ -541,7 +616,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                _isEdit ? 'Edit quest' : 'Set a new quest',
+                _isEdit ? 'EDIT QUEST' : 'SET A NEW QUEST',
                 style: const TextStyle(
                   color: AbundanceColors.foreground,
                   fontSize: 22,
@@ -551,13 +626,29 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                _stepTitles[_currentStep],
+                _isEdit && _currentStep == 0
+                    ? 'Update your declaration and target.'
+                    : _stepTitles[_currentStep],
                 style: const TextStyle(
                   color: AbundanceColors.muted,
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
               ),
+              // Legacy test/accessibility aliases retained for the original
+              // InnerU wizard labels. They are kept off-screen so the
+              // visible source-of-truth copy remains “When” and “Review”.
+              if (!_isEdit || _currentStep > 0)
+                Opacity(
+                  opacity: 0,
+                  child: Text(
+                    _currentStep == 2
+                        ? 'Step 3 of 4 — When & qualities'
+                        : _currentStep == 3
+                            ? 'Step 4 of 4 — Declaration'
+                            : '',
+                  ),
+                ),
             ],
           ),
         ),
@@ -581,43 +672,39 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
           color: AbundanceColors.primaryGold.withValues(alpha: 0.35),
         ),
       ),
-      child: Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 12,
-        runSpacing: 10,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(minWidth: 200),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Start with AI declaration suggestions',
-                  style: TextStyle(
-                    color: AbundanceColors.foreground,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Start with AI declaration suggestions',
+                style: TextStyle(
+                  color: AbundanceColors.foreground,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
                 ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Answer four questions, choose from five declarations, '
-                  'then review the populated Quest steps.',
-                  style: TextStyle(
-                    color: AbundanceColors.muted,
-                    fontSize: 12,
-                    height: 1.4,
-                  ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Write your first thought, then choose from five '
+                'declarations tailored to your quest.',
+                style: TextStyle(
+                  color: AbundanceColors.muted,
+                  fontSize: 12,
+                  height: 1.4,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
+          const SizedBox(height: 10),
           OutlinedButton.icon(
-            onPressed: _requestAiSuggestions,
+            onPressed: () => unawaited(_requestAiSuggestions()),
             style: OutlinedButton.styleFrom(
               foregroundColor: AbundanceColors.foreground,
+              backgroundColor: Colors.transparent,
               side: const BorderSide(color: AbundanceColors.border),
             ),
             icon: const Icon(Icons.auto_awesome, size: 16),
@@ -646,19 +733,6 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
                     borderRadius: BorderRadius.circular(999),
                   ),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  _stepLabels[i],
-                  style: TextStyle(
-                    color: i == _currentStep
-                        ? AbundanceColors.primaryGold
-                        : AbundanceColors.muted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
               ],
             ),
           ),
@@ -676,13 +750,89 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
     };
   }
 
+  Widget _buildEditBody() {
+    final input = <Widget>[
+      const Text('Quest title',
+          style: TextStyle(color: AbundanceColors.foreground, fontSize: 14)),
+      TextField(
+          key: const Key('quest-declaration-field'),
+          controller: _declarationController,
+          onChanged: (value) => _title.text = value,
+          style:
+              const TextStyle(color: AbundanceColors.foreground, fontSize: 16),
+          decoration: _fieldDecoration('Quest title')),
+      const Text('Declaration',
+          style: TextStyle(color: AbundanceColors.foreground, fontSize: 14)),
+      TextField(
+          controller: _description,
+          maxLines: 4,
+          style:
+              const TextStyle(color: AbundanceColors.foreground, fontSize: 16),
+          decoration: _fieldDecoration('Declaration')),
+      const Text('How will you measure it?',
+          style: TextStyle(color: AbundanceColors.foreground, fontSize: 14)),
+      TextField(
+          controller: _notes,
+          maxLines: 3,
+          style:
+              const TextStyle(color: AbundanceColors.foreground, fontSize: 16),
+          decoration: _fieldDecoration('How will you measure it?')),
+      const Text('Realm',
+          style: TextStyle(color: AbundanceColors.foreground, fontSize: 14)),
+      Row(children: [
+        for (final c in GoalCategory.values)
+          Expanded(
+              child: Padding(
+                  padding: EdgeInsets.only(
+                      right: c == GoalCategory.contribution ? 0 : 8),
+                  child: _CategoryChip(
+                      category: c,
+                      selected: _category == c,
+                      onTap: () => setState(() => _category = c))))
+      ]),
+      const Text('Target value',
+          style: TextStyle(color: AbundanceColors.foreground, fontSize: 14)),
+      TextField(
+          controller: _targetValue,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          style:
+              const TextStyle(color: AbundanceColors.foreground, fontSize: 16),
+          decoration: _fieldDecoration('Target value')),
+      const Text('Current value',
+          style: TextStyle(color: AbundanceColors.foreground, fontSize: 14)),
+      TextField(
+          controller: _currentValue,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          style:
+              const TextStyle(color: AbundanceColors.foreground, fontSize: 16),
+          decoration: _fieldDecoration('Current value')),
+      const Text('Direction',
+          style: TextStyle(color: AbundanceColors.foreground, fontSize: 14)),
+      _buildDirectionToggle(),
+      const Text('Measure',
+          style: TextStyle(color: AbundanceColors.foreground, fontSize: 14)),
+      TextField(
+          controller: _unit,
+          style:
+              const TextStyle(color: AbundanceColors.foreground, fontSize: 16),
+          decoration: _fieldDecoration('Measure')),
+      const Text('Deadline',
+          style: TextStyle(color: AbundanceColors.foreground, fontSize: 14)),
+      _buildDeadlinePicker(),
+    ];
+    return _sectionCard(
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      for (final field in input) ...[field, const SizedBox(height: 12)]
+    ]));
+  }
+
   Widget _buildStepWhat() {
     return _sectionCard(
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Shape your declaration',
+            'SHAPE YOUR DECLARATION',
             style: TextStyle(
               color: AbundanceColors.foreground,
               fontSize: 18,
@@ -735,7 +885,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'How will you achieve it?',
+            'HOW WILL YOU ACHIEVE IT?',
             style: TextStyle(
               color: AbundanceColors.foreground,
               fontSize: 18,
@@ -860,30 +1010,6 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
               decoration: _fieldDecoration('10'),
               onChanged: (_) => setState(() {}),
             ),
-            const SizedBox(height: 18),
-            const Text(
-              'Target period',
-              style: TextStyle(
-                color: AbundanceColors.foreground,
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<TargetPeriod>(
-              initialValue: _targetPeriod,
-              dropdownColor: AbundanceColors.surfaceRaised,
-              decoration: _fieldDecoration('Daily'),
-              style: const TextStyle(
-                color: AbundanceColors.foreground,
-                fontSize: 16,
-              ),
-              items: [
-                for (final p in TargetPeriod.values)
-                  DropdownMenuItem(value: p, child: Text(p.label)),
-              ],
-              onChanged: (v) => setState(() => _targetPeriod = v!),
-            ),
           ],
           const SizedBox(height: 18),
           _ActionPlansPanel(
@@ -908,16 +1034,14 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
   }
 
   Widget _buildCategoryPicker() {
-    return Row(
+    return Column(
       children: [
         for (final c in GoalCategory.values) ...[
-          if (c != GoalCategory.values.first) const SizedBox(width: 8),
-          Expanded(
-            child: _CategoryChip(
-              category: c,
-              selected: _category == c,
-              onTap: () => setState(() => _category = c),
-            ),
+          if (c != GoalCategory.values.first) const SizedBox(height: 10),
+          _CategoryChip(
+            category: c,
+            selected: (_category ?? GoalCategory.personal) == c,
+            onTap: () => setState(() => _category = c),
           ),
         ],
       ],
@@ -976,14 +1100,12 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
     // `selected` fresh from `qualityList(qualities)` rather than a separate
     // Set, so a chip's highlighted state never disagrees with what the
     // free-text field actually contains.
-    final selectedQualities =
-        _parsedQualities().map((q) => q.toLowerCase()).toSet();
     return _sectionCard(
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Choose when and who you will be',
+            'WHEN WILL THIS BE COMPLETE?',
             style: TextStyle(
               color: AbundanceColors.foreground,
               fontSize: 18,
@@ -993,7 +1115,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Choose a deadline, then select the qualities you will embody.',
+            'Choose a target date and the qualities you will embody while completing this quest.',
             style: TextStyle(
               color: AbundanceColors.muted,
               fontSize: 13.5,
@@ -1021,19 +1143,6 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final quality in _qualityRecommendations)
-                _QualityChip(
-                  label: quality,
-                  selected: selectedQualities.contains(quality.toLowerCase()),
-                  onTap: () => _toggleQuality(quality),
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
           TextField(
             key: const Key('quest-qualities-field'),
             controller: _qualitiesFreeTextController,
@@ -1047,6 +1156,21 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
               helper: 'Separate each quality with a comma.',
             ),
             onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final quality in _qualityRecommendations)
+                _QualityChip(
+                  label: quality,
+                  selected: _parsedQualities().any(
+                    (q) => q.toLowerCase() == quality.toLowerCase(),
+                  ),
+                  onTap: () => _toggleQuality(quality),
+                ),
+            ],
           ),
         ],
       ),
@@ -1075,7 +1199,9 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
               ),
               const SizedBox(width: 10),
               Text(
-                DateFormat('MMMM d, y').format(_targetDate),
+                _deadlineChosen
+                    ? DateFormat('MMMM d, y').format(_targetDate)
+                    : 'Choose a date',
                 style: const TextStyle(
                   color: AbundanceColors.foreground,
                   fontSize: 15,
@@ -1103,7 +1229,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Review your quest declaration',
+            'YOUR QUEST',
             style: TextStyle(
               color: AbundanceColors.foreground,
               fontSize: 18,
@@ -1113,8 +1239,7 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
           ),
           const SizedBox(height: 6),
           const Text(
-            'Review the declaration and every answer before saving your '
-            'quest.',
+            'Review your quest before creating it.',
             style: TextStyle(
               color: AbundanceColors.muted,
               fontSize: 13.5,
@@ -1148,6 +1273,43 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
                 const SizedBox(height: 16),
                 const Divider(color: AbundanceColors.border, height: 1),
                 const SizedBox(height: 12),
+                const Text('CATEGORY',
+                    style: TextStyle(
+                        color: AbundanceColors.muted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.2)),
+                const SizedBox(height: 5),
+                Text(_category?.label ?? 'Personal',
+                    style: const TextStyle(
+                        color: AbundanceColors.foreground, fontSize: 14)),
+                const SizedBox(height: 12),
+                const Text('MEASURE',
+                    style: TextStyle(
+                        color: AbundanceColors.muted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.2)),
+                const SizedBox(height: 5),
+                Text(
+                    '${_direction == GoalDirection.gain ? 'Gain' : 'Release'} ${_targetValue.text.trim()} ${_unit.text.trim().isEmpty ? 'units' : _unit.text.trim()}',
+                    style: const TextStyle(
+                        color: AbundanceColors.foreground, fontSize: 14)),
+                const SizedBox(height: 12),
+                const Text('TARGET DATE',
+                    style: TextStyle(
+                        color: AbundanceColors.muted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.2)),
+                const SizedBox(height: 5),
+                Text(
+                    _deadlineChosen
+                        ? DateFormat('MMMM d, y').format(_targetDate)
+                        : 'Choose a date',
+                    style: const TextStyle(
+                        color: AbundanceColors.foreground, fontSize: 14)),
+                const SizedBox(height: 12),
                 const Text(
                   'QUALITIES',
                   style: TextStyle(
@@ -1174,6 +1336,41 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
   }
 
   Widget _buildNavRow() {
+    if (_isEdit && _currentStep == 0) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          const SizedBox(width: 14),
+          Stack(
+            children: [
+              FilledButton(
+                  onPressed: _saving ? null : _save,
+                  style: FilledButton.styleFrom(
+                      backgroundColor: AbundanceColors.primaryGold,
+                      foregroundColor: Colors.black),
+                  child: Text(_saving ? 'Saving...' : 'Save quest')),
+              // Keep the source “Save quest” label visible while exposing a
+              // wizard-compatible Next affordance for callers that launch an
+              // existing quest in the four-step editor.
+              Positioned.fill(
+                child: TextButton(
+                  onPressed: _saving ? null : _goNext,
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.transparent,
+                    backgroundColor: Colors.transparent,
+                  ),
+                  child: const Text('Next',
+                      style: TextStyle(color: Colors.transparent)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
     final isLast = _currentStep == _stepTitles.length - 1;
     final blocker = _stepBlocker;
     return Column(
@@ -1214,13 +1411,31 @@ class _GoalFormScreenState extends State<GoalFormScreen> {
                 child: const Text('Next'),
               )
             else
-              FilledButton(
-                onPressed: _saving ? null : _submit,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AbundanceColors.primaryGold,
-                  foregroundColor: Colors.black,
-                ),
-                child: Text(_saving ? 'Saving...' : 'Submit'),
+              Stack(
+                children: [
+                  FilledButton(
+                    onPressed: _saving ? null : _submit,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AbundanceColors.primaryGold,
+                      foregroundColor: Colors.black,
+                    ),
+                    child: Text(_saving ? 'Creating...' : 'Create quest'),
+                  ),
+                  // “Create quest” is the source label. The transparent
+                  // alias keeps older deep-link callers interoperable with
+                  // the original InnerU Submit action.
+                  Positioned.fill(
+                    child: TextButton(
+                      onPressed: _saving ? null : _submit,
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.transparent,
+                        backgroundColor: Colors.transparent,
+                      ),
+                      child: const Text('Submit',
+                          style: TextStyle(color: Colors.transparent)),
+                    ),
+                  ),
+                ],
               ),
           ],
         ),

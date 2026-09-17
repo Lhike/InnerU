@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/abundance_company.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/domain.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/scoring.dart';
@@ -8,6 +9,7 @@ import 'package:selfcare_projects/src/features/abundance/services/goals_service.
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_backdrop.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
+import 'package:selfcare_projects/src/features/abundance/theme/abundance_typography.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
 import 'package:selfcare_projects/src/services/company_membership_service.dart';
 
@@ -68,12 +70,21 @@ class _GoalsHubScreenState extends State<GoalsHubScreen> {
   }
 
   void _openForm({GoalSummary? existing}) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => GoalFormScreen(
-          service: _service,
-          uid: _uid,
-          existing: existing,
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: .78),
+      builder: (_) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        clipBehavior: Clip.antiAlias,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760, maxHeight: 900),
+          child: GoalFormScreen(
+            service: _service,
+            uid: _uid,
+            existing: existing,
+          ),
         ),
       ),
     );
@@ -125,11 +136,11 @@ class _GoalsHubScreenState extends State<GoalsHubScreen> {
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 560),
                   child: Container(
-                    margin: const EdgeInsets.all(24),
-                    padding: const EdgeInsets.all(28),
+                    margin: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
                       color: _panel,
-                      borderRadius: BorderRadius.circular(28),
+                      borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: _border),
                     ),
                     child: Column(
@@ -190,14 +201,6 @@ class _GoalsHubScreenState extends State<GoalsHubScreen> {
                 .toList();
             final categories = scoreCategories(_toScorableGoals(activeGoals));
             final overallScore = weightGoalScore(categories).round();
-            final completedCount = activeGoals
-                .where((goal) => goal.status == GoalStatus.completed)
-                .length;
-            final inProgressCount = activeGoals
-                .where((goal) => openGoalStatuses.contains(goal.status))
-                .length;
-            final overdueCount =
-                activeGoals.where((goal) => goal.isOverdue).length;
             final categoryCounts = {
               for (final category in GoalCategory.values)
                 category: activeGoals
@@ -229,16 +232,11 @@ class _GoalsHubScreenState extends State<GoalsHubScreen> {
                             _GoalsHeader(
                               onNewGoal: _openForm,
                             ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 14),
                             _GoalsSummaryGrid(
                               goalScore: overallScore,
-                              totalGoals: activeGoals.length,
-                              completedGoals: completedCount,
-                              inProgressGoals: inProgressCount,
-                              overdueGoals: overdueCount,
-                              categoryScores: categories,
                             ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 14),
                             _CategoryChipsRow(
                               selectedCategory: _selectedCategory,
                               counts: categoryCounts,
@@ -246,7 +244,7 @@ class _GoalsHubScreenState extends State<GoalsHubScreen> {
                                 setState(() => _selectedCategory = category);
                               },
                             ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 14),
                             if (visibleGoals.isEmpty)
                               _EmptyGoalsState(
                                 hasFilter: _selectedCategory != null,
@@ -309,23 +307,19 @@ class _GoalsHeader extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final stacked = constraints.maxWidth < 720;
-        final title = const Column(
+        final title = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Quests',
-              style: TextStyle(
+              'QUESTS (GOAL)',
+              style: AbundanceTypography.display.copyWith(
                 color: _text,
-                fontSize: 28,
-                height: 1.05,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.3,
-                fontFamily: 'Georgia',
+                fontSize: 23,
               ),
             ),
             SizedBox(height: 10),
             Text(
-              'Personal, professional and contribution - combined into your Life Power.',
+              'Personal, professional and contribution — combined into your Life Power.',
               style: TextStyle(
                 color: _muted,
                 fontSize: 15.5,
@@ -339,19 +333,19 @@ class _GoalsHeader extends StatelessWidget {
           onPressed: onNewGoal,
           icon: const Icon(Icons.add, size: 20),
           label: const Padding(
-            padding: EdgeInsets.symmetric(vertical: 6),
+            padding: EdgeInsets.symmetric(vertical: 1),
             child: Text(
-              'New quest',
-              style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),
+              'New Quest',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
             ),
           ),
           style: FilledButton.styleFrom(
             backgroundColor: _accentGold,
             foregroundColor: Colors.black,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(10),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
           ),
         );
 
@@ -366,13 +360,9 @@ class _GoalsHeader extends StatelessWidget {
           );
         }
 
-        return Row(
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: title),
-            const SizedBox(width: 24),
-            button,
-          ],
+          children: [title, const SizedBox(height: 10), button],
         );
       },
     );
@@ -382,133 +372,13 @@ class _GoalsHeader extends StatelessWidget {
 class _GoalsSummaryGrid extends StatelessWidget {
   const _GoalsSummaryGrid({
     required this.goalScore,
-    required this.totalGoals,
-    required this.completedGoals,
-    required this.inProgressGoals,
-    required this.overdueGoals,
-    required this.categoryScores,
   });
 
   final int goalScore;
-  final int totalGoals;
-  final int completedGoals;
-  final int inProgressGoals;
-  final int overdueGoals;
-  final Map<GoalCategory, double> categoryScores;
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWide = constraints.maxWidth >= 1120;
-        if (isWide) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 360,
-                child: _ScorePanel(score: goalScore),
-              ),
-              const SizedBox(width: 18),
-              Expanded(
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _MetricCard(
-                            label: 'TOTAL QUESTS',
-                            value: '$totalGoals',
-                            icon: Icons.adjust_rounded,
-                          ),
-                        ),
-                        const SizedBox(width: 18),
-                        Expanded(
-                          child: _MetricCard(
-                            label: 'COMPLETED',
-                            value: '$completedGoals',
-                            icon: Icons.flag_outlined,
-                            valueColor: AbundanceColors.scoreExcellent,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _MetricCard(
-                            label: 'IN PROGRESS',
-                            value: '$inProgressGoals',
-                            icon: Icons.calendar_month_outlined,
-                          ),
-                        ),
-                        const SizedBox(width: 18),
-                        Expanded(
-                          child: _MetricCard(
-                            label: 'OVERDUE',
-                            value: '$overdueGoals',
-                            icon: Icons.warning_amber_rounded,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        }
-
-        final tileWidth = (constraints.maxWidth - 12) / 2;
-
-        return Column(
-          children: [
-            _ScorePanel(score: goalScore),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                SizedBox(
-                  width: tileWidth,
-                  child: _MetricCard(
-                    label: 'TOTAL QUESTS',
-                    value: '$totalGoals',
-                    icon: Icons.adjust_rounded,
-                  ),
-                ),
-                SizedBox(
-                  width: tileWidth,
-                  child: _MetricCard(
-                    label: 'COMPLETED',
-                    value: '$completedGoals',
-                    icon: Icons.flag_outlined,
-                    valueColor: AbundanceColors.scoreExcellent,
-                  ),
-                ),
-                SizedBox(
-                  width: tileWidth,
-                  child: _MetricCard(
-                    label: 'IN PROGRESS',
-                    value: '$inProgressGoals',
-                    icon: Icons.calendar_month_outlined,
-                  ),
-                ),
-                SizedBox(
-                  width: tileWidth,
-                  child: _MetricCard(
-                    label: 'OVERDUE',
-                    value: '$overdueGoals',
-                    icon: Icons.warning_amber_rounded,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        );
-      },
-    );
+    return _ScorePanel(score: goalScore);
   }
 }
 
@@ -519,41 +389,28 @@ class _ScorePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final compact = MediaQuery.sizeOf(context).width < 420;
-    final ringSize = compact ? 176.0 : 220.0;
-    final outerPadding = compact ? 18.0 : 24.0;
     return Container(
-      padding: EdgeInsets.all(outerPadding),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: _panel,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _border),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x44000000),
-            blurRadius: 16,
-            offset: Offset(0, 8),
-          ),
-        ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           SizedBox(
-            width: ringSize,
-            height: ringSize,
+            width: 104,
+            height: 104,
             child: Stack(
               alignment: Alignment.center,
               children: [
                 SizedBox(
-                  width: ringSize,
-                  height: ringSize,
-                  // A12 treats this ring as the headline "Life Power" arc — a
-                  // gold accent rather than the score-critical palette, since
-                  // a low aggregate score is expected, not an error state.
+                  width: 104,
+                  height: 104,
                   child: CircularProgressIndicator(
                     value: score / 100,
-                    strokeWidth: compact ? 10 : 12,
+                    strokeWidth: 8,
                     backgroundColor: _trackBg,
                     valueColor: const AlwaysStoppedAnimation<Color>(
                       _accentGold,
@@ -564,10 +421,11 @@ class _ScorePanel extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      '$score',
+                      '$score%',
                       style: const TextStyle(
                         color: _accentGold,
-                        fontSize: 44,
+                        fontFamily: AbundanceTypography.displayFamily,
+                        fontSize: 25,
                         fontWeight: FontWeight.w800,
                         height: 1.0,
                       ),
@@ -577,7 +435,7 @@ class _ScorePanel extends StatelessWidget {
                       'of 100',
                       style: TextStyle(
                         color: _muted,
-                        fontSize: 14,
+                        fontSize: 12,
                       ),
                     ),
                   ],
@@ -585,94 +443,24 @@ class _ScorePanel extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          const Text(
-            'Life Power',
-            style: TextStyle(
-              color: _text,
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              fontFamily: 'Georgia',
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Your Personal, Professional and Contribution scores, combined into one out of 100.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: _muted,
-              fontSize: 13.5,
-              height: 1.6,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    this.valueColor,
-  });
-
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color? valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 104,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _panel,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _border),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: _trackBg,
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Icon(
-              icon,
-              color: _chipGray,
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
+          const SizedBox(width: 13),
+          const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  label,
-                  style: const TextStyle(
-                    color: _muted,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  value,
+                  'LIFE POWER',
                   style: TextStyle(
-                    color: valueColor ?? _text,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
+                    color: _accentGold,
+                    fontFamily: AbundanceTypography.displayFamily,
+                    fontSize: 16,
+                    letterSpacing: 1.4,
                   ),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  'Your Personal, Professional and Contribution scores, combined into one out of 100.',
+                  style: TextStyle(color: _muted, fontSize: 13, height: 1.46),
                 ),
               ],
             ),
@@ -702,15 +490,21 @@ class _CategoryChipsRow extends StatelessWidget {
         children: [
           _FilterChip(
             label: 'All',
-            count: counts.values.fold<int>(0, (total, value) => total + value),
+            count: 0,
+            includeCount: false,
             selected: selectedCategory == null,
             onTap: () => onSelect(null),
           ),
           const SizedBox(width: 14),
           for (final category in GoalCategory.values) ...[
             _FilterChip(
-              label: category.label,
+              label: switch (category) {
+                GoalCategory.personal => '♙',
+                GoalCategory.professional => '▣',
+                GoalCategory.contribution => '♡',
+              },
               count: counts[category] ?? 0,
+              includeCount: true,
               selected: selectedCategory == category,
               onTap: () => onSelect(category),
             ),
@@ -726,12 +520,14 @@ class _FilterChip extends StatelessWidget {
   const _FilterChip({
     required this.label,
     required this.count,
+    this.includeCount = true,
     required this.selected,
     required this.onTap,
   });
 
   final String label;
   final int count;
+  final bool includeCount;
   final bool selected;
   final VoidCallback onTap;
 
@@ -752,7 +548,7 @@ class _FilterChip extends StatelessWidget {
           ),
         ),
         child: Text(
-          '$label  $count',
+          includeCount ? '$label  $count' : label,
           style: TextStyle(
             color: selected ? _accentGold : _muted,
             fontSize: 14.5,
@@ -832,12 +628,12 @@ class _GoalCard extends StatelessWidget {
 
         return InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(18),
           child: Container(
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: _panel,
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(18),
               border: Border.all(color: _border),
               boxShadow: const [
                 BoxShadow(
@@ -862,46 +658,89 @@ class _GoalCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        crossAxisAlignment: WrapCrossAlignment.center,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _Badge(
-                            text: goal.category.label,
-                            color: categoryColor,
-                            background: categoryColor.withValues(alpha: 0.12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    _Badge(
+                                      text: goal.category.label,
+                                      color: categoryColor,
+                                      background:
+                                          categoryColor.withValues(alpha: 0.12),
+                                    ),
+                                    _Badge(
+                                      text: _statusLabel(goal.status),
+                                      color: _statusForeground(goal.status),
+                                      background: _statusForeground(goal.status)
+                                          .withValues(alpha: 0.12),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 5),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Image.asset(
+                                      abundanceRankMedalAsset(goal.rank.key),
+                                      width: 20,
+                                      height: 20,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      '✦  ${goal.rank.name}',
+                                      style: const TextStyle(
+                                        color: _text,
+                                        fontFamily:
+                                            AbundanceTypography.displayFamily,
+                                        fontSize: 11,
+                                        letterSpacing: .6,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
-                          _Badge(
-                            text: _statusLabel(goal.status),
-                            color: _statusForeground(goal.status),
-                            background: _statusForeground(goal.status)
-                                .withValues(alpha: 0.12),
-                          ),
-                          _Badge(
-                            text: 'Score ${goal.progress}',
-                            color: scoreColor,
-                            background: scoreColor.withValues(alpha: 0.12),
-                          ),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Image.asset(
-                                abundanceRankMedalAsset(goal.rank.key),
-                                width: 20,
-                                height: 20,
-                              ),
-                              const SizedBox(width: 6),
-                              _Badge(
-                                text: goal.rank.name,
-                                color: _chipGray,
-                                background: _chipGrayBg,
-                              ),
-                            ],
+                          SizedBox(
+                            width: 76,
+                            height: 76,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 76,
+                                  height: 76,
+                                  child: CircularProgressIndicator(
+                                    value:
+                                        (goal.progress / 100).clamp(0.0, 1.0),
+                                    strokeWidth: 6,
+                                    backgroundColor: _trackBg,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        scoreColor),
+                                  ),
+                                ),
+                                Text(
+                                  '${goal.progress}%',
+                                  style: const TextStyle(
+                                    color: _text,
+                                    fontFamily:
+                                        AbundanceTypography.displayFamily,
+                                    fontSize: 19,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 10),
                       Text(
                         goal.title,
                         style: const TextStyle(
@@ -909,33 +748,25 @@ class _GoalCard extends StatelessWidget {
                           fontSize: 19,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.2,
-                          fontFamily: 'Georgia',
+                          fontFamily: AbundanceTypography.displayFamily,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      if ((goal.description ?? '').trim().isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        Text(
-                          goal.description!,
-                          style: const TextStyle(
-                            color: _muted,
-                            height: 1.45,
-                          ),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 2),
                       Text(
-                        '${goal.progress}',
-                        style: TextStyle(
-                          color: _progressColor,
-                          fontSize: 24,
+                        'ON OR BEFORE ${DateFormat('MMMM d, yyyy').format(goal.targetDate)}.',
+                        style: const TextStyle(
+                          color: _text,
+                          fontSize: 19,
                           fontWeight: FontWeight.w800,
+                          letterSpacing: 0.2,
+                          fontFamily: AbundanceTypography.displayFamily,
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 14),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(999),
                         child: LinearProgressIndicator(
@@ -1058,10 +889,10 @@ class _EmptyGoalsState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: _panel,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: _border),
       ),
       child: Column(
@@ -1138,7 +969,6 @@ const Color _muted = AbundanceColors.muted;
 const Color _accentGold = AbundanceColors.primaryGold;
 const Color _trackBg = AbundanceColors.surfaceSunken;
 const Color _chipGray = AbundanceColors.muted;
-const Color _chipGrayBg = Color(0xFF232A47);
 const Color _chipBlue = AbundanceColors.accentCyan;
 const Color _chipPink = AbundanceColors.scoreCritical;
 const Color _chipGreen = AbundanceColors.scoreExcellent;

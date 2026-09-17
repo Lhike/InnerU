@@ -34,7 +34,7 @@ class AbundanceCoachHomeScreen extends StatelessWidget {
           ),
           SafeArea(
             child: ListView(
-              padding: const EdgeInsets.all(18),
+              padding: const EdgeInsets.all(16),
               children: [
                 const Text('ABUNDANCE 12', style: AbundanceTypography.eyebrow),
                 const SizedBox(height: 8),
@@ -46,7 +46,7 @@ class AbundanceCoachHomeScreen extends StatelessWidget {
                     color: AbundanceColors.muted,
                   ),
                 ),
-                const SizedBox(height: 22),
+                const SizedBox(height: 16),
                 for (final tool in _tools)
                   AbundanceCard(
                     margin: const EdgeInsets.only(bottom: 10),

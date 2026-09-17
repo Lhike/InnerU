@@ -124,7 +124,7 @@ class _CoachQuestsRosterScreenState extends State<CoachQuestsRosterScreen> {
                         onChanged: (value) =>
                             setState(() => _searchQuery = value),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
                       if (roster.isEmpty)
                         const _RosterEmptyState(
                           title: 'No students yet',
@@ -173,7 +173,7 @@ class _RosterHeader extends StatelessWidget {
           'Quests',
           style: TextStyle(
             color: AbundanceColors.foreground,
-            fontSize: 28,
+            fontSize: 26,
             height: 1.05,
             fontWeight: FontWeight.w800,
             letterSpacing: 0.3,
@@ -242,13 +242,13 @@ class _RosterErrorState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(18),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: AbundanceColors.surfaceRaised,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AbundanceColors.border),
           ),
           child: Column(
@@ -316,10 +316,10 @@ class _RosterEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AbundanceColors.surfaceRaised,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AbundanceColors.border),
       ),
       child: Column(
