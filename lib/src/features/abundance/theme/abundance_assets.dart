@@ -44,6 +44,11 @@ const Map<String, String> abundanceAchievementAssets = <String, String>{
   'quest-architect': '$_achievementsBase/quest-architect.png',
   'high-performer': '$_achievementsBase/high-performer.png',
   'abundance-elite': '$_achievementsBase/abundance-elite.png',
+  'tended-ground': '$_achievementsBase/tended-ground.png',
+  'forged-craft': '$_achievementsBase/forged-craft.png',
+  'given-freely': '$_achievementsBase/given-freely.png',
+  'immovable': '$_achievementsBase/immovable.png',
+  'examine-life': '$_achievementsBase/examine-life.png',
 };
 
 const Map<String, String> _rankMedalAssets = {

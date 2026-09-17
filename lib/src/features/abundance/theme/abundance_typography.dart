@@ -9,7 +9,7 @@ abstract final class AbundanceTypography {
   static const TextStyle display = TextStyle(
     fontFamily: displayFamily,
     color: AbundanceColors.foreground,
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: FontWeight.w700,
     height: 1.1,
   );
@@ -17,21 +17,21 @@ abstract final class AbundanceTypography {
   static const TextStyle title = TextStyle(
     fontFamily: displayFamily,
     color: AbundanceColors.foreground,
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: FontWeight.w700,
   );
 
   static const TextStyle body = TextStyle(
     fontFamily: bodyFamily,
     color: AbundanceColors.foreground,
-    fontSize: 15,
-    height: 1.45,
+    fontSize: 14,
+    height: 1.4,
   );
 
   static const TextStyle eyebrow = TextStyle(
     fontFamily: bodyFamily,
     color: AbundanceColors.primaryGold,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: FontWeight.w800,
     letterSpacing: 1.5,
   );

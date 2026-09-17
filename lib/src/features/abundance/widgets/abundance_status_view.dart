@@ -49,7 +49,7 @@ class AbundanceStatusView extends StatelessWidget {
       color: AbundanceColors.background,
       child: Center(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -59,7 +59,7 @@ class AbundanceStatusView extends StatelessWidget {
                 )
               else
                 Icon(icon, color: AbundanceColors.primaryGold, size: 40),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               Text(
                 message,
                 textAlign: TextAlign.center,
@@ -68,7 +68,7 @@ class AbundanceStatusView extends StatelessWidget {
                 ),
               ),
               if (onRetry != null) ...[
-                const SizedBox(height: 18),
+                const SizedBox(height: 14),
                 AbundanceButton(
                   label: actionLabel ?? 'Try again',
                   outlined: true,

@@ -19,19 +19,22 @@ class AbundanceButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final child = Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        if (icon != null) ...[
-          Icon(icon, size: 18),
-          const SizedBox(width: 8),
+    final child = FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 18),
+            const SizedBox(width: 8),
+          ],
+          Text(label),
         ],
-        Text(label),
-      ],
+      ),
     );
     final style = ButtonStyle(
-      minimumSize: const WidgetStatePropertyAll(Size(44, 48)),
+      minimumSize: const WidgetStatePropertyAll(Size(44, 44)),
       foregroundColor: WidgetStatePropertyAll(
         outlined ? AbundanceColors.primaryGold : AbundanceColors.surfaceSunken,
       ),
@@ -44,6 +47,7 @@ class AbundanceButton extends StatelessWidget {
       textStyle: const WidgetStatePropertyAll(
         TextStyle(
           fontFamily: AbundanceTypography.bodyFamily,
+          fontSize: 14,
           fontWeight: FontWeight.w800,
           letterSpacing: .4,
         ),

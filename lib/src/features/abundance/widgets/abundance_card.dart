@@ -24,7 +24,7 @@ class AbundanceCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AbundanceColors.surfaceRaised,
         border: Border.all(color: AbundanceColors.border),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: child,
     );
@@ -33,7 +33,7 @@ class AbundanceCard extends StatelessWidget {
       button: true,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         child: content,
       ),
     );
