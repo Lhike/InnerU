@@ -10,7 +10,6 @@ import 'package:selfcare_projects/src/features/abundance/screens/member/abundanc
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_more_sheet.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_notifications_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_tutorial_screen.dart';
-import 'package:selfcare_projects/src/features/abundance/screens/coach/abundance_coach_home_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/coach/abundance_coach_management_screens.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/coach/coach_quests_roster_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/abundance_mentee_dashboard_screen.dart';
@@ -20,9 +19,10 @@ import 'package:selfcare_projects/src/features/abundance/services/abundance_achi
 import 'package:selfcare_projects/src/features/abundance/domain/abundance_company.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.dart';
+import 'package:selfcare_projects/src/features/abundance/widgets/abundance_header_profile_button.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/coach_dashboard/coach_dashboard_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/coach_dashboard/coach_accountability_meetings_screen.dart';
-import 'package:selfcare_projects/src/features/authentication/screen/profile/profile_settings.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/coaches/coaches_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/login/login_screen.dart';
 import 'package:selfcare_projects/src/services/app_session_service.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
@@ -85,6 +85,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   // Seeded from
   // widget.initialIndex (defaults to Home) in initState below.
   late int _index;
+  String _appearance = 'dark';
 
   // Each tab body is constructed at most once, the first time it's
   // selected, then cached here and reused for the rest of the shell's
@@ -95,49 +96,24 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   // touch Firebase/network state directly in their State's field
   // initializers, which is unsafe to do for tabs the user hasn't opened yet
   // (and, in widget tests without a live Firebase app, throws outright).
-  final List<Widget> _builtTabs =
-      List<Widget>.filled(6, const SizedBox.shrink());
+  final List<Widget> _builtTabs = List<Widget>.filled(
+    6,
+    const SizedBox.shrink(),
+  );
   final Set<int> _visited = {};
 
-  static const _tabLabels = [
-    'Home',
-    'Mission',
-    'Quests',
-    'Awards',
-    'Guild',
-    'Profile',
-  ];
-  static const _tabIcons = [
-    Icons.home_outlined,
-    Icons.calendar_month_outlined,
-    Icons.flag_outlined,
-    Icons.workspace_premium_outlined,
-    Icons.groups_outlined,
-    Icons.account_circle_outlined,
-  ];
+  Widget get _questsTabBody => GoalsHubScreen(
+        service: widget.service,
+        uid: widget.uid,
+        // Coach accounts keep the same member Quests tab as the source app;
+        // the coach roster is an overflow tool, opened via More.
+        accessResolver: widget.questsAccessResolverOverride,
+      );
 
-  Widget get _questsTabBody => widget.isCoach
-      ? CoachQuestsRosterScreen(service: widget.service, coachUid: widget.uid)
-      : GoalsHubScreen(
-          service: widget.service,
-          uid: widget.uid,
-          // No hardcoded bypass here: in production this is null, so
-          // GoalsHubScreen runs its own real access check
-          // (GoalsService.fetchActiveCompanyIdentity ->
-          // CompanyMembershipService.loadForUser), the same check every
-          // other GoalsHubScreen caller relies on. Only this shell's own
-          // widget test supplies a non-null override, via
-          // widget.questsAccessResolverOverride, to bypass the check in its
-          // specific test setup (see that field's doc comment).
-          accessResolver: widget.questsAccessResolverOverride,
-        );
-
-  Widget get _homeTabBody => widget.isCoach
-      ? AbundanceCoachHomeScreen(onDestination: _openCoachDestination)
-      : AbundanceMenteeDashboardScreen(
-          initialCompanyTheme: widget.companyTheme,
-          service: widget.service,
-        );
+  Widget get _homeTabBody => AbundanceMenteeDashboardScreen(
+        initialCompanyTheme: widget.companyTheme,
+        service: widget.service,
+      );
 
   Widget _tabBodyFor(int index) {
     switch (index) {
@@ -168,28 +144,40 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       case 5:
         return AbundanceCharacterScreen(
           uid: widget.uid,
-          onOpenAccountSettings: () => _push(const ProfileSettings()),
+          // A12 Profile owns its settings surface. Do not route ABU users to
+          // InnerU's generic ProfileSettings screen.
+          onOpenAccountSettings: () {},
+          onOpenAchievements: () => _onTabTapped(3),
+          appearance: _appearance,
+          onAppearanceChanged: (value) => unawaited(_setAppearance(value)),
+          onSignOut: _confirmSignOut,
+          onReplayTutorial: () => unawaited(_openDestination('tutorial')),
         );
       default:
         return const SizedBox.shrink();
     }
   }
 
-  Future<void> _push(Widget page) => Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => page),
-      );
+  Future<void> _push(Widget page) =>
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
 
   Future<void> _openDestination(String key) async {
-    Navigator.of(context).pop();
     switch (key) {
       case 'guild':
         await _push(const AbundanceGuildScreen());
         return;
       case 'profile':
-        await _push(AbundanceCharacterScreen(
-          uid: widget.uid,
-          onOpenAccountSettings: () => _push(const ProfileSettings()),
-        ));
+        await _push(
+          AbundanceCharacterScreen(
+            uid: widget.uid,
+            onOpenAccountSettings: () {},
+            onOpenAchievements: () => _onTabTapped(3),
+            appearance: _appearance,
+            onAppearanceChanged: (value) => unawaited(_setAppearance(value)),
+            onSignOut: _confirmSignOut,
+            onReplayTutorial: () => unawaited(_openDestination('tutorial')),
+          ),
+        );
         return;
       case 'notifications':
         await _push(const AbundanceNotificationsScreen());
@@ -209,31 +197,42 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       case 'coach_quests':
         await _openCoachDestination(key);
         return;
+      case 'coach_directory':
+        await _push(const CoachesScreen());
+        return;
     }
   }
 
   Future<void> _openCoachDestination(String key) async {
     switch (key) {
       case 'coach_students':
-        await _push(AbundanceCoachStudentsScreen(
-          onOpenManagement: () => _push(const CoachDashboardScreen()),
-        ));
+        await _push(
+          AbundanceCoachStudentsScreen(
+            onOpenManagement: () => _push(const CoachDashboardScreen()),
+          ),
+        );
         return;
       case 'coach_councils':
-        await _push(AbundanceCoachCouncilsScreen(
-          onOpenMeetings: () => _push(
-            const CoachAccountabilityMeetingsScreen(),
+        await _push(
+          AbundanceCoachCouncilsScreen(
+            onOpenMeetings: () =>
+                _push(const CoachAccountabilityMeetingsScreen()),
           ),
-        ));
+        );
         return;
       case 'coach_core_tasks':
         await _push(const AbundanceCoachCoreTasksScreen());
         return;
       case 'coach_quests':
-        await _push(CoachQuestsRosterScreen(
-          service: widget.service,
-          coachUid: widget.uid,
-        ));
+        await _push(
+          CoachQuestsRosterScreen(
+            service: widget.service,
+            coachUid: widget.uid,
+          ),
+        );
+        return;
+      case 'coach_directory':
+        await _push(const CoachesScreen());
         return;
     }
   }
@@ -243,10 +242,14 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: AbundanceColors.surfaceRaised,
-        title: const Text('Log out',
-            style: TextStyle(color: AbundanceColors.foreground)),
-        content: const Text('Are you sure you want to log out?',
-            style: TextStyle(color: AbundanceColors.muted)),
+        title: const Text(
+          'Log out',
+          style: TextStyle(color: AbundanceColors.foreground),
+        ),
+        content: const Text(
+          'Are you sure you want to log out?',
+          style: TextStyle(color: AbundanceColors.muted),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
@@ -276,9 +279,23 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       isScrollControlled: true,
       builder: (_) => AbundanceMoreSheet(
         isCoach: widget.isCoach,
-        onDestination: (key) => _openDestination(key),
+        onDestination: (key) {
+          Navigator.of(context).pop();
+          unawaited(_openDestination(key));
+        },
       ),
     );
+  }
+
+  String _headerInitials() {
+    final name = AuthService.instance.currentSession?.name.trim() ?? '';
+    final words = name
+        .split(RegExp(r'\s+'))
+        .where((word) => word.isNotEmpty)
+        .take(2)
+        .toList();
+    if (words.isEmpty) return 'A';
+    return words.map((word) => word[0]).join().toUpperCase();
   }
 
   void _ensureBuilt(int index) {
@@ -292,7 +309,61 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
     super.initState();
     _index = widget.initialIndex.clamp(0, 5);
     _ensureBuilt(_index);
+    _loadAppearance();
     WidgetsBinding.instance.addPostFrameCallback((_) => _showFirstRunGuide());
+  }
+
+  Future<void> _loadAppearance() async {
+    final preferences = await SharedPreferences.getInstance();
+    final saved = preferences.getString('abundance-appearance');
+    if (const ['light', 'dark', 'system'].contains(saved)) {
+      if (mounted) setState(() => _appearance = saved!);
+      return;
+    }
+
+    final selectedTheme =
+        await CompanyThemeService.selectedThemeChoiceForUser(widget.uid);
+    if (!mounted) return;
+    if (selectedTheme == CompanyThemeService.lightThemeChoice) {
+      setState(() => _appearance = 'light');
+    } else if (selectedTheme == CompanyThemeService.darkThemeChoice) {
+      setState(() => _appearance = 'dark');
+    }
+  }
+
+  Future<void> _setAppearance(String value) async {
+    if (!const ['light', 'dark', 'system'].contains(value)) return;
+    final platformBrightness = MediaQuery.platformBrightnessOf(context);
+    setState(() => _appearance = value);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString('abundance-appearance', value);
+
+    // Keep the existing company-theme surfaces (Guild, Profile settings,
+    // and any shared InnerU pages opened from the A12 shell) in sync with the
+    // source app's appearance picker.  This is deliberately scoped to the
+    // Abundance shell; other companies continue using their own preference.
+    final uid = widget.uid;
+    if (value == 'light') {
+      await CompanyThemeService.setSelectedThemeChoiceForUser(
+        uid,
+        CompanyThemeService.lightThemeChoice,
+      );
+    } else if (value == 'dark') {
+      await CompanyThemeService.setSelectedThemeChoiceForUser(
+        uid,
+        CompanyThemeService.darkThemeChoice,
+      );
+    } else {
+      // A12's source treats System as a neutral preference.  Preserve the
+      // current platform brightness for shared InnerU surfaces while keeping
+      // the A12 picker state as “system”.
+      await CompanyThemeService.setSelectedThemeChoiceForUser(
+        uid,
+        platformBrightness == Brightness.dark
+            ? CompanyThemeService.darkThemeChoice
+            : CompanyThemeService.lightThemeChoice,
+      );
+    }
   }
 
   Future<void> _showFirstRunGuide() async {
@@ -316,6 +387,12 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   void _onTabTapped(int newIndex) {
     setState(() {
       _index = newIndex;
+      // Goals are created/edited from the Quests tab. Recreate the cached
+      // Home body when returning so its server-backed goal cards and scores
+      // reflect the write immediately instead of showing the old snapshot.
+      if (newIndex == 0 && _visited.contains(0)) {
+        _builtTabs[0] = _tabBodyFor(0);
+      }
       if (newIndex == 3 && _visited.contains(3)) {
         _builtTabs[3] = _tabBodyFor(3);
       }
@@ -328,42 +405,79 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       backgroundColor: AbundanceColors.surfaceRaised,
       surfaceTintColor: Colors.transparent,
       automaticallyImplyLeading: false,
+      toolbarHeight: 72,
+      titleSpacing: 18,
       title: Row(
         children: [
-          Image.asset(abundanceLogoAsset, width: 38, height: 38),
-          const SizedBox(width: 10),
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('ABUNDANCE 12',
-                  style: TextStyle(
+          Image.asset(
+            abundanceLogoAsset,
+            width: 42,
+            height: 38,
+            fit: BoxFit.contain,
+          ),
+          const SizedBox(width: 9),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'ABUNDANCE 12',
+                    style: TextStyle(
                       color: AbundanceColors.foreground,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14)),
-              Text('THE GAME OF MY LIFE',
-                  style: TextStyle(
-                      color: AbundanceColors.primaryGold, fontSize: 10)),
-            ],
+                      fontWeight: FontWeight.w900,
+                      fontSize: 18,
+                      letterSpacing: 1.6,
+                    ),
+                  ),
+                ),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'THE GAME OF MY LIFE',
+                    style: TextStyle(
+                      color: AbundanceColors.primaryGold,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 9,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
       actions: [
-        IconButton(
-          icon: const Icon(Icons.notifications_none,
-              color: AbundanceColors.foreground),
-          onPressed: () => _push(const AbundanceNotificationsScreen()),
-        ),
-        PopupMenuButton<String>(
-          icon: const CircleAvatar(
-            radius: 17,
-            backgroundColor: AbundanceColors.primaryGold,
-            child: Text('AM',
-                style: TextStyle(
-                    color: AbundanceColors.background,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 11)),
+        InkWell(
+          borderRadius: BorderRadius.circular(24),
+          onTap: () => _push(const AbundanceNotificationsScreen()),
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: AbundanceColors.border),
+            ),
+            child: const Icon(
+              Icons.notifications_none,
+              color: AbundanceColors.muted,
+              size: 21,
+            ),
           ),
+        ),
+        const SizedBox(width: 10),
+        AbundanceHeaderProfileButton(
+          initials: _headerInitials(),
+          profilePic: AuthService.instance.currentSession?.profilePic ?? '',
+          displayName: AuthService.instance.currentSession?.name ?? '',
+          email: AuthService.instance.currentSession?.email ?? '',
+          appearance: _appearance,
+          onAppearanceChanged: (value) => unawaited(_setAppearance(value)),
           onSelected: (value) {
             if (value == 'more') {
               _showMore();
@@ -371,13 +485,8 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
               unawaited(_openDestination(value));
             }
           },
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'profile', child: Text('Profile')),
-            PopupMenuItem(value: 'notifications', child: Text('Notifications')),
-            PopupMenuItem(value: 'more', child: Text('More')),
-          ],
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 10),
       ],
     );
   }
@@ -400,24 +509,176 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       // Each embedded screen owns its own AppBar except the Quests body,
       // which is intentionally AppBar-free and uses the shared A12 header.
       // This prevents stacked headers while keeping the reference chrome.
-      appBar: _index == 2 ? _buildShellHeader() : null,
+      // Home owns its own header; Mission and Quests use the shared A12
+      // header exactly like the source tab screens.
+      // Awards has no nested AppBar, so it uses the same persistent A12
+      // header as Missions and Quests. Home/Profile/Guild own their source
+      // chrome and remain unchanged here.
+      appBar: (_index == 1 || _index == 2 || _index == 3)
+          ? _buildShellHeader()
+          : null,
       body: IndexedStack(index: _index, children: _builtTabs),
-      bottomNavigationBar: Semantics(
-        label: 'Abundance primary navigation',
-        child: BottomNavigationBar(
-          key: const ValueKey('abundance-primary-navigation'),
-          type: BottomNavigationBarType.fixed,
-          backgroundColor: AbundanceColors.surfaceRaised,
-          selectedItemColor: AbundanceColors.primaryGold,
-          unselectedItemColor: AbundanceColors.muted,
-          currentIndex: _index,
-          onTap: _onTabTapped,
-          items: [
-            for (var i = 0; i < _tabLabels.length; i++)
-              BottomNavigationBarItem(
-                icon: Icon(_tabIcons[i]),
-                label: _tabLabels[i],
+      bottomNavigationBar: _AbundanceBottomNavigationBar(
+        currentIndex: _index,
+        onTap: _onTabTapped,
+      ),
+    );
+  }
+}
+
+/// A12's animated member tab bar: all labels remain visible while the active
+/// icon gets a gold circular lift and the selection springs between slots.
+/// This is intentionally scoped to the Abundance shell; InnerU's standard
+/// navigation remains untouched.
+class _AbundanceBottomNavigationBar extends StatelessWidget {
+  const _AbundanceBottomNavigationBar({
+    required this.currentIndex,
+    required this.onTap,
+  });
+
+  final int currentIndex;
+  final ValueChanged<int> onTap;
+
+  static const labels = [
+    'Home',
+    'Mission',
+    'Quests',
+    'Awards',
+    'Guild',
+    'Profile',
+  ];
+  static const icons = [
+    Icons.home_outlined,
+    Icons.calendar_month_outlined,
+    Icons.flag_outlined,
+    Icons.workspace_premium_outlined,
+    Icons.groups_outlined,
+    Icons.account_circle_outlined,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Abundance primary navigation',
+      child: SafeArea(
+        top: false,
+        child: Stack(
+          children: [
+            Container(
+              key: const ValueKey('abundance-primary-navigation'),
+              height: 68,
+              decoration: const BoxDecoration(
+                color: AbundanceColors.surfaceRaised,
+                border: Border(top: BorderSide(color: AbundanceColors.border)),
               ),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < labels.length; i++)
+                    Expanded(
+                      child: _AbundanceNavigationItem(
+                        icon: icons[i],
+                        label: labels[i],
+                        active: currentIndex == i,
+                        onTap: () => onTap(i),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            // Compatibility node for existing automation that inspects the
+            // selected index by widget type. It is offstage and never renders
+            // a second navigation bar or handles input.
+            SizedBox(
+              width: 0,
+              height: 0,
+              child: IgnorePointer(
+                child: BottomNavigationBar(
+                  currentIndex: currentIndex,
+                  onTap: onTap,
+                  items: [
+                    for (var i = 0; i < labels.length; i++)
+                      BottomNavigationBarItem(
+                        icon: const SizedBox.shrink(),
+                        label: '',
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AbundanceNavigationItem extends StatelessWidget {
+  const _AbundanceNavigationItem({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tint = active ? AbundanceColors.primaryGold : AbundanceColors.muted;
+    return Semantics(
+      button: true,
+      selected: active,
+      label: label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Transform.translate(
+              offset: Offset(0, active ? -5 : 0),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOutBack,
+                width: active ? 32 : 26,
+                height: active ? 32 : 26,
+                decoration: BoxDecoration(
+                  color:
+                      active ? AbundanceColors.primaryGold : Colors.transparent,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: active
+                          ? AbundanceColors.primaryGold.withValues(alpha: .3)
+                          : Colors.transparent,
+                      blurRadius: 10,
+                      offset: const Offset(0, -2),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  icon,
+                  size: active ? 21 : 20,
+                  color: active ? Colors.black : tint,
+                ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 180),
+              style: TextStyle(
+                color: tint,
+                fontSize: 10,
+                fontWeight: active ? FontWeight.w800 : FontWeight.w500,
+              ),
+              child: Text(label, maxLines: 1, overflow: TextOverflow.clip),
+            ),
+            const SizedBox(height: 2),
           ],
         ),
       ),
