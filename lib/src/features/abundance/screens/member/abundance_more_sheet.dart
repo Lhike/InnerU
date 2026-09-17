@@ -18,7 +18,10 @@ class AbundanceMoreSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = abundanceNavigationFor(isCoach: isCoach)
         .where((item) => item.kind == AbundanceDestinationKind.overflow);
-    return ColoredBox(
+    // ListTile paints ink/background on its nearest Material ancestor. Using
+    // Material here keeps the sheet's surface while avoiding Flutter's
+    // invisible-ink assertion when this menu is opened in tests or on device.
+    return Material(
       color: AbundanceColors.surfaceRaised,
       child: SafeArea(
         top: false,
