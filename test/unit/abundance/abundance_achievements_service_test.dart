@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:selfcare_projects/src/features/abundance/domain/domain.dart'
+    as abundance;
 import 'package:selfcare_projects/src/features/abundance/services/abundance_achievements_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_missions_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
@@ -31,6 +33,43 @@ class _FakeGoalsService extends GoalsService {
   Stream<List<GoalSummary>> watchGoals(String uid) =>
       Stream<List<GoalSummary>>.value(const <GoalSummary>[]);
 }
+
+GoalSummary _goal({
+  required abundance.GoalCategory category,
+  abundance.GoalStatus status = abundance.GoalStatus.completed,
+}) {
+  return GoalSummary(
+    id: category.code,
+    userId: 'member-1',
+    companyId: 'company-1',
+    title: category.label,
+    description: null,
+    notes: null,
+    status: status,
+    progress: status == abundance.GoalStatus.completed ? 100 : 40,
+    category: category,
+    goalType: abundance.GoalType.merit,
+    targetPeriod: abundance.TargetPeriod.none,
+    direction: abundance.GoalDirection.gain,
+    targetValue: 100,
+    currentValue: status == abundance.GoalStatus.completed ? 100 : 40,
+    unit: '%',
+    startDate: DateTime(2026, 1, 1),
+    targetDate: DateTime(2026, 12, 31),
+    completedAt:
+        status == abundance.GoalStatus.completed ? DateTime(2026, 9, 1) : null,
+  );
+}
+
+Task _mission(DateTime day, {bool completed = true}) => Task(
+      id: day.toIso8601String(),
+      title: 'Mission',
+      goalType: GoalType.everyday,
+      startDate: day,
+      dueDate: day,
+      isCompleted: completed,
+      completionDates: completed ? <DateTime>[day] : const <DateTime>[],
+    );
 
 void main() {
   test('catalog contains the canonical Expo achievement keys', () {
@@ -166,6 +205,77 @@ void main() {
     expect(firstFlame.unlocked, isTrue);
     expect(firstFlame.percent, 100);
     expect(untouched.unlocked, isFalse);
+    expect(untouched.current, 0);
     expect(untouched.percent, 0);
+  });
+
+  test('evaluator reports boundary progress without unlocking later criteria',
+      () {
+    final asOf = DateTime(2026, 9, 20);
+    final records = computeAbundanceAchievementRecords(
+      tasks: <Task>[
+        for (var i = 0; i < 7; i++) _mission(asOf.subtract(Duration(days: i)))
+      ],
+      quests: <GoalSummary>[_goal(category: abundance.GoalCategory.personal)],
+      checkInDays: <DateTime>[asOf],
+      asOf: asOf,
+    );
+
+    AbundanceAchievementRecord record(String key) => records.firstWhere(
+          (item) => item.definition.key == key,
+        );
+
+    expect(record('STREAK_7').unlocked, isTrue);
+    expect(record('STREAK_30').current, 7);
+    expect(record('STREAK_30').unlocked, isFalse);
+    expect(record('PERSONAL_GOAL_DONE').unlocked, isTrue);
+    expect(record('PROFESSIONAL_GOAL_DONE').unlocked, isFalse);
+    expect(record('GOALS_COMPLETED_1').unlocked, isTrue);
+    expect(record('GOALS_COMPLETED_5').current, 1);
+    expect(record('CHECK_IN_RATE_80').current, closeTo(3.33, 0.01));
+  });
+
+  test(
+      'evaluator maps all streak, goal, score, mission, and check-in thresholds',
+      () {
+    final asOf = DateTime(2026, 9, 20);
+    final records = computeAbundanceAchievementRecords(
+      tasks: <Task>[
+        for (var i = 0; i < 60; i++) _mission(asOf.subtract(Duration(days: i))),
+      ],
+      quests: <GoalSummary>[
+        _goal(category: abundance.GoalCategory.personal),
+        _goal(category: abundance.GoalCategory.professional),
+        _goal(category: abundance.GoalCategory.contribution),
+      ],
+      checkInDays: <DateTime>[
+        for (var i = 0; i < 24; i++) asOf.subtract(Duration(days: i))
+      ],
+      lifePower: 90,
+      asOf: asOf,
+    );
+
+    expect(
+      records
+          .where((record) => record.unlocked)
+          .map((record) => record.definition.key),
+      containsAll(<String>[
+        'STREAK_7',
+        'STREAK_30',
+        'STREAK_50',
+        'TASK_RATE_80',
+        'TASK_RATE_95',
+        'PERSONAL_GOAL_DONE',
+        'PROFESSIONAL_GOAL_DONE',
+        'CONTRIBUTION_GOAL_DONE',
+        'GOALS_COMPLETED_1',
+        'GOALS_COMPLETED_5',
+        'GOALS_COMPLETED_10',
+        'OVERALL_SCORE_60',
+        'OVERALL_SCORE_80',
+        'OVERALL_SCORE_90',
+        'CHECK_IN_RATE_80',
+      ]),
+    );
   });
 }

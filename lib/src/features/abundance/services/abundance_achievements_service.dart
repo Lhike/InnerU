@@ -1,7 +1,10 @@
 import 'package:selfcare_projects/src/features/abundance/domain/domain.dart'
     as abundance;
+import 'package:selfcare_projects/src/features/abundance/domain/day_keys.dart';
+import 'package:selfcare_projects/src/features/abundance/domain/scoring.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_missions_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
+import 'package:selfcare_projects/src/services/daily_check_in_api_service.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/todo_list.dart'
     as todo;
 
@@ -192,46 +195,122 @@ abstract interface class AbundanceAchievementsGateway {
   Future<List<AbundanceAchievementRecord>> load();
 }
 
-Set<String> computeAbundanceAchievementKeys({
+abstract interface class AbundanceCheckInsGateway {
+  Future<List<DateTime>> load();
+}
+
+class InnerUAbundanceCheckInsGateway implements AbundanceCheckInsGateway {
+  InnerUAbundanceCheckInsGateway({DailyCheckInApiService? api})
+      : api = api ?? DailyCheckInApiService.instance;
+
+  final DailyCheckInApiService api;
+
+  @override
+  Future<List<DateTime>> load() async {
+    try {
+      final history = await api.fetchHistory();
+      return history
+          .map((entry) => entry['date'] ?? entry['checkInDate'] ?? entry['day'])
+          .map((value) => DateTime.tryParse(value?.toString() ?? ''))
+          .whereType<DateTime>()
+          .toList(growable: false);
+    } catch (_) {
+      return const <DateTime>[];
+    }
+  }
+}
+
+List<AbundanceAchievementRecord> computeAbundanceAchievementRecords({
   required List<todo.Task> tasks,
   required List<GoalSummary> quests,
+  List<DateTime> checkInDays = const <DateTime>[],
+  num? lifePower,
+  DateTime? asOf,
 }) {
+  final end = _day(asOf ?? DateTime.now());
   final everydayTasks = tasks
       .where((task) => task.goalType == todo.GoalType.everyday)
       .toList(growable: false);
-  final completionDays = everydayTasks
-      .expand((task) => task.completionDates)
-      .map((date) => DateTime(date.year, date.month, date.day))
-      .toSet();
+  final completionDays =
+      everydayTasks.expand((task) => task.completionDates).map(_day).toSet();
   final completedMissions = everydayTasks
       .where((task) => task.isCompleted || task.completionDates.isNotEmpty)
       .length;
   final completedQuests = quests
       .where((quest) => quest.status == abundance.GoalStatus.completed)
       .length;
-  final unlocked = <String>{};
-  if (completedMissions > 0) {
-    unlocked.add('first-flame');
-  }
   final longestStreak = _longestConsecutiveRun(completionDays);
-  if (longestStreak >= 3) unlocked.add('finding-rythm');
-  if (completionDays.length >= 30) unlocked.add('30-days-strong');
-  if (longestStreak >= 14) unlocked.add('unbroken');
-  if (everydayTasks.length >= 3 && completedMissions == everydayTasks.length) {
-    unlocked.add('discipline');
-  }
-  if (completedQuests >= 1) unlocked.add('finished-first');
-  if (completedQuests >= 3) unlocked.add('closer');
-  if (quests.any((quest) => quest.goalType == abundance.GoalType.milestone)) {
-    unlocked.add('quest-architect');
-  }
-  if (quests.any((quest) => quest.progress >= 80)) {
-    unlocked.add('high-performer');
-  }
-  if (completedQuests >= 10 && completionDays.length >= 30) {
-    unlocked.add('abundance-elite');
-  }
-  return unlocked;
+  final windowStart = addDays(end, -29);
+  final completedDaysInWindow = completionDays
+      .where((day) => !day.isBefore(windowStart) && !day.isAfter(end))
+      .length;
+  final missionRate = completedDaysInWindow / 30 * 100;
+  final checkInRate = checkInDays
+          .map(_day)
+          .toSet()
+          .where((day) => !day.isBefore(windowStart) && !day.isAfter(end))
+          .length /
+      30 *
+      100;
+  final categories = <abundance.GoalCategory, int>{
+    for (final category in abundance.GoalCategory.values)
+      category: quests
+          .where((quest) =>
+              quest.category == category &&
+              quest.status == abundance.GoalStatus.completed)
+          .length,
+  };
+  final metrics = <String, num>{
+    'everydayMissionStreak': longestStreak,
+    'streak': longestStreak,
+    'personalGoalsCompleted': categories[abundance.GoalCategory.personal]!,
+    'professionalGoalsCompleted':
+        categories[abundance.GoalCategory.professional]!,
+    'contributionGoalsCompleted':
+        categories[abundance.GoalCategory.contribution]!,
+    'goalsCompleted': completedQuests,
+    'taskCompletionRate': missionRate,
+    'overallScore': lifePower ?? _lifePower(quests),
+    'checkInRate': checkInRate,
+  };
+  return abundanceAchievementDefinitions.map((definition) {
+    final current = definition.key == 'STREAK_7'
+        ? completedMissions
+        : metrics[definition.metric] ?? 0;
+    return AbundanceAchievementRecord(
+      definition: definition,
+      current: current,
+      unlocked: definition.key == 'STREAK_7'
+          ? completedMissions > 0
+          : current >= definition.target,
+    );
+  }).toList(growable: false);
+}
+
+Set<String> computeAbundanceAchievementKeys({
+  required List<todo.Task> tasks,
+  required List<GoalSummary> quests,
+}) {
+  return computeAbundanceAchievementRecords(tasks: tasks, quests: quests)
+      .where((record) => record.unlocked)
+      .map((record) => record.definition.assetKey)
+      .toSet();
+}
+
+DateTime _day(DateTime value) => DateTime(value.year, value.month, value.day);
+
+num _lifePower(List<GoalSummary> quests) {
+  final goals = quests
+      .map((quest) => ScorableGoal(
+            status: quest.status,
+            progress: quest.progress,
+            category: quest.category,
+            goalType: quest.goalType,
+            targetValue: quest.targetValue,
+            currentValue: quest.currentValue,
+          ))
+      .toList(growable: false);
+  return weightGoalScore(scoreCategories(goals));
 }
 
 int _longestConsecutiveRun(Set<DateTime> days) {
@@ -256,33 +335,29 @@ class InnerUAbundanceAchievementsGateway
     required this.uid,
     required this.goals,
     AbundanceMissionsGateway? missions,
-  }) : missions = missions ?? InnerUAbundanceMissionsGateway();
+    AbundanceCheckInsGateway? checkIns,
+  })  : missions = missions ?? InnerUAbundanceMissionsGateway(),
+        checkIns = checkIns ?? InnerUAbundanceCheckInsGateway();
 
   final String uid;
   final GoalsService goals;
   final AbundanceMissionsGateway missions;
+  final AbundanceCheckInsGateway checkIns;
 
   @override
   Future<List<AbundanceAchievementRecord>> load() async {
     final values = await Future.wait<Object>([
       missions.load(),
       goals.watchGoals(uid).first,
+      checkIns.load(),
     ]);
     final tasks = values[0] as List<todo.Task>;
     final quests = values[1] as List<GoalSummary>;
-    final unlockedKeys = computeAbundanceAchievementKeys(
+    final records = computeAbundanceAchievementRecords(
       tasks: tasks,
       quests: quests,
+      checkInDays: values[2] as List<DateTime>,
     );
-    return abundanceAchievementDefinitions.map(
-      (definition) {
-        final unlocked = unlockedKeys.contains(definition.assetKey);
-        return AbundanceAchievementRecord(
-          definition: definition,
-          current: unlocked ? definition.target : 0,
-          unlocked: unlocked,
-        );
-      },
-    ).toList(growable: false);
+    return records;
   }
 }
