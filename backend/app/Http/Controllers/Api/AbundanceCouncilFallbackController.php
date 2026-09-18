@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\LeaderboardController;
 use App\Models\CoachGroup;
 use App\Models\CoachMentee;
 use App\Models\User;
@@ -28,7 +29,6 @@ class AbundanceCouncilFallbackController extends Controller
         if (! $user instanceof User) {
             return response()->json(['message' => 'Unauthorized.'], Response::HTTP_UNAUTHORIZED);
         }
-
         $currentGroupId = CoachMentee::query()
             ->where('mentee_id', (string) $user->id)
             ->whereNotNull('group_id')
@@ -46,6 +46,26 @@ class AbundanceCouncilFallbackController extends Controller
         $user = $request->user();
         if (! $user instanceof User) {
             return response()->json(['message' => 'Unauthorized.'], Response::HTTP_UNAUTHORIZED);
+        }
+        // Abundance Guild is a company-wide directory, not a council
+        // membership surface. The A12 API normally owns this response; this
+        // InnerU fallback preserves the same contract when the bridge is
+        // unavailable.
+        if ($this->isAbundanceUser($user)) {
+            $leaderboard = app(LeaderboardController::class)
+                ->index($request)
+                ->getData(true);
+            $entries = collect($leaderboard['entries'] ?? []);
+            $users = $entries->reject(fn (array $entry): bool => ($entry['isCoach'] ?? false) === true)->values();
+            $payload = [
+                'company' => 'ABU15DN',
+                'users' => $users,
+            ];
+            if ((bool) $user->is_coach) {
+                $payload['coaches'] = $entries->filter(fn (array $entry): bool => ($entry['isCoach'] ?? false) === true)->values();
+            }
+
+            return response()->json($payload);
         }
 
         $groupId = CoachMentee::query()
@@ -76,6 +96,9 @@ class AbundanceCouncilFallbackController extends Controller
         $user = $request->user();
         if (! $user instanceof User) {
             return response()->json(['message' => 'Unauthorized.'], Response::HTTP_UNAUTHORIZED);
+        }
+        if ($this->isAbundanceUser($user)) {
+            return response()->json(['message' => 'Abundance coach assignments are managed by an admin.'], Response::HTTP_FORBIDDEN);
         }
 
         $validated = $request->validate(['councilId' => ['required', 'string']]);
@@ -121,6 +144,9 @@ class AbundanceCouncilFallbackController extends Controller
         $user = $request->user();
         if (! $user instanceof User) {
             return response()->json(['message' => 'Unauthorized.'], Response::HTTP_UNAUTHORIZED);
+        }
+        if ($this->isAbundanceUser($user)) {
+            return response()->json(['message' => 'Abundance coach assignments are managed by an admin.'], Response::HTTP_FORBIDDEN);
         }
 
         CoachMentee::query()
@@ -203,6 +229,11 @@ class AbundanceCouncilFallbackController extends Controller
             'name' => (string) $member->name,
             'score' => (int) ($member->score ?? 0),
         ])->values()->all();
+    }
+
+    private function isAbundanceUser(User $user): bool
+    {
+        return in_array(strtoupper(trim((string) ($user->company_code ?: $user->active_company_code))), ['ABU15DN'], true);
     }
 
     /** @return array<int, string> */

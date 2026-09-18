@@ -77,8 +77,9 @@ class A12ApiTransport implements AbundanceApiTransport {
     String method,
     String path,
     Map<String, dynamic>? body,
-    String? token,
-  ) async {
+    String? token, {
+    bool retryingAfterUnauthorized = false,
+  }) async {
     late final A12Session session;
     try {
       session = await _sessions.ensureSession();
@@ -97,6 +98,7 @@ class A12ApiTransport implements AbundanceApiTransport {
       rethrow;
     }
     final translated = _translatePath(path);
+    final translatedBody = _translateRequestBody(path, body ?? const {});
     final uri = Uri.parse('${ApiConfig.a12BaseUrl}${translated.path}');
     final headers = <String, String>{
       'Accept': 'application/json',
@@ -110,7 +112,7 @@ class A12ApiTransport implements AbundanceApiTransport {
           response = await http.get(uri, headers: headers);
         case 'POST':
           response = await http.post(uri,
-              headers: headers, body: jsonEncode(_translateBody(body ?? {})));
+              headers: headers, body: jsonEncode(translatedBody));
         case 'PATCH':
           response = await http.patch(uri,
               headers: headers, body: jsonEncode(body ?? {}));
@@ -130,6 +132,17 @@ class A12ApiTransport implements AbundanceApiTransport {
         : jsonDecode(response.body);
     if (response.statusCode == 401) {
       await _sessions.clear();
+      // A cached A12 token may have expired. Refresh it once and retry the
+      // same A12 request. In particular, never silently route council writes
+      // to InnerU: the council id and membership tables are A12-owned.
+      if (!retryingAfterUnauthorized) {
+        return _request(method, path, body, token,
+            retryingAfterUnauthorized: true);
+      }
+      if (_isCouncilPath(path) && method == 'POST') {
+        throw ApiException(
+            401, 'Your Abundance session expired. Please try again.');
+      }
       return _fallbackRequest(method, path, body, token);
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -218,6 +231,13 @@ class A12ApiTransport implements AbundanceApiTransport {
     final normalized = path.startsWith('/') ? path : '/$path';
     if (normalized.startsWith('/api/goals')) {
       final rest = normalized.substring('/api/goals'.length);
+      if (rest.endsWith('/measure')) {
+        return (
+          path: '/goals${rest.substring(0, rest.length - 8)}/logs',
+          plans: false,
+          history: false
+        );
+      }
       if (rest.endsWith('/tasks')) {
         return (
           path: '/goals${rest.substring(0, rest.length - 6)}',
@@ -269,6 +289,19 @@ class A12ApiTransport implements AbundanceApiTransport {
     }
     translated.remove('status');
     return translated;
+  }
+
+  Map<String, dynamic> _translateRequestBody(
+    String originalPath,
+    Map<String, dynamic> body,
+  ) {
+    final normalized =
+        originalPath.startsWith('/') ? originalPath : '/$originalPath';
+    if (normalized.startsWith('/api/goals/') &&
+        normalized.endsWith('/measure')) {
+      return {'amount': body['current_value']};
+    }
+    return _translateBody(body);
   }
 
   Map<String, dynamic> _translateResponse(String originalPath, dynamic data) {
@@ -378,7 +411,7 @@ class A12SessionService {
     late final Map<String, dynamic> response;
     try {
       response = await ApiClient.instance.postJson(
-        '/api/abundance/a12/session',
+        '/api/abundance/session',
         const <String, dynamic>{},
         token: innerToken,
       );

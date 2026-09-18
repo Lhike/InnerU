@@ -5,12 +5,17 @@ import 'package:selfcare_projects/src/features/abundance/screens/member/abundanc
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_missions_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_more_sheet.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_tutorial_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/tutorial/abundance_tutorial_controller.dart';
+import 'package:selfcare_projects/src/features/abundance/tutorial/abundance_tutorial_steps.dart';
+import 'package:selfcare_projects/src/features/abundance/widgets/abundance_tutorial_target.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/domain.dart'
     as a12;
 import 'package:selfcare_projects/src/features/abundance/services/abundance_achievements_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_missions_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/todo_list.dart';
+
+void _noop() {}
 
 class _FakeMissionsGateway implements AbundanceMissionsGateway {
   _FakeMissionsGateway({this.failCompletion = false, List<Task>? seed}) {
@@ -197,7 +202,7 @@ void main() {
 
     expect(find.text('THE HALL OF RECORDS'), findsOneWidget);
     expect(find.text('RECENTLY UNLOCKED'), findsOneWidget);
-    expect(find.text('LOCKED'), findsOneWidget);
+    expect(find.text('LOCKED'), findsWidgets);
     expect(find.text('First Flame'), findsOneWidget);
   });
 
@@ -258,13 +263,13 @@ void main() {
     final unlocked = await gateway.load();
 
     expect(
-      unlocked,
+      unlocked
+          .where((record) => record.unlocked)
+          .map((record) => record.definition.assetKey)
+          .toSet(),
       containsAll(<String>{
-        'first-flame',
-        'finding-rythm',
         'finished-first',
-        'quest-architect',
-        'high-performer',
+        'tended-ground',
       }),
     );
   });
@@ -335,6 +340,20 @@ void main() {
     expect(selected, 'mage');
   });
 
+  testWidgets('profile does not show the coach role to a member',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: AbundanceCharacterScreen(
+        uid: 'member-1',
+        onOpenAccountSettings: _noop,
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('STUDENT'), findsOneWidget);
+    expect(find.text('COACH'), findsNothing);
+  });
+
   testWidgets('failed character persistence rolls selection back',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
@@ -379,5 +398,67 @@ void main() {
     await tester.tap(find.text('Enter the game'));
     await tester.pumpAndSettle();
     expect(completedFor, 'member-1');
+  });
+
+  testWidgets('tutorial scrolls when advancing between same-screen targets',
+      (tester) async {
+    final controller = AbundanceTutorialController(
+      uid: 'member-1',
+      roles: const {AbundanceTutorialRole.member},
+      stepsOverride: const [
+        AbundanceTutorialStep(
+          eyebrow: 'Home · First',
+          title: 'First target',
+          description: 'First target',
+          target: 'first',
+          route: '/(tabs)',
+        ),
+        AbundanceTutorialStep(
+          eyebrow: 'Home · Second',
+          title: 'Second target',
+          description: 'Second target',
+          target: 'second',
+          route: '/(tabs)',
+        ),
+      ],
+    );
+    addTearDown(controller.dispose);
+
+    final scrollController = ScrollController();
+    addTearDown(scrollController.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(400, 240)),
+          child: SizedBox(
+            height: 240,
+            child: SingleChildScrollView(
+              controller: scrollController,
+              child: Column(
+                children: [
+                  AbundanceTutorialTarget(
+                    name: 'first',
+                    controller: controller,
+                    child: const SizedBox(height: 80),
+                  ),
+                  const SizedBox(height: 600),
+                  AbundanceTutorialTarget(
+                    name: 'second',
+                    controller: controller,
+                    child: const SizedBox(height: 80),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    controller.start();
+    await tester.pumpAndSettle();
+    controller.next();
+    await tester.pumpAndSettle();
+
+    expect(scrollController.offset, greaterThan(0));
   });
 }

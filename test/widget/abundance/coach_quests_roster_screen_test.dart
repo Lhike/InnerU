@@ -151,7 +151,14 @@ void main() {
     expect(find.text('Maychell Alcorin'), findsOneWidget);
     expect(find.text('Jamie Rivera'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextField), 'jamie');
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.hintText == 'Search by student name',
+      ),
+      'jamie',
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Maychell Alcorin'), findsNothing);

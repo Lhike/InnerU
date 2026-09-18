@@ -341,6 +341,53 @@ void main() {
     expect(find.text('ABUNDANCE 12'), findsNothing);
   });
 
+  testWidgets('Appearance selection survives the cached Profile tab rebuild',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceShellScreen(
+        isCoach: false,
+        service: GoalsService(FakeFirebaseFirestore()),
+        uid: 'appearance-test',
+        companyTheme: CompanyThemeData.standard.copyWith(
+          companyCode: 'ABU15DN',
+          companyName: 'Abundance',
+          isCompanyTheme: true,
+        ),
+        initialIndex: 5,
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final otherCompanyThemeChoice =
+        await CompanyThemeService.selectedThemeChoiceForUser('appearance-test');
+
+    await tester.scrollUntilVisible(
+      find.text('Light'),
+      500,
+      // The shell's IndexedStack also contains horizontal scrollables in
+      // profile-related children. Target the Profile page's vertical list.
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView).last,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.tap(find.text('Light'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ColorFiltered), findsWidgets);
+
+    expect(
+      (await SharedPreferences.getInstance()).getString('abundance-appearance'),
+      'light',
+    );
+    expect(
+      await CompanyThemeService.selectedThemeChoiceForUser('appearance-test'),
+      otherCompanyThemeChoice,
+    );
+  });
+
   testWidgets(
       'the Quests tab renders exactly one AppBar — the shell\'s own, since '
       'neither Quests body has one', (tester) async {

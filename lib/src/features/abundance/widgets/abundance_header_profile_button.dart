@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
+import 'package:selfcare_projects/src/services/profile_picture_bus.dart';
 
 /// The persistent A12 brand bar shown above member pages in the source app.
 /// It is kept as a reusable widget so nested A12 routes do not fall back to
@@ -17,11 +18,15 @@ class AbundanceHeaderBar extends StatelessWidget
     this.onNotifications,
     this.onMenu,
     this.onSelected,
+    this.appearance = 'dark',
+    this.onAppearanceChanged,
   });
 
   final VoidCallback? onNotifications;
   final VoidCallback? onMenu;
   final ValueChanged<String>? onSelected;
+  final String appearance;
+  final ValueChanged<String>? onAppearanceChanged;
 
   @override
   Size get preferredSize => const Size.fromHeight(72);
@@ -47,7 +52,9 @@ class AbundanceHeaderBar extends StatelessWidget
       toolbarHeight: 72,
       titleSpacing: 18,
       title: Row(children: [
-        Image.asset(abundanceLogoAsset, width: 42, height: 38),
+        AbundanceArtwork(
+          child: Image.asset(abundanceLogoAsset, width: 42, height: 38),
+        ),
         const SizedBox(width: 9),
         const Expanded(
           child: Column(
@@ -85,19 +92,24 @@ class AbundanceHeaderBar extends StatelessWidget
           ),
         ),
         const SizedBox(width: 10),
-        AbundanceHeaderProfileButton(
-          initials: initials,
-          profilePic: session?.profilePic ?? '',
-          displayName: session?.name ?? '',
-          email: session?.email ?? '',
-          onSelected: (value) {
-            if (onSelected != null) {
-              onSelected!(value);
-              return;
-            }
-            if (value == 'notifications') onNotifications?.call();
-            if (value == 'more') onMenu?.call();
-          },
+        ValueListenableBuilder<String?>(
+          valueListenable: ProfilePictureBus.latestUrl,
+          builder: (context, latestUrl, _) => AbundanceHeaderProfileButton(
+            initials: initials,
+            profilePic: latestUrl ?? session?.profilePic ?? '',
+            displayName: session?.name ?? '',
+            email: session?.email ?? '',
+            appearance: appearance,
+            onAppearanceChanged: onAppearanceChanged,
+            onSelected: (value) {
+              if (onSelected != null) {
+                onSelected!(value);
+                return;
+              }
+              if (value == 'notifications') onNotifications?.call();
+              if (value == 'more') onMenu?.call();
+            },
+          ),
         ),
         const SizedBox(width: 10),
       ],
@@ -173,13 +185,19 @@ class AbundanceHeaderProfileButton extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: AbundanceColors.primaryGold,
               ),
-              child: CircleAvatar(
-                radius: 15,
-                backgroundColor: AbundanceColors.accentCyan,
-                backgroundImage:
-                    profilePic.isNotEmpty ? NetworkImage(profilePic) : null,
-                child: profilePic.isEmpty ? _Initials(initials) : null,
-              ),
+              child: profilePic.isNotEmpty
+                  ? AbundanceArtwork(
+                      child: CircleAvatar(
+                        radius: 15,
+                        backgroundColor: AbundanceColors.accentCyan,
+                        backgroundImage: NetworkImage(profilePic),
+                      ),
+                    )
+                  : CircleAvatar(
+                      radius: 15,
+                      backgroundColor: AbundanceColors.accentCyan,
+                      child: _Initials(initials),
+                    ),
             ),
             const SizedBox(width: 5),
             const Icon(

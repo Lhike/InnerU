@@ -39,7 +39,10 @@ class _CoachQuestsRosterScreenState extends State<CoachQuestsRosterScreen> {
   // leaving and re-entering the screen.
   late Future<List<CoachMenteeGoals>> _rosterFuture;
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _minimumScoreController = TextEditingController();
   String _searchQuery = '';
+  GoalCategory? _category;
+  int _minimumScore = 0;
 
   @override
   void initState() {
@@ -56,12 +59,20 @@ class _CoachQuestsRosterScreenState extends State<CoachQuestsRosterScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _minimumScoreController.dispose();
     super.dispose();
   }
 
   void _clearSearch() {
     _searchController.clear();
     setState(() => _searchQuery = '');
+  }
+
+  bool _matchesFilters(CoachMenteeGoals entry) {
+    if (entry.goals.isEmpty) return _minimumScore == 0 && _category == null;
+    return entry.goals.any((goal) =>
+        goal.progress >= _minimumScore &&
+        (_category == null || goal.category == _category));
   }
 
   void _openGoal(CoachMenteeGoals entry, String goalId) {
@@ -105,10 +116,11 @@ class _CoachQuestsRosterScreenState extends State<CoachQuestsRosterScreen> {
             final roster = snapshot.data!;
             final query = _searchQuery.trim().toLowerCase();
             final filtered = query.isEmpty
-                ? roster
+                ? roster.where(_matchesFilters).toList()
                 : roster
                     .where((entry) =>
-                        entry.menteeName.toLowerCase().contains(query))
+                        entry.menteeName.toLowerCase().contains(query) &&
+                        _matchesFilters(entry))
                     .toList();
 
             return SingleChildScrollView(
@@ -123,6 +135,13 @@ class _CoachQuestsRosterScreenState extends State<CoachQuestsRosterScreen> {
                         controller: _searchController,
                         onChanged: (value) =>
                             setState(() => _searchQuery = value),
+                        minimumScoreController: _minimumScoreController,
+                        category: _category,
+                        onCategoryChanged: (value) =>
+                            setState(() => _category = value),
+                        onMinimumScoreChanged: (value) => setState(() {
+                          _minimumScore = int.tryParse(value) ?? 0;
+                        }),
                       ),
                       const SizedBox(height: 16),
                       if (roster.isEmpty)
@@ -159,10 +178,21 @@ class _CoachQuestsRosterScreenState extends State<CoachQuestsRosterScreen> {
 }
 
 class _RosterHeader extends StatelessWidget {
-  const _RosterHeader({required this.controller, required this.onChanged});
+  const _RosterHeader({
+    required this.controller,
+    required this.onChanged,
+    required this.minimumScoreController,
+    required this.category,
+    required this.onCategoryChanged,
+    required this.onMinimumScoreChanged,
+  });
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
+  final TextEditingController minimumScoreController;
+  final GoalCategory? category;
+  final ValueChanged<GoalCategory?> onCategoryChanged;
+  final ValueChanged<String> onMinimumScoreChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -224,6 +254,44 @@ class _RosterHeader extends StatelessWidget {
               ),
             ),
           ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<GoalCategory?>(
+                initialValue: category,
+                dropdownColor: AbundanceColors.surfaceRaised,
+                decoration: const InputDecoration(labelText: 'Category'),
+                items: [
+                  const DropdownMenuItem<GoalCategory?>(
+                    value: null,
+                    child: Text('All categories'),
+                  ),
+                  ...GoalCategory.values.map(
+                    (value) => DropdownMenuItem<GoalCategory?>(
+                      value: value,
+                      child: Text(value.label),
+                    ),
+                  ),
+                ],
+                onChanged: onCategoryChanged,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: minimumScoreController,
+                keyboardType: TextInputType.number,
+                onChanged: onMinimumScoreChanged,
+                style: const TextStyle(color: AbundanceColors.foreground),
+                decoration: const InputDecoration(
+                  labelText: 'Minimum score',
+                  hintText: '0–100',
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );

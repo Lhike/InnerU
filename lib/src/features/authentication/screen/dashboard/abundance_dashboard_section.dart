@@ -32,6 +32,14 @@ class AbundanceDashboardSection extends StatefulWidget {
       _AbundanceDashboardSectionState();
 }
 
+List<AbundanceDashboardAchievement> unlockedAchievementsForDashboard(
+  Iterable<AbundanceDashboardAchievement> achievements,
+) {
+  return achievements.where((achievement) => achievement.unlocked).toList(
+        growable: false,
+      );
+}
+
 class _AbundanceDashboardSectionState extends State<AbundanceDashboardSection> {
   late Future<_AbundanceDashboardData> _dashboardFuture;
 
@@ -179,7 +187,8 @@ class _AbundanceDashboardSectionState extends State<AbundanceDashboardSection> {
     companyScoreMap.putIfAbsent(currentUserId, () => currentScore);
 
     final current = companyScoreMap[currentUserId] ?? currentScore;
-    final betterCount = companyScoreMap.values.where((value) => value > current).length;
+    final betterCount =
+        companyScoreMap.values.where((value) => value > current).length;
     return _AbundanceCouncilRank(
       rank: betterCount + 1,
       total: companyScoreMap.length,
@@ -221,7 +230,8 @@ class _AbundanceDashboardSectionState extends State<AbundanceDashboardSection> {
     return logs;
   }
 
-  Future<List<_AbundanceEmotionLog>> _loadEmotionLogs(List<String> months) async {
+  Future<List<_AbundanceEmotionLog>> _loadEmotionLogs(
+      List<String> months) async {
     final emotionByDay = <String, _AbundanceEmotionLog>{};
     for (final month in months) {
       try {
@@ -289,7 +299,7 @@ class _AbundanceDashboardSectionState extends State<AbundanceDashboardSection> {
     return stats;
   }
 
-  List<_AbundanceAchievement> _buildAchievements(
+  List<AbundanceDashboardAchievement> _buildAchievements(
     UserScore score,
     List<GoalSummary> goals,
   ) {
@@ -300,37 +310,37 @@ class _AbundanceDashboardSectionState extends State<AbundanceDashboardSection> {
     final hasNoOverdue = goals.every((goal) => !goal.isOverdue);
 
     return [
-      _AbundanceAchievement(
+      AbundanceDashboardAchievement(
         title: 'First goal',
         subtitle: 'A goal is on the board.',
         icon: Icons.flag_rounded,
         unlocked: hasAnyGoal,
       ),
-      _AbundanceAchievement(
+      AbundanceDashboardAchievement(
         title: 'Balanced',
         subtitle: 'All three life areas are covered.',
         icon: Icons.balance_rounded,
         unlocked: hasAllCategories,
       ),
-      _AbundanceAchievement(
+      AbundanceDashboardAchievement(
         title: 'Momentum',
         subtitle: 'Current streak of 3 days.',
         icon: Icons.local_fire_department_rounded,
         unlocked: score.currentStreak >= 3,
       ),
-      _AbundanceAchievement(
+      AbundanceDashboardAchievement(
         title: 'Consistency',
         subtitle: 'Current streak of 7 days.',
         icon: Icons.trending_up_rounded,
         unlocked: score.currentStreak >= 7,
       ),
-      _AbundanceAchievement(
+      AbundanceDashboardAchievement(
         title: 'Finisher',
         subtitle: '$completed completed goals.',
         icon: Icons.verified_rounded,
         unlocked: completed >= 3,
       ),
-      _AbundanceAchievement(
+      AbundanceDashboardAchievement(
         title: 'Clear runway',
         subtitle: 'No overdue goals left behind.',
         icon: Icons.check_circle_rounded,
@@ -564,8 +574,7 @@ class _AbundanceDashboardSectionState extends State<AbundanceDashboardSection> {
                     _AbundanceCategoryCard(
                       theme: widget.theme,
                       category: category,
-                      totalGoals:
-                          data.categoryStats[category]?.totalGoals ?? 0,
+                      totalGoals: data.categoryStats[category]?.totalGoals ?? 0,
                       completedGoals:
                           data.categoryStats[category]?.completedGoals ?? 0,
                       score: data.categoryStats[category]?.score ?? 0,
@@ -611,26 +620,31 @@ class _AbundanceDashboardSectionState extends State<AbundanceDashboardSection> {
               subtitle: 'Keep moving and these milestones light up.',
             ),
             const SizedBox(height: 14),
-            SizedBox(
-              height: 180,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemBuilder: (context, index) {
-                  return _AbundanceAchievementCard(
-                    theme: widget.theme,
-                    achievement: data.achievements[index],
-                  );
-                },
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
-                itemCount: data.achievements.length,
-              ),
+            Builder(
+              builder: (context) {
+                final unlockedAchievements =
+                    unlockedAchievementsForDashboard(data.achievements);
+                return SizedBox(
+                  height: 180,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: unlockedAchievements.length,
+                    itemBuilder: (context, index) {
+                      return _AbundanceAchievementCard(
+                        theme: widget.theme,
+                        achievement: unlockedAchievements[index],
+                      );
+                    },
+                    separatorBuilder: (_, __) => const SizedBox(width: 12),
+                  ),
+                );
+              },
             ),
           ],
         );
       },
     );
   }
-
 }
 
 class _AbundanceDashboardData {
@@ -670,7 +684,7 @@ class _AbundanceDashboardData {
         momentumPoints = const <_AbundanceMomentumPoint>[],
         coach = null,
         councilRankLabel = '',
-        achievements = const <_AbundanceAchievement>[];
+        achievements = const <AbundanceDashboardAchievement>[];
 
   final bool allowed;
   final CompanyThemeData theme;
@@ -688,7 +702,7 @@ class _AbundanceDashboardData {
   final List<_AbundanceMomentumPoint> momentumPoints;
   final _AbundanceCoachProfile? coach;
   final String councilRankLabel;
-  final List<_AbundanceAchievement> achievements;
+  final List<AbundanceDashboardAchievement> achievements;
 
   // Named goalTotalScore for historical reasons (this dashboard used to
   // headline a pure goal-completion score); the ring now shows
@@ -770,8 +784,8 @@ class _AbundanceMomentumPoint {
   final double value;
 }
 
-class _AbundanceAchievement {
-  const _AbundanceAchievement({
+class AbundanceDashboardAchievement {
+  const AbundanceDashboardAchievement({
     required this.title,
     required this.subtitle,
     required this.icon,
@@ -968,7 +982,8 @@ class _AbundanceScorePanel extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: [
             theme.surfaceColor,
-            Color.alphaBlend(theme.primaryColor.withValues(alpha: 0.14), theme.backgroundColor),
+            Color.alphaBlend(theme.primaryColor.withValues(alpha: 0.14),
+                theme.backgroundColor),
           ],
         ),
         borderRadius: BorderRadius.circular(28),
@@ -1177,7 +1192,8 @@ class _AbundanceMomentumCard extends StatelessWidget {
     final hasData = points.any((point) => point.value > 0);
     final maxY = math.max(
       100.0,
-      points.fold<double>(0, (total, point) => math.max(total, point.value + 10)),
+      points.fold<double>(
+          0, (total, point) => math.max(total, point.value + 10)),
     );
 
     return Container(
@@ -1485,7 +1501,9 @@ class _AbundanceDeadlineTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(
-                late ? Icons.warning_amber_rounded : Icons.calendar_month_rounded,
+                late
+                    ? Icons.warning_amber_rounded
+                    : Icons.calendar_month_rounded,
                 color: late ? Colors.red : color,
                 size: 20,
               ),
@@ -1591,11 +1609,14 @@ class _AbundanceCoachCard extends StatelessWidget {
                   CircleAvatar(
                     radius: 20,
                     backgroundColor: theme.iconColor.withValues(alpha: 0.12),
-                    backgroundImage:
-                        coach!.profilePic.isNotEmpty ? NetworkImage(coach!.profilePic) : null,
+                    backgroundImage: coach!.profilePic.isNotEmpty
+                        ? NetworkImage(coach!.profilePic)
+                        : null,
                     child: coach!.profilePic.isEmpty
                         ? Text(
-                            coach!.name.isNotEmpty ? coach!.name[0].toUpperCase() : 'C',
+                            coach!.name.isNotEmpty
+                                ? coach!.name[0].toUpperCase()
+                                : 'C',
                             style: TextStyle(
                               color: theme.iconColor,
                               fontWeight: FontWeight.w900,
@@ -1639,7 +1660,8 @@ class _AbundanceCoachCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: theme.backgroundColor.withValues(alpha: 0.36),
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: theme.iconColor.withValues(alpha: 0.12)),
+              border:
+                  Border.all(color: theme.iconColor.withValues(alpha: 0.12)),
             ),
             child: Center(
               child: Column(
@@ -1734,14 +1756,17 @@ class _AbundanceCategoryCard extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(color: color.withValues(alpha: 0.14)),
                 ),
                 child: Text(
-                  empty ? 'No goals' : '$totalGoals goal${totalGoals == 1 ? '' : 's'}',
+                  empty
+                      ? 'No goals'
+                      : '$totalGoals goal${totalGoals == 1 ? '' : 's'}',
                   style: TextStyle(
                     color: color,
                     fontSize: 11,
@@ -1816,7 +1841,7 @@ class _AbundanceAchievementCard extends StatelessWidget {
   });
 
   final CompanyThemeData theme;
-  final _AbundanceAchievement achievement;
+  final AbundanceDashboardAchievement achievement;
 
   @override
   Widget build(BuildContext context) {

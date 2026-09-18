@@ -12,7 +12,7 @@ import 'package:selfcare_projects/src/features/abundance/widgets/abundance_card.
 /// The four-step member setup from the Abundance mobile app.
 ///
 /// This remains inside the company-gated feature. It mirrors the source
-/// app's single scrollable form per step while using InnerU's existing goal
+/// app's single scrollable form per step while using the A12-backed goal
 /// service for persistence.
 class AbundanceOnboardingScreen extends StatefulWidget {
   const AbundanceOnboardingScreen({

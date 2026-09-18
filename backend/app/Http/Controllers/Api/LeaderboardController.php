@@ -55,8 +55,10 @@ class LeaderboardController extends Controller
                     'goalScore' => $breakdown['goalScore'],
                     'coreTaskScore' => $breakdown['coreTaskScore'],
                     'overallScore' => $breakdown['overallScore'],
+                    ...$this->progressionForScore((float) $breakdown['overallScore']),
                     'profilePic' => $candidate->profile_pic,
                     'teamName' => $candidate->company_name,
+                    'isCoach' => (bool) $candidate->is_coach,
                     'firstCompletedTrackerAt' => $companyCompletionTimes[(string) $candidate->id] ?? null,
                 ];
             })
@@ -169,6 +171,7 @@ class LeaderboardController extends Controller
                             'goalScore' => $breakdown['goalScore'],
                             'coreTaskScore' => $breakdown['coreTaskScore'],
                             'overallScore' => $breakdown['overallScore'],
+                            ...$this->progressionForScore((float) $breakdown['overallScore']),
                             'profilePic' => $member->profile_pic,
                             'teamName' => $group->name,
                             'firstCompletedTrackerAt' => $groupCompletionTimes[(string) $member->id] ?? null,
@@ -233,6 +236,7 @@ class LeaderboardController extends Controller
                     'goalScore' => $breakdown['goalScore'],
                     'coreTaskScore' => $breakdown['coreTaskScore'],
                     'overallScore' => $breakdown['overallScore'],
+                    ...$this->progressionForScore((float) $breakdown['overallScore']),
                     'rank' => 0,
                     'profilePic' => $mentee->profile_pic,
                     'teamName' => $relation->group_name ?: $relation->team_name,
@@ -478,6 +482,7 @@ class LeaderboardController extends Controller
             'goalScore' => $score,
             'coreTaskScore' => 0.0,
             'overallScore' => $score,
+            ...$this->progressionForScore($score),
             'rank' => $rank,
             'profilePic' => $user->profile_pic,
             'teamName' => $teamName,
@@ -526,6 +531,46 @@ class LeaderboardController extends Controller
             'coreTaskScore' => (float) ($breakdown['coreTaskScore'] ?? 0.0),
             'overallScore' => (float) ($breakdown['overallScore'] ?? $fallback),
         ];
+    }
+
+    /**
+     * The canonical A12 progression ladder. Level and rank are derived from
+     * the same overall score used by the leaderboard, then sent to clients as
+     * data so each client does not invent a separate display ladder.
+     *
+     * @return array{level:int,levelName:string,rankKey:string}
+     */
+    private function progressionForScore(float $score): array
+    {
+        $score = max(0, min(100, $score));
+
+        return match (true) {
+            $score >= 100 => [
+                'level' => 5,
+                'levelName' => 'Immortal',
+                'rankKey' => 'IMMORTAL',
+            ],
+            $score > 75 => [
+                'level' => 4,
+                'levelName' => 'Divine',
+                'rankKey' => 'DIVINE',
+            ],
+            $score > 50 => [
+                'level' => 3,
+                'levelName' => 'Ancient',
+                'rankKey' => 'ANCIENT',
+            ],
+            $score > 25 => [
+                'level' => 2,
+                'levelName' => 'Legend',
+                'rankKey' => 'LEGEND',
+            ],
+            default => [
+                'level' => 1,
+                'levelName' => 'Archon',
+                'rankKey' => 'ARCHON',
+            ],
+        };
     }
 
     private function activeCompanyValue(?string $primary, ?string $fallback): string

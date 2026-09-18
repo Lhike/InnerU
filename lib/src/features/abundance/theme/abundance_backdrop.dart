@@ -38,10 +38,12 @@ class AbundanceBackdrop extends StatelessWidget {
                       imageFilter: ui.ImageFilter.blur(sigmaX: 5, sigmaY: 5),
                       child: Opacity(
                         opacity: 0.52,
-                        child: Image.asset(
-                          abundanceBackdropAsset,
-                          fit: BoxFit.cover,
-                          alignment: const Alignment(0, 0.1),
+                        child: AbundanceArtwork(
+                          child: Image.asset(
+                            abundanceBackdropAsset,
+                            fit: BoxFit.cover,
+                            alignment: const Alignment(0, 0.1),
+                          ),
                         ),
                       ),
                     ),
@@ -102,7 +104,9 @@ class AbundanceQuestScene extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             if (asset != null)
-              Image.asset(asset, fit: BoxFit.cover)
+              AbundanceArtwork(
+                child: Image.asset(asset, fit: BoxFit.cover),
+              )
             else
               // A12's CSS fallback: a light shaft over a tinted ground.
               DecoratedBox(

@@ -55,32 +55,20 @@ const List<AbundanceDestination> _memberDestinations = <AbundanceDestination>[
     icon: Icons.person_outline,
     kind: AbundanceDestinationKind.overflow,
   ),
-  AbundanceDestination(
-    key: 'notifications',
-    label: 'Notifications',
-    icon: Icons.notifications_none,
-    kind: AbundanceDestinationKind.overflow,
-  ),
-  AbundanceDestination(
-    key: 'more',
-    label: 'More',
-    icon: Icons.more_horiz,
-    kind: AbundanceDestinationKind.tab,
-  ),
 ];
 
 const List<AbundanceDestination> _coachDestinations = <AbundanceDestination>[
   AbundanceDestination(
-    key: 'coach_students',
-    label: 'Students',
-    icon: Icons.school_outlined,
-    kind: AbundanceDestinationKind.overflow,
+    key: 'more',
+    label: 'Coaching',
+    icon: Icons.more_horiz,
+    kind: AbundanceDestinationKind.tab,
     coachOnly: true,
   ),
   AbundanceDestination(
-    key: 'coach_councils',
-    label: 'Councils',
-    icon: Icons.diversity_3_outlined,
+    key: 'coach_students',
+    label: 'Students',
+    icon: Icons.school_outlined,
     kind: AbundanceDestinationKind.overflow,
     coachOnly: true,
   ),

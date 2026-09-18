@@ -249,6 +249,7 @@ class _LeaderboardState extends State<Leaderboard>
 
   List<LeaderboardEntry> _allEntries = [];
   List<A12LeaderboardEntry> _a12Entries = [];
+  List<A12LeaderboardEntry> _coachA12Entries = [];
   List<LeaderboardEntry> _menteeEntries = [];
   List<GroupLeaderboardSummary> _groupLeaderboards = [];
   bool _isLoading = true;
@@ -341,6 +342,7 @@ class _LeaderboardState extends State<Leaderboard>
       setState(() {
         _allEntries = const <LeaderboardEntry>[];
         _a12Entries = const <A12LeaderboardEntry>[];
+        _coachA12Entries = const <A12LeaderboardEntry>[];
         _menteeEntries = const <LeaderboardEntry>[];
         _groupLeaderboards = const <GroupLeaderboardSummary>[];
         _isLoading = false;
@@ -398,6 +400,7 @@ class _LeaderboardState extends State<Leaderboard>
         return entry.value.copyWith(rank: entry.key + 1);
       }).toList();
       final a12Entries = companyEntries.map(_toA12Entry).toList();
+      final coachA12Entries = snapshot.coachEntries.map(_toA12Entry).toList();
       final groups = snapshot.groups
           .map(
             (group) => GroupLeaderboardSummary(
@@ -453,6 +456,7 @@ class _LeaderboardState extends State<Leaderboard>
         _leaderboardPeriodStart = snapshot.leaderboardPeriodStart;
         _leaderboardPeriodEnd = snapshot.leaderboardPeriodEnd;
         _a12Entries = a12Entries;
+        _coachA12Entries = coachA12Entries;
         _allEntries = rankedCompany;
         _menteeEntries = menteeEntries.isEmpty ? rankedCompany : menteeEntries;
         _groupLeaderboards = groups;
@@ -543,8 +547,10 @@ class _LeaderboardState extends State<Leaderboard>
                 isDark: true,
               )
             : resolvedTheme;
+        final showAbundanceCoachBoard =
+            _isAbundanceCompany && _isCoachUser && _coachA12Entries.isNotEmpty;
         return DefaultTabController(
-          length: 2,
+          length: showAbundanceCoachBoard || !_isAbundanceCompany ? 2 : 1,
           child: Theme(
             data: Theme.of(context).copyWith(
               scaffoldBackgroundColor: companyTheme.backgroundColor,
@@ -612,6 +618,15 @@ class _LeaderboardState extends State<Leaderboard>
                     ),
               body: Column(
                 children: [
+                  if (showAbundanceCoachBoard)
+                    TabBar(
+                      isScrollable: true,
+                      indicatorColor: companyTheme.primaryColor,
+                      tabs: const [
+                        Tab(text: 'Users'),
+                        Tab(text: 'Coaches'),
+                      ],
+                    ),
                   if (_leaderboardPeriodStart != null &&
                       _leaderboardPeriodEnd != null)
                     _LeaderboardPeriodBanner(
@@ -633,7 +648,7 @@ class _LeaderboardState extends State<Leaderboard>
                             )
                           : TabBarView(
                               children: [
-                                widget.appBarTitle == 'Allies'
+                                _isAbundanceCompany
                                     ? _AbundanceAlliesBoard(
                                         entries: _a12Entries,
                                         isLoading: _isA12Loading,
@@ -642,43 +657,66 @@ class _LeaderboardState extends State<Leaderboard>
                                                 .instance.currentSession?.id
                                                 .toString() ??
                                             '',
-                                        onLeaveCouncil: widget.onLeaveCouncil,
                                         tutorialController:
                                             widget.tutorialController,
                                       )
-                                    : _A12LeaderboardBoard(
-                                        key: const ValueKey('company'),
-                                        entries: _a12Entries,
-                                        isLoading: _isA12Loading,
-                                        theme: companyTheme,
-                                        currentUserId: AuthService
-                                                .instance.currentSession?.id
-                                                .toString() ??
-                                            '',
-                                        showRankLabels: _isAbundanceCompany,
-                                        title: 'Company leaderboard',
-                                        onEntryTap: (entry) =>
-                                            _showScoreBreakdown(
-                                          context,
-                                          entry,
-                                          companyTheme,
-                                        ),
-                                      ),
-                                _GroupLeaderboardsBoard(
-                                  groups: _groupLeaderboards,
-                                  allMenteeEntries: _isCoachUser
-                                      ? _menteeEntries
-                                      : _allEntries,
-                                  isLoading: _isLoading,
-                                  isCoachUser: _isCoachUser,
-                                  view: _CoachLeaderboardView.groups,
-                                  theme: companyTheme,
-                                  onEntryTap: (entry) => _showPointsBreakdown(
-                                    context,
-                                    entry,
-                                    companyTheme,
+                                    : widget.appBarTitle == 'Allies'
+                                        ? _AbundanceAlliesBoard(
+                                            entries: _a12Entries,
+                                            isLoading: _isA12Loading,
+                                            theme: companyTheme,
+                                            currentUserId: AuthService
+                                                    .instance.currentSession?.id
+                                                    .toString() ??
+                                                '',
+                                            onLeaveCouncil:
+                                                widget.onLeaveCouncil,
+                                            tutorialController:
+                                                widget.tutorialController,
+                                          )
+                                        : _A12LeaderboardBoard(
+                                            key: const ValueKey('company'),
+                                            entries: _a12Entries,
+                                            isLoading: _isA12Loading,
+                                            theme: companyTheme,
+                                            currentUserId: AuthService
+                                                    .instance.currentSession?.id
+                                                    .toString() ??
+                                                '',
+                                            showRankLabels: _isAbundanceCompany,
+                                            title: 'Company leaderboard',
+                                            onEntryTap: (entry) =>
+                                                _showScoreBreakdown(
+                                              context,
+                                              entry,
+                                              companyTheme,
+                                            ),
+                                          ),
+                                if (showAbundanceCoachBoard)
+                                  _AbundanceAlliesBoard(
+                                    entries: _coachA12Entries,
+                                    isLoading: _isA12Loading,
+                                    theme: companyTheme,
+                                    currentUserId: AuthService
+                                            .instance.currentSession?.id
+                                            .toString() ??
+                                        '',
+                                    tutorialController:
+                                        widget.tutorialController,
+                                  )
+                                else if (!_isAbundanceCompany)
+                                  _GroupLeaderboardsBoard(
+                                    groups: _groupLeaderboards,
+                                    allMenteeEntries: _isCoachUser
+                                        ? _menteeEntries
+                                        : _allEntries,
+                                    isLoading: _isLoading,
+                                    isCoachUser: _isCoachUser,
+                                    view: _CoachLeaderboardView.groups,
+                                    theme: companyTheme,
+                                    onEntryTap: (entry) => _showPointsBreakdown(
+                                        context, entry, companyTheme),
                                   ),
-                                ),
                               ],
                             ),
                     ),

@@ -59,14 +59,31 @@ class AbundanceCouncilService {
 
   Future<AbundanceCouncil?> fetchCurrent() async {
     final response = await _transport.getJson('/guild');
-    final raw = response['councils'];
+    final direct = response['currentCouncil'] ??
+        response['current_council'] ??
+        response['council'];
+    if (direct is Map) {
+      final council =
+          AbundanceCouncil.fromJson(Map<String, dynamic>.from(direct));
+      if (council.id.isNotEmpty && council.name.isNotEmpty) return council;
+    }
+
+    final raw = response['councils'] ?? response['guild'];
+    if (raw is Map) {
+      final council = AbundanceCouncil.fromJson(Map<String, dynamic>.from(raw));
+      if (council.id.isNotEmpty && council.name.isNotEmpty) return council;
+      return null;
+    }
     if (raw is! List) return null;
+    AbundanceCouncil? first;
     for (final item in raw.whereType<Map>()) {
       final council =
           AbundanceCouncil.fromJson(Map<String, dynamic>.from(item));
-      if (council.isCurrent || council.id.isNotEmpty) return council;
+      if (council.id.isEmpty || council.name.isEmpty) continue;
+      first ??= council;
+      if (council.isCurrent) return council;
     }
-    return null;
+    return first;
   }
 
   Future<void> join(String councilId) async {

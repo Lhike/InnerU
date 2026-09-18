@@ -9,6 +9,32 @@ import 'package:flutter/material.dart';
 class AbundanceColors {
   const AbundanceColors._();
 
+  static bool lightAppearanceActive = false;
+
+  static const ColorFilter restoreArtworkColorFilter =
+      ColorFilter.matrix(<double>[
+    -1,
+    0,
+    0,
+    0,
+    255,
+    0,
+    -1,
+    0,
+    0,
+    255,
+    0,
+    0,
+    -1,
+    0,
+    255,
+    0,
+    0,
+    0,
+    1,
+    0,
+  ]);
+
   static const Color background = Color(0xFF080C1C);
   static const Color surfaceRaised = Color(0xFF0D1330);
   static const Color surfaceSunken = Color(0xFF060916);
@@ -28,15 +54,15 @@ class AbundanceColors {
   static const Color categoryProfessional = Color(0xFFA98BFF);
   static const Color categoryContribution = Color(0xFF58C8FF);
 
+  /// [categoryCode] is a `GoalCategory.code` value (e.g. `'PERSONAL'`).
+  static Color categoryColor(String categoryCode) =>
+      _categoryColors[categoryCode] ?? muted;
+
   static const Map<String, Color> _categoryColors = {
     'PERSONAL': categoryPersonal,
     'PROFESSIONAL': categoryProfessional,
     'CONTRIBUTION': categoryContribution,
   };
-
-  /// [categoryCode] is a `GoalCategory.code` value (e.g. `'PERSONAL'`).
-  static Color categoryColor(String categoryCode) =>
-      _categoryColors[categoryCode] ?? muted;
 
   /// A12's four score bands: >=80 excellent, >=60 good, >=40 warning, else
   /// critical (matches the score-color naming in `globals.css`; exact
@@ -46,5 +72,48 @@ class AbundanceColors {
     if (score >= 60) return scoreGood;
     if (score >= 40) return scoreWarning;
     return scoreCritical;
+  }
+}
+
+/// Keeps A12 artwork in its authored colors when the shell applies its light
+/// appearance treatment to the surrounding UI.
+class AbundanceArtwork extends StatelessWidget {
+  const AbundanceArtwork({
+    super.key,
+    required this.child,
+    this.enabled = true,
+  });
+
+  final Widget child;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!enabled || !AbundanceColors.lightAppearanceActive) return child;
+    return ColorFiltered(
+      colorFilter: const ColorFilter.matrix(<double>[
+        -1,
+        0,
+        0,
+        0,
+        255,
+        0,
+        -1,
+        0,
+        0,
+        255,
+        0,
+        0,
+        -1,
+        0,
+        255,
+        0,
+        0,
+        0,
+        1,
+        0,
+      ]),
+      child: child,
+    );
   }
 }

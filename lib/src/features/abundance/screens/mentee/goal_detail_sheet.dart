@@ -127,7 +127,12 @@ class _GoalDetailSheetState extends State<GoalDetailSheet> {
 
   Future<void> _logToday(GoalSummary goal) async {
     final amount = double.tryParse(_logController.text.trim());
-    if (amount == null || amount <= 0) return;
+    if (amount == null || amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a number greater than 0.')),
+      );
+      return;
+    }
     final nextValue = goal.direction == GoalDirection.lose
         ? math.max(0, goal.currentValue - amount)
         : goal.currentValue + amount;

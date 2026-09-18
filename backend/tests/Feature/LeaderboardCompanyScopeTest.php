@@ -149,6 +149,54 @@ class LeaderboardCompanyScopeTest extends TestCase
         );
     }
 
+    public function test_company_leaderboard_returns_canonical_progression_for_each_member(): void
+    {
+        $company = $this->makeCompany('Abundance', 'ABUNDANCE');
+        $legend = User::factory()->create([
+            'company_id' => $company->id,
+            'company_code' => $company->code,
+            'company_name' => $company->name,
+        ]);
+        $archon = User::factory()->create([
+            'company_id' => $company->id,
+            'company_code' => $company->code,
+            'company_name' => $company->name,
+        ]);
+
+        $scoreService = Mockery::mock(UserScoreService::class);
+        $scoreService
+            ->shouldReceive('resolveBreakdownForUsers')
+            ->once()
+            ->andReturn([
+                (string) $legend->id => [
+                    'goalScore' => 35.0,
+                    'coreTaskScore' => 0.0,
+                    'overallScore' => 35.0,
+                ],
+                (string) $archon->id => [
+                    'goalScore' => 25.0,
+                    'coreTaskScore' => 0.0,
+                    'overallScore' => 25.0,
+                ],
+            ]);
+        $scoreService
+            ->shouldReceive('firstCompletedDailyTrackerAtForUsers')
+            ->andReturn([]);
+        $this->app->instance(UserScoreService::class, $scoreService);
+
+        Sanctum::actingAs($legend);
+
+        $response = $this->getJson('/api/leaderboard');
+
+        $response->assertOk();
+        $response->assertJsonPath('companyLeaderboard.0.level', 2);
+        $response->assertJsonPath('companyLeaderboard.0.levelName', 'Legend');
+        $response->assertJsonPath('companyLeaderboard.0.rankKey', 'LEGEND');
+        $response->assertJsonPath('companyLeaderboard.1.level', 1);
+        $response->assertJsonPath('companyLeaderboard.1.levelName', 'Archon');
+        $response->assertJsonPath('companyLeaderboard.1.rankKey', 'ARCHON');
+    }
+
     public function test_a_user_with_a_matching_company_code_is_still_included_even_if_their_company_id_has_drifted(): void
     {
         $company = $this->makeCompany('Gencys', 'GENTIKG');

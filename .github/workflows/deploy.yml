@@ -101,8 +101,9 @@ jobs:
             composer install --no-interaction --prefer-dist --no-dev --optimize-autoloader
             php artisan migrate --force
             php artisan config:clear
+            php artisan route:clear
           else
-            docker compose exec -T inneru_api sh -lc 'composer install --no-interaction --prefer-dist --no-dev --optimize-autoloader && php artisan migrate --force && php artisan config:clear'
+            docker compose exec -T inneru_api sh -lc 'composer install --no-interaction --prefer-dist --no-dev --optimize-autoloader && php artisan migrate --force && php artisan config:clear && php artisan route:clear'
           fi
 
           if [ -n "$DEPLOY_RESTART_COMMAND" ]; then

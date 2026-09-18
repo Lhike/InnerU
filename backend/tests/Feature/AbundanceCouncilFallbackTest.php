@@ -137,8 +137,8 @@ class AbundanceCouncilFallbackTest extends TestCase
 
         $this->getJson('/api/abundance/guild')
             ->assertOk()
-            ->assertJsonCount(0, 'councils')
-            ->assertJsonCount(0, 'members');
+            ->assertJsonCount(1, 'users')
+            ->assertJsonMissingPath('councils');
     }
 
     public function test_join_and_leave_update_the_coach_group_membership(): void
@@ -163,24 +163,16 @@ class AbundanceCouncilFallbackTest extends TestCase
         Sanctum::actingAs($user);
 
         $this->postJson('/api/abundance/guild/join', ['councilId' => 'dawn'])
-            ->assertOk()
-            ->assertJsonPath('ok', true);
-        $this->assertDatabaseHas('coach_mentees', [
-            'coach_id' => (string) $coach->id,
+            ->assertForbidden();
+        $this->assertDatabaseMissing('coach_mentees', [
             'mentee_id' => (string) $user->id,
-            'group_id' => 'dawn',
         ]);
 
         $this->getJson('/api/abundance/guild')
             ->assertOk()
-            ->assertJsonPath('councils.0.id', 'dawn');
+            ->assertJsonCount(1, 'users');
 
         $this->postJson('/api/abundance/guild/leave')
-            ->assertOk();
-        $this->assertDatabaseHas('coach_mentees', [
-            'coach_id' => (string) $coach->id,
-            'mentee_id' => (string) $user->id,
-            'group_id' => null,
-        ]);
+            ->assertForbidden();
     }
 }

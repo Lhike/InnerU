@@ -35,8 +35,7 @@ class AbundancePostAuthGate extends StatefulWidget {
 }
 
 class _AbundancePostAuthGateState extends State<AbundancePostAuthGate> {
-  late final AbundanceOnboardingService _service =
-      widget.service ??
+  late final AbundanceOnboardingService _service = widget.service ??
       AbundanceOnboardingService(
         goals: GoalsService(null, A12ApiTransport()),
       );
@@ -50,10 +49,9 @@ class _AbundancePostAuthGateState extends State<AbundancePostAuthGate> {
       );
 
   bool get _needsCompanyResolution =>
-      !widget.isCoach && (widget.companyTheme == null || _isAbundance);
+      widget.companyTheme == null || _isAbundance;
 
   Future<bool> _resolve() async {
-    if (widget.isCoach) return true;
     if (widget.companyTheme != null && !_isAbundance) return true;
 
     // A restored session may not have a persisted theme yet. Resolve the

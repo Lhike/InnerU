@@ -15,10 +15,12 @@ class AbundanceCoachStudentsScreen extends StatelessWidget {
     super.key,
     this.loader,
     required this.onOpenManagement,
+    this.onOpenStudent,
   });
 
   final AbundanceCoachCollectionLoader? loader;
   final VoidCallback onOpenManagement;
+  final ValueChanged<Map<String, dynamic>>? onOpenStudent;
 
   @override
   Widget build(BuildContext context) => _AbundanceCoachCollectionScreen(
@@ -35,6 +37,7 @@ class AbundanceCoachStudentsScreen extends StatelessWidget {
         ),
         actionLabel: 'Manage students',
         onAction: onOpenManagement,
+        onItemTap: onOpenStudent,
       );
 }
 
@@ -43,10 +46,12 @@ class AbundanceCoachCouncilsScreen extends StatelessWidget {
     super.key,
     this.loader,
     required this.onOpenMeetings,
+    this.createGroup,
   });
 
   final AbundanceCoachCollectionLoader? loader;
   final VoidCallback onOpenMeetings;
+  final Future<String> Function(String name)? createGroup;
 
   @override
   Widget build(BuildContext context) => _AbundanceCoachCollectionScreen(
@@ -61,6 +66,8 @@ class AbundanceCoachCouncilsScreen extends StatelessWidget {
         },
         actionLabel: 'Council meetings',
         onAction: onOpenMeetings,
+        createGroup: createGroup ??
+            ((name) => CoachApiService.instance.createGroup(name: name)),
       );
 }
 
@@ -116,6 +123,8 @@ class _AbundanceCoachCollectionScreen extends StatefulWidget {
     required this.subtitle,
     this.actionLabel,
     this.onAction,
+    this.createGroup,
+    this.onItemTap,
   });
 
   final String title;
@@ -126,6 +135,8 @@ class _AbundanceCoachCollectionScreen extends StatefulWidget {
   final String Function(Map<String, dynamic>) subtitle;
   final String? actionLabel;
   final VoidCallback? onAction;
+  final Future<String> Function(String name)? createGroup;
+  final ValueChanged<Map<String, dynamic>>? onItemTap;
 
   @override
   State<_AbundanceCoachCollectionScreen> createState() =>
@@ -140,6 +151,54 @@ class _AbundanceCoachCollectionScreenState
     final future = widget.loader();
     setState(() => _future = future);
     await future;
+  }
+
+  Future<void> _showCreateCouncil() async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AbundanceColors.surfaceRaised,
+        title: const Text('Create council',
+            style: TextStyle(color: AbundanceColors.foreground)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: AbundanceColors.foreground),
+          decoration: const InputDecoration(
+            labelText: 'Council name',
+            labelStyle: TextStyle(color: AbundanceColors.muted),
+          ),
+          onSubmitted: (value) => Navigator.pop(dialogContext, value.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || name == null || name.trim().isEmpty) return;
+    try {
+      await widget.createGroup!(name.trim());
+      await _reload();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Council created.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Council could not be created.')),
+      );
+    }
   }
 
   @override
@@ -195,6 +254,17 @@ class _AbundanceCoachCollectionScreenState
                           .copyWith(color: AbundanceColors.muted),
                     ),
                     const SizedBox(height: 18),
+                    if (widget.createGroup != null) ...[
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: FilledButton.icon(
+                          onPressed: _showCreateCouncil,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Create council'),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
                     for (final item in items)
                       AbundanceCard(
                         margin: const EdgeInsets.only(bottom: 10),
@@ -213,6 +283,9 @@ class _AbundanceCoachCollectionScreenState
                             style: AbundanceTypography.body
                                 .copyWith(color: AbundanceColors.muted),
                           ),
+                          onTap: widget.onItemTap == null
+                              ? null
+                              : () => widget.onItemTap!(item),
                         ),
                       ),
                     if (widget.onAction != null)

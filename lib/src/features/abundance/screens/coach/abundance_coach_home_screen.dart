@@ -18,6 +18,11 @@ class AbundanceCoachHomeScreen extends StatelessWidget {
     (key: 'coach_councils', label: 'Councils', icon: Icons.groups_outlined),
     (key: 'coach_core_tasks', label: 'Core Tasks', icon: Icons.checklist),
     (key: 'coach_quests', label: 'Quest List', icon: Icons.flag_outlined),
+    (
+      key: 'coach_directory',
+      label: 'Coaches',
+      icon: Icons.auto_awesome_outlined
+    ),
   ];
 
   @override

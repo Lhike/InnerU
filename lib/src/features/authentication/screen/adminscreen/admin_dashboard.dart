@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/adminscreen/addcoach.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/adminscreen/admin_daily_tracker_overview.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/adminscreen/admin_profile.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/adminscreen/abundance_management.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/adminscreen/manage_companies.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/adminscreen/viewalluser.dart';
 import 'package:selfcare_projects/src/services/admin_access.dart';
@@ -159,12 +160,11 @@ class _AdminDashboardContentState extends State<_AdminDashboardContent> {
         .where((company) => company.id != 'No company assigned')
         .take(5)
         .map((company) {
-          return _RecentCompany(
-            name: company.name,
-            code: company.code,
-          );
-        })
-        .toList();
+      return _RecentCompany(
+        name: company.name,
+        code: company.code,
+      );
+    }).toList();
 
     return _AdminDashboardData(
       userCount: users.length,
@@ -195,7 +195,9 @@ class _AdminDashboardContentState extends State<_AdminDashboardContent> {
   }
 
   DateTime _sortDate(AdminUserApiUser user) {
-    return user.updatedAt ?? user.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+    return user.updatedAt ??
+        user.createdAt ??
+        DateTime.fromMillisecondsSinceEpoch(0);
   }
 
   Future<void> _copyCompanyCode(String code) async {
@@ -241,6 +243,14 @@ class _AdminDashboardContentState extends State<_AdminDashboardContent> {
       MaterialPageRoute(
         builder: (context) => const AdminDailyTrackerOverviewScreen(),
       ),
+    );
+  }
+
+  void _openAbundanceManagement() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+          builder: (context) => const AbundanceManagementScreen()),
     );
   }
 
@@ -479,6 +489,13 @@ class _AdminDashboardContentState extends State<_AdminDashboardContent> {
             title: 'Daily tracker overview',
             subtitle: "Monitor every user's daily checklist progress.",
             onTap: _openDailyTrackerOverview,
+          ),
+          const Divider(height: 1),
+          _ActionTile(
+            icon: CupertinoIcons.person_3_fill,
+            title: 'Abundance Management',
+            subtitle: 'Assign Abundance students, goals, and quests.',
+            onTap: _openAbundanceManagement,
           ),
         ],
       ),
@@ -973,8 +990,10 @@ class _RecentUser {
       name: user.name.isNotEmpty ? user.name : 'Unknown User',
       email: user.email.isNotEmpty ? user.email : 'No email',
       role: user.role.isNotEmpty ? user.role : 'user',
-      companyName: user.companyName?.isNotEmpty == true ? user.companyName! : '',
-      companyCode: user.companyCode?.isNotEmpty == true ? user.companyCode! : '',
+      companyName:
+          user.companyName?.isNotEmpty == true ? user.companyName! : '',
+      companyCode:
+          user.companyCode?.isNotEmpty == true ? user.companyCode! : '',
     );
   }
 

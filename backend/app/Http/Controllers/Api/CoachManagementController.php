@@ -213,6 +213,9 @@ class CoachManagementController extends Controller
         if ($user === null || ! $this->userCanManageGroup($user, $group)) {
             return response()->json(['message' => 'Unauthorized.'], Response::HTTP_UNAUTHORIZED);
         }
+        if ($this->isAbundanceUser($user)) {
+            return response()->json(['message' => 'Abundance student assignments are managed by an admin.'], Response::HTTP_FORBIDDEN);
+        }
 
         if (! $request->has('name') && ! $request->has('photo_url')) {
             return response()->json([
@@ -535,6 +538,9 @@ class CoachManagementController extends Controller
         if ($user === null) {
             return response()->json(['message' => 'Unauthorized.'], Response::HTTP_UNAUTHORIZED);
         }
+        if ($this->isAbundanceUser($user)) {
+            return response()->json(['message' => 'Abundance student assignments are managed by an admin.'], Response::HTTP_FORBIDDEN);
+        }
 
         $validated = $request->validate([
             'mentee_id' => ['required', 'string', 'max:255'],
@@ -619,6 +625,9 @@ class CoachManagementController extends Controller
         $user = $request->user();
         if ($user === null) {
             return response()->json(['message' => 'Unauthorized.'], Response::HTTP_UNAUTHORIZED);
+        }
+        if ($this->isAbundanceUser($user)) {
+            return response()->json(['message' => 'Abundance student assignments are managed by an admin.'], Response::HTTP_FORBIDDEN);
         }
 
         // A mentee may now have several rows for this coach (one per
@@ -759,6 +768,9 @@ class CoachManagementController extends Controller
         if ($user === null) {
             return response()->json(['message' => 'Unauthorized.'], Response::HTTP_UNAUTHORIZED);
         }
+        if ($this->isAbundanceUser($user)) {
+            return response()->json(['message' => 'Abundance coach assignments are managed by an admin.'], Response::HTTP_FORBIDDEN);
+        }
 
         $validated = $request->validate([
             'coach_id' => ['required', 'string', 'max:255'],
@@ -817,6 +829,9 @@ class CoachManagementController extends Controller
         $user = $request->user();
         if ($user === null) {
             return response()->json(['message' => 'Unauthorized.'], Response::HTTP_UNAUTHORIZED);
+        }
+        if ($this->isAbundanceUser($user)) {
+            return response()->json(['message' => 'Abundance coach assignments are managed by an admin.'], Response::HTTP_FORBIDDEN);
         }
 
         $validated = $request->validate([
@@ -1114,6 +1129,12 @@ class CoachManagementController extends Controller
     {
         $role = strtolower(trim((string) $user->role));
         return $role === 'coach' || (bool) $user->is_coach;
+    }
+
+    private function isAbundanceUser(User $user): bool
+    {
+        return strtoupper(trim((string) ($user->active_company_code ?: $user->company_code))) === 'ABU15DN'
+            || strtoupper(trim((string) $user->company_code)) === 'ABU15DN';
     }
 
     private function activeCompanyValue(?string $primary, ?string $fallback): string

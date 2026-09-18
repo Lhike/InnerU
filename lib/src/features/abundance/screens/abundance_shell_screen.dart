@@ -11,6 +11,7 @@ import 'package:selfcare_projects/src/features/abundance/screens/member/abundanc
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_notifications_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_tutorial_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/coach/abundance_coach_management_screens.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/coach/abundance_coach_student_file_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/coach/coach_quests_roster_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/abundance_mentee_dashboard_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/goals_hub_screen.dart';
@@ -170,7 +171,6 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
           onOpenAccountSettings: () {},
           onOpenAchievements: () => _onTabTapped(3),
           appearance: _appearance,
-          isCoach: widget.isCoach,
           onAppearanceChanged: (value) => unawaited(_setAppearance(value)),
           onSignOut: _confirmSignOut,
           onReplayTutorial: () => unawaited(_openDestination('tutorial')),
@@ -235,6 +235,9 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         await _push(
           AbundanceCoachStudentsScreen(
             onOpenManagement: () => _push(const CoachDashboardScreen()),
+            onOpenStudent: (student) => _push(
+              AbundanceCoachStudentFileScreen(student: student),
+            ),
           ),
         );
         return;
@@ -299,12 +302,16 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   }
 
   void _showMore() {
-    showModalBottomSheet<void>(
+    showDialog<void>(
       context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
+      barrierColor: Colors.black.withValues(alpha: .72),
       builder: (_) => AbundanceMoreSheet(
         isCoach: widget.isCoach,
+        displayName: AuthService.instance.currentSession?.name ?? '',
+        email: AuthService.instance.currentSession?.email ?? '',
+        roleLabel: widget.isCoach ? 'Coach' : 'Student',
+        appearance: _appearance,
+        onAppearanceChanged: (value) => unawaited(_setAppearance(value)),
         onDestination: (key) {
           Navigator.of(context).pop();
           unawaited(_openDestination(key));
@@ -543,6 +550,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
               '',
           displayName: AuthService.instance.currentSession?.name ?? '',
           email: AuthService.instance.currentSession?.email ?? '',
+          roleLabel: widget.isCoach ? 'Coach' : 'Student',
           appearance: _appearance,
           onAppearanceChanged: (value) => unawaited(_setAppearance(value)),
           onSelected: (value) {
@@ -593,7 +601,9 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       ),
       bottomNavigationBar: _AbundanceBottomNavigationBar(
         currentIndex: _index,
+        isCoach: widget.isCoach,
         onTap: _onTabTapped,
+        onMore: _showMore,
       ),
     );
     final lightMode = _appearance == 'light' ||
@@ -653,13 +663,17 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
 class _AbundanceBottomNavigationBar extends StatelessWidget {
   const _AbundanceBottomNavigationBar({
     required this.currentIndex,
+    required this.isCoach,
     required this.onTap,
+    required this.onMore,
   });
 
   final int currentIndex;
+  final bool isCoach;
   final ValueChanged<int> onTap;
+  final VoidCallback onMore;
 
-  static const labels = [
+  static const memberLabels = [
     'Home',
     'Mission',
     'Quests',
@@ -667,7 +681,7 @@ class _AbundanceBottomNavigationBar extends StatelessWidget {
     'Guild',
     'Profile',
   ];
-  static const icons = [
+  static const memberIcons = [
     Icons.home_outlined,
     Icons.calendar_month_outlined,
     Icons.flag_outlined,
@@ -678,6 +692,14 @@ class _AbundanceBottomNavigationBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final labels = <String>[
+      ...memberLabels,
+      if (isCoach) 'Coaching',
+    ];
+    final icons = <IconData>[
+      ...memberIcons,
+      if (isCoach) Icons.more_horiz,
+    ];
     return Semantics(
       label: 'Abundance primary navigation',
       child: Container(
@@ -704,7 +726,8 @@ class _AbundanceBottomNavigationBar extends StatelessWidget {
                           icon: icons[i],
                           label: labels[i],
                           active: currentIndex == i,
-                          onTap: () => onTap(i),
+                          onTap: () =>
+                              i == memberLabels.length ? onMore() : onTap(i),
                         ),
                       ),
                   ],

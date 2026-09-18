@@ -10,9 +10,15 @@ class LeaderboardApiCompanyEntry {
     required this.coreTaskScore,
     required this.overallScore,
     required this.rank,
+    this.level,
+    this.levelName,
+    this.rankKey,
     this.profilePic,
     this.teamName,
     this.firstCompletedTrackerAt,
+    this.personalScore,
+    this.professionalScore,
+    this.contributionScore,
   });
 
   final String userId;
@@ -22,9 +28,15 @@ class LeaderboardApiCompanyEntry {
   final num coreTaskScore;
   final num overallScore;
   final int rank;
+  final int? level;
+  final String? levelName;
+  final String? rankKey;
   final String? profilePic;
   final String? teamName;
   final String? firstCompletedTrackerAt;
+  final num? personalScore;
+  final num? professionalScore;
+  final num? contributionScore;
 
   factory LeaderboardApiCompanyEntry.fromJson(Map<String, dynamic> json) {
     final score = _parseApiNumber(json['score']);
@@ -34,6 +46,9 @@ class LeaderboardApiCompanyEntry {
       json['overallScore'],
       fallback: score,
     );
+    final goalScores = json['goalScores'] is Map
+        ? Map<String, dynamic>.from(json['goalScores'] as Map)
+        : const <String, dynamic>{};
 
     return LeaderboardApiCompanyEntry(
       userId: json['userId']?.toString() ?? '',
@@ -45,9 +60,17 @@ class LeaderboardApiCompanyEntry {
       rank: json['rank'] is int
           ? json['rank'] as int
           : int.tryParse(json['rank']?.toString() ?? '') ?? 0,
+      level: json['level'] is int
+          ? json['level'] as int
+          : int.tryParse(json['level']?.toString() ?? ''),
+      levelName: json['levelName']?.toString(),
+      rankKey: json['rankKey']?.toString(),
       profilePic: json['profilePic']?.toString(),
       teamName: json['teamName']?.toString(),
       firstCompletedTrackerAt: json['firstCompletedTrackerAt']?.toString(),
+      personalScore: _optionalApiNumber(goalScores['personal']),
+      professionalScore: _optionalApiNumber(goalScores['professional']),
+      contributionScore: _optionalApiNumber(goalScores['contribution']),
     );
   }
 }
@@ -153,6 +176,7 @@ class LeaderboardApiSnapshot {
     required this.entries,
     required this.groups,
     required this.menteeEntries,
+    this.coachEntries = const <LeaderboardApiCompanyEntry>[],
   });
 
   final String companyCode;
@@ -162,6 +186,7 @@ class LeaderboardApiSnapshot {
   final List<LeaderboardApiCompanyEntry> entries;
   final List<LeaderboardApiGroup> groups;
   final List<LeaderboardApiGroupMember> menteeEntries;
+  final List<LeaderboardApiCompanyEntry> coachEntries;
 
   factory LeaderboardApiSnapshot.fromJson(Map<String, dynamic> json) {
     final company = json['company'] is Map
@@ -231,6 +256,13 @@ num _parseApiNumber(dynamic value, {num fallback = 0}) {
 
   final parsed = num.tryParse(value?.toString() ?? '');
   return parsed ?? fallback;
+}
+
+num? _optionalApiNumber(dynamic value) {
+  if (value is num) return value;
+  final raw = value?.toString().trim() ?? '';
+  if (raw.isEmpty) return null;
+  return num.tryParse(raw);
 }
 
 DateTime? _parseApiDate(dynamic value) {
