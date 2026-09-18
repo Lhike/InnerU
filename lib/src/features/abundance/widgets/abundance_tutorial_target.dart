@@ -72,19 +72,49 @@ class _AbundanceTutorialTargetState extends State<AbundanceTutorialTarget> {
         final targetContext = _key.currentContext;
         if (targetContext == null) return;
         final render = targetContext.findRenderObject();
-        final targetHeight = render is RenderBox ? render.size.height : 0;
-        final viewportHeight = MediaQuery.sizeOf(targetContext).height;
-        Scrollable.ensureVisible(
-          targetContext,
-          duration: const Duration(milliseconds: 260),
-          curve: Curves.easeOutCubic,
-          // Short controls sit above a bottom sheet; large cards/lists sit
-          // below a top sheet so the modal never covers the highlighted area.
-          alignment: targetHeight >= viewportHeight * .45 ? .78 : .08,
+        if (render is! RenderBox || !render.hasSize) return;
+
+        final scrollable = Scrollable.maybeOf(targetContext);
+        final viewport = scrollable?.context.findRenderObject();
+        if (scrollable == null || viewport is! RenderBox || !viewport.hasSize) {
+          Scrollable.ensureVisible(
+            targetContext,
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+            alignment: .4,
+          );
+          _remeasureAfterScroll();
+          return;
+        }
+
+        final targetOffset = render.localToGlobal(Offset.zero);
+        final viewportOffset = viewport.localToGlobal(Offset.zero);
+        final requestedOffset = tutorialScrollOffset(
+          targetTop: targetOffset.dy,
+          targetHeight: render.size.height,
+          viewportTop: viewportOffset.dy,
+          currentOffset: scrollable.position.pixels,
+          viewportHeight: viewport.size.height,
         );
+        if (requestedOffset != null) {
+          scrollable.position.animateTo(
+            requestedOffset,
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+          );
+          _remeasureAfterScroll();
+        }
       });
       WidgetsBinding.instance.scheduleFrame();
     }
+  }
+
+  void _remeasureAfterScroll() {
+    Future<void>.delayed(const Duration(milliseconds: 320), () {
+      if (!mounted || widget.controller?.active != true) return;
+      if (widget.controller?.step.target != widget.name) return;
+      _measure();
+    });
   }
 
   @override
