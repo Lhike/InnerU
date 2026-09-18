@@ -46,11 +46,16 @@ class _AbundanceTutorialTargetState extends State<AbundanceTutorialTarget> {
         if (!mounted || widget.controller?.active != true) return;
         final targetContext = _key.currentContext;
         if (targetContext == null) return;
+        final render = targetContext.findRenderObject();
+        final targetHeight = render is RenderBox ? render.size.height : 0;
+        final viewportHeight = MediaQuery.sizeOf(targetContext).height;
         Scrollable.ensureVisible(
           targetContext,
           duration: const Duration(milliseconds: 260),
           curve: Curves.easeOutCubic,
-          alignment: .24,
+          // Short controls sit above a bottom sheet; large cards/lists sit
+          // below a top sheet so the modal never covers the highlighted area.
+          alignment: targetHeight >= viewportHeight * .45 ? .78 : .08,
         );
       });
     }

@@ -20,7 +20,7 @@ class AbundanceTutorialOverlay extends StatelessWidget {
         ? null
         : Rect.fromLTWH(target.left - 6, target.top - 6, target.width + 12,
             target.height + 12);
-    final placement = tutorialSheetPlacement(
+    final calculatedPlacement = tutorialSheetPlacement(
       targetTop: ring?.top,
       targetBottom: ring?.bottom,
       sheetHeight: 430,
@@ -28,6 +28,9 @@ class AbundanceTutorialOverlay extends StatelessWidget {
       safeBottom: size.height - MediaQuery.paddingOf(context).bottom - 80,
       gap: 12,
     );
+    final placement = ring != null && ring.height >= size.height * .6
+        ? AbundanceTutorialSheetPlacement.top
+        : calculatedPlacement;
     return Material(
       color: Colors.transparent,
       child: Stack(
