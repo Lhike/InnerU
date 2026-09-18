@@ -68,6 +68,7 @@ class AbundanceMenteeDashboardScreen extends StatefulWidget {
     this.onOpenMissions,
     this.onOpenAwards,
     this.tutorialController,
+    this.onReplayTutorial,
   });
 
   final CompanyThemeData? initialCompanyTheme;
@@ -75,6 +76,7 @@ class AbundanceMenteeDashboardScreen extends StatefulWidget {
   final VoidCallback? onOpenMissions;
   final VoidCallback? onOpenAwards;
   final AbundanceTutorialController? tutorialController;
+  final VoidCallback? onReplayTutorial;
 
   @override
   State<AbundanceMenteeDashboardScreen> createState() =>
@@ -448,6 +450,11 @@ class _AbundanceMenteeDashboardScreenState
   }
 
   Future<void> _openTutorial() async {
+    final replay = widget.onReplayTutorial;
+    if (replay != null) {
+      replay();
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => AbundanceTutorialScreen(
@@ -548,7 +555,12 @@ class _AbundanceMenteeDashboardScreenState
               unawaited(_openNamedRoute('/activityLogs'));
               return;
             case 'tutorial':
-              unawaited(_openTutorial());
+              final replay = widget.onReplayTutorial;
+              if (replay != null) {
+                replay();
+              } else {
+                unawaited(_openTutorial());
+              }
               return;
             case 'sign_out':
               unawaited(_confirmSignOut());

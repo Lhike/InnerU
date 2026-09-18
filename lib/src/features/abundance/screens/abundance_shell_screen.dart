@@ -125,6 +125,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         onOpenMissions: () => _onTabTapped(1),
         onOpenAwards: () => _onTabTapped(3),
         tutorialController: _tutorialController,
+        onReplayTutorial: _startTutorial,
       );
 
   Widget _tabBodyFor(int index) {
