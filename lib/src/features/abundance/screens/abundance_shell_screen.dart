@@ -112,6 +112,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   Widget get _questsTabBody => GoalsHubScreen(
         service: widget.service,
         uid: widget.uid,
+        tutorialController: _tutorialController,
         // Coach accounts keep the same member Quests tab as the source app;
         // the coach roster is an overflow tool, opened via More.
         accessResolver: widget.questsAccessResolverOverride,

@@ -10,6 +10,8 @@ import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_backdrop.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_typography.dart';
+import 'package:selfcare_projects/src/features/abundance/tutorial/abundance_tutorial_controller.dart';
+import 'package:selfcare_projects/src/features/abundance/widgets/abundance_tutorial_target.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
 import 'package:selfcare_projects/src/services/company_membership_service.dart';
 
@@ -21,11 +23,13 @@ class GoalsHubScreen extends StatefulWidget {
     this.service,
     this.uid,
     this.accessResolver,
+    this.tutorialController,
   });
 
   final GoalsService? service;
   final String? uid;
   final Future<bool> Function(String uid)? accessResolver;
+  final AbundanceTutorialController? tutorialController;
 
   @override
   State<GoalsHubScreen> createState() => _GoalsHubScreenState();
@@ -229,20 +233,30 @@ class _GoalsHubScreenState extends State<GoalsHubScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _GoalsHeader(
-                              onNewGoal: _openForm,
+                            AbundanceTutorialTarget(
+                              name: 'quests-overview',
+                              controller: widget.tutorialController,
+                              child: _GoalsHeader(onNewGoal: _openForm),
                             ),
                             const SizedBox(height: 14),
-                            _GoalsSummaryGrid(
-                              goalScore: overallScore,
+                            AbundanceTutorialTarget(
+                              name: 'quests-life-power',
+                              controller: widget.tutorialController,
+                              child: _GoalsSummaryGrid(
+                                goalScore: overallScore,
+                              ),
                             ),
                             const SizedBox(height: 14),
-                            _CategoryChipsRow(
-                              selectedCategory: _selectedCategory,
-                              counts: categoryCounts,
-                              onSelect: (category) {
-                                setState(() => _selectedCategory = category);
-                              },
+                            AbundanceTutorialTarget(
+                              name: 'quests-categories',
+                              controller: widget.tutorialController,
+                              child: _CategoryChipsRow(
+                                selectedCategory: _selectedCategory,
+                                counts: categoryCounts,
+                                onSelect: (category) {
+                                  setState(() => _selectedCategory = category);
+                                },
+                              ),
                             ),
                             const SizedBox(height: 14),
                             if (visibleGoals.isEmpty)
@@ -269,14 +283,29 @@ class _GoalsHubScreenState extends State<GoalsHubScreen> {
                                     spacing: gap,
                                     runSpacing: gap,
                                     children: [
-                                      for (final goal in visibleGoals)
+                                      for (var index = 0;
+                                          index < visibleGoals.length;
+                                          index++)
                                         SizedBox(
                                           width: cardWidth,
-                                          child: _GoalCard(
-                                            goal: goal,
-                                            service: _service,
-                                            onTap: () => _openDetail(goal),
-                                          ),
+                                          child: index == 0
+                                              ? AbundanceTutorialTarget(
+                                                  name: 'quests-list',
+                                                  controller:
+                                                      widget.tutorialController,
+                                                  child: _GoalCard(
+                                                    goal: visibleGoals[index],
+                                                    service: _service,
+                                                    onTap: () => _openDetail(
+                                                        visibleGoals[index]),
+                                                  ),
+                                                )
+                                              : _GoalCard(
+                                                  goal: visibleGoals[index],
+                                                  service: _service,
+                                                  onTap: () => _openDetail(
+                                                      visibleGoals[index]),
+                                                ),
                                         ),
                                     ],
                                   );
@@ -687,10 +716,12 @@ class _GoalCard extends StatelessWidget {
                                 Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Image.asset(
-                                      abundanceRankMedalAsset(goal.rank.key),
-                                      width: 20,
-                                      height: 20,
+                                    AbundanceArtwork(
+                                      child: Image.asset(
+                                        abundanceRankMedalAsset(goal.rank.key),
+                                        width: 20,
+                                        height: 20,
+                                      ),
                                     ),
                                     const SizedBox(width: 6),
                                     Text(

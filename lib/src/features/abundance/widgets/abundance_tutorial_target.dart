@@ -22,6 +22,7 @@ class AbundanceTutorialTarget extends StatefulWidget {
 
 class _AbundanceTutorialTargetState extends State<AbundanceTutorialTarget> {
   final _key = GlobalKey();
+  String? _lastEnsuredTarget;
 
   void _measure() {
     if (widget.controller?.active != true) return;
@@ -38,6 +39,21 @@ class _AbundanceTutorialTargetState extends State<AbundanceTutorialTarget> {
         height: render.size.height,
       ),
     );
+    if (widget.controller!.step.target == widget.name &&
+        _lastEnsuredTarget != widget.name) {
+      _lastEnsuredTarget = widget.name;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || widget.controller?.active != true) return;
+        final targetContext = _key.currentContext;
+        if (targetContext == null) return;
+        Scrollable.ensureVisible(
+          targetContext,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+          alignment: .24,
+        );
+      });
+    }
   }
 
   @override
