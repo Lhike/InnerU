@@ -233,9 +233,6 @@ List<AbundanceAchievementRecord> computeAbundanceAchievementRecords({
       .toList(growable: false);
   final completionDays =
       everydayTasks.expand((task) => task.completionDates).map(_day).toSet();
-  final completedMissions = everydayTasks
-      .where((task) => task.isCompleted || task.completionDates.isNotEmpty)
-      .length;
   final completedQuests = quests
       .where((quest) => quest.status == abundance.GoalStatus.completed)
       .length;
@@ -274,15 +271,11 @@ List<AbundanceAchievementRecord> computeAbundanceAchievementRecords({
     'checkInRate': checkInRate,
   };
   return abundanceAchievementDefinitions.map((definition) {
-    final current = definition.key == 'STREAK_7'
-        ? completedMissions
-        : metrics[definition.metric] ?? 0;
+    final current = metrics[definition.metric] ?? 0;
     return AbundanceAchievementRecord(
       definition: definition,
       current: current,
-      unlocked: definition.key == 'STREAK_7'
-          ? completedMissions > 0
-          : current >= definition.target,
+      unlocked: current >= definition.target,
     );
   }).toList(growable: false);
 }

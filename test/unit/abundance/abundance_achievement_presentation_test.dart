@@ -28,8 +28,7 @@ void main() {
     expect(
         catalog.inProgress.map((item) => item.definition.key), ['STREAK_30']);
     expect(catalog.locked.map((item) => item.definition.key), ['STREAK_50']);
-    expect(catalog.recent.map((item) => item.definition.key),
-        ['STREAK_7', 'STREAK_30']);
+    expect(catalog.recent.map((item) => item.definition.key), ['STREAK_7']);
   });
 
   test('catalog groups records into the seven presentation sections', () {

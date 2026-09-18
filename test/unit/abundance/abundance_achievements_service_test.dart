@@ -178,7 +178,7 @@ void main() {
     );
   });
 
-  test('gateway unlocks First Flame for a completed first mission', () async {
+  test('gateway keeps First Flame locked before a seven-day streak', () async {
     final gateway = InnerUAbundanceAchievementsGateway(
       uid: 'member-1',
       goals: _FakeGoalsService(),
@@ -202,8 +202,9 @@ void main() {
       (record) => record.definition.key == 'STREAK_30',
     );
 
-    expect(firstFlame.unlocked, isTrue);
-    expect(firstFlame.percent, 100);
+    expect(firstFlame.unlocked, isFalse);
+    expect(firstFlame.current, 0);
+    expect(firstFlame.percent, 0);
     expect(untouched.unlocked, isFalse);
     expect(untouched.current, 0);
     expect(untouched.percent, 0);
@@ -277,5 +278,32 @@ void main() {
         'CHECK_IN_RATE_80',
       ]),
     );
+  });
+
+  test('STREAK_7 requires seven consecutive everyday mission days', () {
+    final asOf = DateTime(2026, 9, 20);
+    final records = computeAbundanceAchievementRecords(
+      tasks: <Task>[
+        for (var i = 0; i < 6; i++) _mission(asOf.subtract(Duration(days: i)))
+      ],
+      quests: const <GoalSummary>[],
+      asOf: asOf,
+    );
+
+    final streak = records.firstWhere(
+      (record) => record.definition.key == 'STREAK_7',
+    );
+    expect(streak.current, 6);
+    expect(streak.unlocked, isFalse);
+
+    final complete = computeAbundanceAchievementRecords(
+      tasks: <Task>[
+        for (var i = 0; i < 7; i++) _mission(asOf.subtract(Duration(days: i)))
+      ],
+      quests: const <GoalSummary>[],
+      asOf: asOf,
+    ).firstWhere((record) => record.definition.key == 'STREAK_7');
+    expect(complete.current, 7);
+    expect(complete.unlocked, isTrue);
   });
 }

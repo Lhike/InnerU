@@ -62,7 +62,7 @@ class AbundanceAchievementCatalog {
       unlocked: List.unmodifiable(unlocked),
       inProgress: List.unmodifiable(inProgress),
       locked: List.unmodifiable(locked),
-      recent: List.unmodifiable([...unlocked, ...inProgress]),
+      recent: List.unmodifiable(unlocked),
       groups: Map.unmodifiable(groups),
     );
   }
@@ -78,7 +78,9 @@ String _sectionFor(String key) {
   if (key == 'TASK_RATE_80' || key == 'TASK_RATE_95') return 'Discipline';
   if (key == 'PERSONAL_GOAL_DONE' ||
       key == 'PROFESSIONAL_GOAL_DONE' ||
-      key == 'CONTRIBUTION_GOAL_DONE') return 'The three realms';
+      key == 'CONTRIBUTION_GOAL_DONE') {
+    return 'The three realms';
+  }
   if (key.startsWith('GOALS_COMPLETED_')) return 'Quests';
   if (key.startsWith('OVERALL_SCORE_')) return 'Life Power';
   if (key == 'STREAK_7' || key == 'STREAK_30' || key == 'STREAK_50') {
