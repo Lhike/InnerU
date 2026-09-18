@@ -23,7 +23,7 @@ class AbundanceTutorialOverlay extends StatelessWidget {
     final placement = tutorialSheetPlacement(
       targetTop: ring?.top,
       targetBottom: ring?.bottom,
-      sheetHeight: 260,
+      sheetHeight: 430,
       safeTop: MediaQuery.paddingOf(context).top + 10,
       safeBottom: size.height - MediaQuery.paddingOf(context).bottom - 80,
       gap: 12,
@@ -43,8 +43,8 @@ class AbundanceTutorialOverlay extends StatelessWidget {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     border: Border.all(
-                        color: AbundanceColors.primaryGold, width: 2),
-                    borderRadius: BorderRadius.circular(14),
+                        color: AbundanceColors.primaryGold, width: 3),
+                    borderRadius: BorderRadius.circular(22),
                   ),
                 ),
               ),
@@ -72,81 +72,156 @@ class _TutorialSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final step = controller.step;
     final last = controller.stepIndex == controller.steps.length - 1;
-    return Card(
-      color: AbundanceColors.surfaceRaised,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: const BorderSide(color: AbundanceColors.border),
+    final progress = (controller.stepIndex + 1) / controller.steps.length;
+    final showing = step.eyebrow.contains('·')
+        ? step.eyebrow.split('·').last.trim().toUpperCase()
+        : 'YOUR ABUNDANCE 12 JOURNEY';
+    return Container(
+      decoration: BoxDecoration(
+        color: AbundanceColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: AbundanceColors.border, width: 1.5),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x66000000),
+            blurRadius: 24,
+            offset: Offset(0, 12),
+          ),
+        ],
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          LinearProgressIndicator(
-            value: (controller.stepIndex + 1) / controller.steps.length,
-            backgroundColor: AbundanceColors.border,
-            color: AbundanceColors.primaryGold,
-            minHeight: 4,
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FractionallySizedBox(
+              widthFactor: progress,
+              child: const SizedBox(
+                height: 5,
+                child: ColoredBox(color: AbundanceColors.primaryGold),
+              ),
+            ),
           ),
           Padding(
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.fromLTRB(22, 20, 22, 22),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(children: [
-                  const Icon(Icons.auto_awesome,
-                      color: AbundanceColors.primaryGold),
-                  const SizedBox(width: 10),
-                  Expanded(
-                      child: Text(step.eyebrow.toUpperCase(),
-                          style: AbundanceTypography.eyebrow)),
-                  IconButton(
-                    tooltip: 'Skip tutorial',
-                    onPressed: controller.pending ? null : controller.skip,
-                    icon: const Icon(Icons.close, color: AbundanceColors.muted),
-                  ),
-                ]),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Color(0x332C2D46),
+                      ),
+                      child: const Icon(Icons.auto_awesome,
+                          color: AbundanceColors.primaryGold, size: 28),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        step.eyebrow.toUpperCase(),
+                        style: AbundanceTypography.eyebrow.copyWith(
+                          color: AbundanceColors.accentCyan,
+                          fontSize: 12,
+                          letterSpacing: 2,
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Skip tutorial',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: controller.pending ? null : controller.skip,
+                      icon: const Icon(Icons.close,
+                          color: AbundanceColors.foreground, size: 30),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
                 Text(
                     controller.stepIndex == 0
-                        ? 'Welcome, Champion'
+                        ? 'Welcome to Abundance 12'
                         : step.title,
-                    style: AbundanceTypography.title),
-                const SizedBox(height: 8),
-                Text(step.description, style: AbundanceTypography.body),
+                    style: AbundanceTypography.display.copyWith(fontSize: 27)),
+                const SizedBox(height: 18),
+                Text(step.description,
+                    style: AbundanceTypography.body
+                        .copyWith(fontSize: 17, height: 1.5)),
                 if (controller.error != null) ...[
                   const SizedBox(height: 8),
                   Text(controller.error!,
                       style: const TextStyle(
                           color: AbundanceColors.scoreCritical)),
                 ],
-                const SizedBox(height: 12),
-                Row(children: [
-                  if (controller.stepIndex > 0)
-                    TextButton(
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'SHOWING · $showing',
+                        style: AbundanceTypography.eyebrow.copyWith(
+                            color: AbundanceColors.primaryGold,
+                            fontSize: 11,
+                            letterSpacing: 1.8),
+                      ),
+                    ),
+                    Text(
+                        '${controller.stepIndex + 1} of ${controller.steps.length}',
+                        style: AbundanceTypography.body.copyWith(
+                            color: AbundanceColors.muted, fontSize: 16)),
+                  ],
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    if (controller.stepIndex > 0)
+                      OutlinedButton(
                         onPressed: controller.pending ? null : controller.back,
-                        child: const Text('‹ Back'))
-                  else
-                    const SizedBox(width: 76),
-                  const Spacer(),
-                  Text(
-                      '${controller.stepIndex + 1} of ${controller.steps.length}',
-                      style: AbundanceTypography.body.copyWith(fontSize: 11)),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: controller.pending
-                        ? null
-                        : (last ? controller.finish : controller.next),
-                    style: FilledButton.styleFrom(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AbundanceColors.foreground,
+                          side: const BorderSide(color: AbundanceColors.border),
+                          minimumSize: const Size(118, 58),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                        ),
+                        child: const Text('‹  Back',
+                            style: TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.w700)),
+                      )
+                    else
+                      const SizedBox(width: 118),
+                    const Spacer(),
+                    FilledButton(
+                      onPressed: controller.pending
+                          ? null
+                          : (last ? controller.finish : controller.next),
+                      style: FilledButton.styleFrom(
                         backgroundColor: AbundanceColors.primaryGold,
-                        foregroundColor: Colors.black),
-                    child: Text(controller.pending
-                        ? 'Saving…'
-                        : last
-                            ? (controller.completionSaver != null
-                                ? 'Enter the game'
-                                : 'Finish tour  ✓')
-                            : 'Next'),
-                  ),
-                ]),
+                        foregroundColor: Colors.black,
+                        minimumSize: const Size(155, 60),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16)),
+                      ),
+                      child: Text(
+                        controller.pending
+                            ? 'Saving…'
+                            : last
+                                ? (controller.completionSaver != null
+                                    ? 'Enter the game'
+                                    : 'Finish tour  ✓')
+                                : 'Next',
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -163,7 +238,7 @@ class _TutorialShadePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final path = Path()..addRect(Offset.zero & size);
-    path.addRRect(RRect.fromRectAndRadius(cutout, const Radius.circular(14)));
+    path.addRRect(RRect.fromRectAndRadius(cutout, const Radius.circular(22)));
     canvas.drawPath(path..fillType = PathFillType.evenOdd,
         Paint()..color = const Color(0xD2080C1C));
   }
