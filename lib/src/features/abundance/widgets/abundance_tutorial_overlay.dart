@@ -51,7 +51,9 @@ class _AbundanceTutorialOverlayState extends State<AbundanceTutorialOverlay> {
       sheetHeight: _sheetHeight == 0 ? 320 : _sheetHeight,
       safeTop: topPosition,
       safeBottom: MediaQuery.sizeOf(context).height - bottomInset,
-      gap: 12,
+      // Keep the highlighted border visibly separate from the sheet. The
+      // reference tour leaves a small breathing gap between both surfaces.
+      gap: 20,
     );
     final placement = calculatedPlacement;
     return Material(
