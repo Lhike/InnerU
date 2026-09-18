@@ -67,7 +67,7 @@ double? tutorialScrollOffset({
   final targetBottom = localTop + targetHeight;
   if (localTop >= 90 && targetBottom <= viewportHeight - 250) return null;
 
-  final desiredTop = (viewportHeight * 0.4).roundToDouble() - viewportTop;
+  final desiredTop = (viewportHeight * 0.4).roundToDouble();
   final boundedDesiredTop = desiredTop < 24 ? 24 : desiredTop;
   final requestedOffset =
       (currentOffset + localTop - boundedDesiredTop).roundToDouble();

@@ -33,15 +33,21 @@ void main() {
     });
 
     test('scrolls a lower target to the reading position', () {
+      const targetTop = 720.0;
+      const viewportTop = 100.0;
+      const currentOffset = 250.0;
+      final newOffset = tutorialScrollOffset(
+        targetTop: targetTop,
+        targetHeight: 120,
+        viewportTop: viewportTop,
+        currentOffset: currentOffset,
+        viewportHeight: 850,
+      );
+
+      expect(newOffset, 530);
       expect(
-        tutorialScrollOffset(
-          targetTop: 720,
-          targetHeight: 120,
-          viewportTop: 100,
-          currentOffset: 250,
-          viewportHeight: 850,
-        ),
-        630,
+        targetTop - viewportTop - (newOffset! - currentOffset),
+        340,
       );
     });
 
