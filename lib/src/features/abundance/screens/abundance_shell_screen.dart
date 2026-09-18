@@ -20,6 +20,10 @@ import 'package:selfcare_projects/src/features/abundance/domain/abundance_compan
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.dart';
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_header_profile_button.dart';
+import 'package:selfcare_projects/src/features/abundance/widgets/abundance_tutorial_overlay.dart';
+import 'package:selfcare_projects/src/features/abundance/widgets/abundance_tutorial_target.dart';
+import 'package:selfcare_projects/src/features/abundance/tutorial/abundance_tutorial_controller.dart';
+import 'package:selfcare_projects/src/features/abundance/tutorial/abundance_tutorial_steps.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/coach_dashboard/coach_dashboard_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/coach_dashboard/coach_accountability_meetings_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/coaches/coaches_screen.dart';
@@ -27,6 +31,7 @@ import 'package:selfcare_projects/src/features/authentication/screen/login/login
 import 'package:selfcare_projects/src/services/app_session_service.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
 import 'package:selfcare_projects/src/services/company_theme_service.dart';
+import 'package:selfcare_projects/src/services/profile_picture_bus.dart';
 import 'package:selfcare_projects/src/services/session_cleanup_service.dart';
 
 /// The custom app shell (header + six-tab bottom nav) used only for Abundance
@@ -86,6 +91,8 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   // widget.initialIndex (defaults to Home) in initState below.
   late int _index;
   String _appearance = 'dark';
+  String? _profilePictureOverride;
+  late final AbundanceTutorialController _tutorialController;
 
   // Each tab body is constructed at most once, the first time it's
   // selected, then cached here and reused for the rest of the shell's
@@ -111,9 +118,11 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       );
 
   Widget get _homeTabBody => AbundanceMenteeDashboardScreen(
+        key: UniqueKey(),
         initialCompanyTheme: widget.companyTheme,
         service: widget.service,
         onOpenMissions: () => _onTabTapped(1),
+        onOpenAwards: () => _onTabTapped(3),
       );
 
   Widget _tabBodyFor(int index) {
@@ -150,9 +159,11 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
           onOpenAccountSettings: () {},
           onOpenAchievements: () => _onTabTapped(3),
           appearance: _appearance,
+          isCoach: widget.isCoach,
           onAppearanceChanged: (value) => unawaited(_setAppearance(value)),
           onSignOut: _confirmSignOut,
           onReplayTutorial: () => unawaited(_openDestination('tutorial')),
+          goalsService: widget.service,
         );
       default:
         return const SizedBox.shrink();
@@ -174,9 +185,11 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
             onOpenAccountSettings: () {},
             onOpenAchievements: () => _onTabTapped(3),
             appearance: _appearance,
+            isCoach: widget.isCoach,
             onAppearanceChanged: (value) => unawaited(_setAppearance(value)),
             onSignOut: _confirmSignOut,
             onReplayTutorial: () => unawaited(_openDestination('tutorial')),
+            goalsService: widget.service,
           ),
         );
         return;
@@ -187,7 +200,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         await Navigator.of(context).pushNamed('/activityLogs');
         return;
       case 'tutorial':
-        await _push(AbundanceTutorialScreen(uid: widget.uid));
+        _tutorialController.start();
         return;
       case 'sign_out':
         await _confirmSignOut();
@@ -308,63 +321,79 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   @override
   void initState() {
     super.initState();
+    _tutorialController = AbundanceTutorialController(
+      uid: widget.uid,
+      roles: {
+        AbundanceTutorialRole.member,
+        if (widget.isCoach) AbundanceTutorialRole.coach,
+      },
+    )..addListener(_onTutorialChanged);
+    ProfilePictureBus.latestUrl.addListener(_onProfilePictureBusUpdate);
+    AbundanceColors.lightAppearanceActive = false;
     _index = widget.initialIndex.clamp(0, 5);
     _ensureBuilt(_index);
     _loadAppearance();
     WidgetsBinding.instance.addPostFrameCallback((_) => _showFirstRunGuide());
   }
 
+  @override
+  void dispose() {
+    _tutorialController
+      ..removeListener(_onTutorialChanged)
+      ..dispose();
+    ProfilePictureBus.latestUrl.removeListener(_onProfilePictureBusUpdate);
+    super.dispose();
+  }
+
+  void _onTutorialChanged() {
+    if (!mounted || !_tutorialController.active) return;
+    final index = switch (_tutorialController.step.route) {
+      '/missions' => 1,
+      '/quests' => 2,
+      '/achievements' => 3,
+      '/guild' => 4,
+      '/profile' => 5,
+      _ => 0,
+    };
+    if (_index != index) {
+      _index = index;
+      _ensureBuilt(index);
+    }
+    setState(() {});
+  }
+
+  void _onProfilePictureBusUpdate() {
+    if (!mounted) return;
+    setState(() => _profilePictureOverride = ProfilePictureBus.latestUrl.value);
+  }
+
   Future<void> _loadAppearance() async {
     final preferences = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    final systemBrightness = MediaQuery.platformBrightnessOf(context);
     final saved = preferences.getString('abundance-appearance');
     if (const ['light', 'dark', 'system'].contains(saved)) {
+      AbundanceColors.lightAppearanceActive = saved == 'light' ||
+          (saved == 'system' && systemBrightness == Brightness.light);
       if (mounted) setState(() => _appearance = saved!);
       return;
-    }
-
-    final selectedTheme =
-        await CompanyThemeService.selectedThemeChoiceForUser(widget.uid);
-    if (!mounted) return;
-    if (selectedTheme == CompanyThemeService.lightThemeChoice) {
-      setState(() => _appearance = 'light');
-    } else if (selectedTheme == CompanyThemeService.darkThemeChoice) {
-      setState(() => _appearance = 'dark');
     }
   }
 
   Future<void> _setAppearance(String value) async {
     if (!const ['light', 'dark', 'system'].contains(value)) return;
-    final platformBrightness = MediaQuery.platformBrightnessOf(context);
-    setState(() => _appearance = value);
+    AbundanceColors.lightAppearanceActive = value == 'light' ||
+        (value == 'system' &&
+            MediaQuery.platformBrightnessOf(context) == Brightness.light);
+    setState(() {
+      _appearance = value;
+      // Rebuild visited A12 tabs so artwork wrappers receive the new mode.
+      for (final index in _visited.toList()) {
+        _builtTabs[index] = _tabBodyFor(index);
+      }
+    });
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString('abundance-appearance', value);
-
-    // Keep the existing company-theme surfaces (Guild, Profile settings,
-    // and any shared InnerU pages opened from the A12 shell) in sync with the
-    // source app's appearance picker.  This is deliberately scoped to the
-    // Abundance shell; other companies continue using their own preference.
-    final uid = widget.uid;
-    if (value == 'light') {
-      await CompanyThemeService.setSelectedThemeChoiceForUser(
-        uid,
-        CompanyThemeService.lightThemeChoice,
-      );
-    } else if (value == 'dark') {
-      await CompanyThemeService.setSelectedThemeChoiceForUser(
-        uid,
-        CompanyThemeService.darkThemeChoice,
-      );
-    } else {
-      // A12's source treats System as a neutral preference.  Preserve the
-      // current platform brightness for shared InnerU surfaces while keeping
-      // the A12 picker state as “system”.
-      await CompanyThemeService.setSelectedThemeChoiceForUser(
-        uid,
-        platformBrightness == Brightness.dark
-            ? CompanyThemeService.darkThemeChoice
-            : CompanyThemeService.lightThemeChoice,
-      );
-    }
   }
 
   Future<void> _showFirstRunGuide() async {
@@ -382,7 +411,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         ) ??
         false;
     if (!mounted || completed) return;
-    await _push(AbundanceTutorialScreen(uid: widget.uid));
+    _tutorialController.start();
   }
 
   void _onTabTapped(int newIndex) {
@@ -417,11 +446,13 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       titleSpacing: 18,
       title: Row(
         children: [
-          Image.asset(
-            abundanceLogoAsset,
-            width: 42,
-            height: 38,
-            fit: BoxFit.contain,
+          AbundanceArtwork(
+            child: Image.asset(
+              abundanceLogoAsset,
+              width: 42,
+              height: 38,
+              fit: BoxFit.contain,
+            ),
           ),
           const SizedBox(width: 9),
           const Expanded(
@@ -481,7 +512,9 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         const SizedBox(width: 10),
         AbundanceHeaderProfileButton(
           initials: _headerInitials(),
-          profilePic: AuthService.instance.currentSession?.profilePic ?? '',
+          profilePic: _profilePictureOverride ??
+              AuthService.instance.currentSession?.profilePic ??
+              '',
           displayName: AuthService.instance.currentSession?.name ?? '',
           email: AuthService.instance.currentSession?.email ?? '',
           appearance: _appearance,
@@ -512,7 +545,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         ),
       );
     }
-    return Scaffold(
+    final scaffold = Scaffold(
       backgroundColor: AbundanceColors.background,
       // Each embedded screen owns its own AppBar except the Quests body,
       // which is intentionally AppBar-free and uses the shared A12 header.
@@ -525,11 +558,62 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       appBar: (_index == 1 || _index == 2 || _index == 3)
           ? _buildShellHeader()
           : null,
-      body: IndexedStack(index: _index, children: _builtTabs),
+      body: AbundanceTutorialTarget(
+        name: _tutorialController.step.target ?? 'tutorial-shell',
+        controller: _tutorialController,
+        child: IndexedStack(index: _index, children: _builtTabs),
+      ),
       bottomNavigationBar: _AbundanceBottomNavigationBar(
         currentIndex: _index,
         onTap: _onTabTapped,
       ),
+    );
+    final lightMode = _appearance == 'light' ||
+        (_appearance == 'system' &&
+            MediaQuery.platformBrightnessOf(context) == Brightness.light);
+    final content = Stack(
+      fit: StackFit.expand,
+      children: [
+        scaffold,
+        if (_tutorialController.active)
+          ListenableBuilder(
+            listenable: _tutorialController,
+            builder: (_, __) => _tutorialController.active
+                ? AbundanceTutorialOverlay(controller: _tutorialController)
+                : const SizedBox.shrink(),
+          ),
+      ],
+    );
+    if (!lightMode) return content;
+
+    // The A12 widgets use a fixed dark token set inherited from the source
+    // app. Apply the light appearance at this company shell boundary so the
+    // preference has a real visible effect without changing InnerU's other
+    // company themes.
+    return ColorFiltered(
+      colorFilter: const ColorFilter.matrix(<double>[
+        -1,
+        0,
+        0,
+        0,
+        255,
+        0,
+        -1,
+        0,
+        0,
+        255,
+        0,
+        0,
+        -1,
+        0,
+        255,
+        0,
+        0,
+        0,
+        1,
+        0,
+      ]),
+      child: content,
     );
   }
 }
@@ -568,54 +652,58 @@ class _AbundanceBottomNavigationBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       label: 'Abundance primary navigation',
-      child: SafeArea(
-        top: false,
-        child: Stack(
-          children: [
-            Container(
-              key: const ValueKey('abundance-primary-navigation'),
-              height: 68,
-              decoration: const BoxDecoration(
-                color: AbundanceColors.surfaceRaised,
-                border: Border(top: BorderSide(color: AbundanceColors.border)),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (var i = 0; i < labels.length; i++)
-                    Expanded(
-                      child: _AbundanceNavigationItem(
-                        icon: icons[i],
-                        label: labels[i],
-                        active: currentIndex == i,
-                        onTap: () => onTap(i),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            // Compatibility node for existing automation that inspects the
-            // selected index by widget type. It is offstage and never renders
-            // a second navigation bar or handles input.
-            SizedBox(
-              width: 0,
-              height: 0,
-              child: IgnorePointer(
-                child: BottomNavigationBar(
-                  currentIndex: currentIndex,
-                  onTap: onTap,
-                  items: [
+      child: Container(
+        color: AbundanceColors.surfaceRaised,
+        child: SafeArea(
+          top: false,
+          child: Stack(
+            children: [
+              Container(
+                key: const ValueKey('abundance-primary-navigation'),
+                height: 68,
+                decoration: const BoxDecoration(
+                  color: AbundanceColors.surfaceRaised,
+                  border:
+                      Border(top: BorderSide(color: AbundanceColors.border)),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                     for (var i = 0; i < labels.length; i++)
-                      BottomNavigationBarItem(
-                        icon: const SizedBox.shrink(),
-                        label: '',
+                      Expanded(
+                        child: _AbundanceNavigationItem(
+                          icon: icons[i],
+                          label: labels[i],
+                          active: currentIndex == i,
+                          onTap: () => onTap(i),
+                        ),
                       ),
                   ],
                 ),
               ),
-            ),
-          ],
+              // Compatibility node for existing automation that inspects the
+              // selected index by widget type. It is offstage and never renders
+              // a second navigation bar or handles input.
+              SizedBox(
+                width: 0,
+                height: 0,
+                child: IgnorePointer(
+                  child: BottomNavigationBar(
+                    currentIndex: currentIndex,
+                    onTap: onTap,
+                    items: [
+                      for (var i = 0; i < labels.length; i++)
+                        BottomNavigationBarItem(
+                          icon: const SizedBox.shrink(),
+                          label: '',
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
