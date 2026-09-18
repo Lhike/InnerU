@@ -5,17 +5,42 @@ import 'package:selfcare_projects/src/features/abundance/tutorial/abundance_tuto
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_typography.dart';
 
-class AbundanceTutorialOverlay extends StatelessWidget {
+class AbundanceTutorialOverlay extends StatefulWidget {
   const AbundanceTutorialOverlay({super.key, required this.controller});
 
   final AbundanceTutorialController controller;
 
   @override
+  State<AbundanceTutorialOverlay> createState() =>
+      _AbundanceTutorialOverlayState();
+}
+
+class _AbundanceTutorialOverlayState extends State<AbundanceTutorialOverlay> {
+  final _sheetKey = GlobalKey();
+  double _sheetHeight = 0;
+
+  void _measureSheet() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final render = _sheetKey.currentContext?.findRenderObject();
+      if (render is RenderBox &&
+          render.hasSize &&
+          (render.size.height - _sheetHeight).abs() > .5) {
+        setState(() => _sheetHeight = render.size.height);
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    _measureSheet();
+    final controller = widget.controller;
     final step = controller.step;
     final target =
         step.target == null ? null : controller.targetRects[step.target];
-    final size = MediaQuery.sizeOf(context);
+    final insets = MediaQuery.paddingOf(context);
+    final topPosition = insets.top + 10 > 16 ? insets.top + 10 : 16.0;
+    final bottomInset = insets.bottom > 8 ? insets.bottom + 58 : 66.0;
     final ring = target == null
         ? null
         : Rect.fromLTWH(target.left - 6, target.top - 6, target.width + 12,
@@ -23,14 +48,12 @@ class AbundanceTutorialOverlay extends StatelessWidget {
     final calculatedPlacement = tutorialSheetPlacement(
       targetTop: ring?.top,
       targetBottom: ring?.bottom,
-      sheetHeight: 430,
-      safeTop: MediaQuery.paddingOf(context).top + 10,
-      safeBottom: size.height - MediaQuery.paddingOf(context).bottom - 80,
+      sheetHeight: _sheetHeight == 0 ? 320 : _sheetHeight,
+      safeTop: topPosition,
+      safeBottom: MediaQuery.sizeOf(context).height - bottomInset,
       gap: 12,
     );
-    final placement = ring != null && ring.height >= size.height * .6
-        ? AbundanceTutorialSheetPlacement.top
-        : calculatedPlacement;
+    final placement = calculatedPlacement;
     return Material(
       color: Colors.transparent,
       child: Stack(
@@ -56,10 +79,13 @@ class AbundanceTutorialOverlay extends StatelessWidget {
           Positioned(
             left: 16,
             right: 16,
-            top: placement == AbundanceTutorialSheetPlacement.top ? 24 : null,
-            bottom:
-                placement == AbundanceTutorialSheetPlacement.bottom ? 88 : null,
-            child: _TutorialSheet(controller: controller),
+            top: placement == AbundanceTutorialSheetPlacement.top
+                ? topPosition
+                : null,
+            bottom: placement == AbundanceTutorialSheetPlacement.bottom
+                ? bottomInset
+                : null,
+            child: _TutorialSheet(key: _sheetKey, controller: controller),
           ),
         ],
       ),
@@ -68,7 +94,7 @@ class AbundanceTutorialOverlay extends StatelessWidget {
 }
 
 class _TutorialSheet extends StatelessWidget {
-  const _TutorialSheet({required this.controller});
+  const _TutorialSheet({super.key, required this.controller});
   final AbundanceTutorialController controller;
 
   @override
@@ -82,7 +108,7 @@ class _TutorialSheet extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AbundanceColors.surfaceRaised,
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: AbundanceColors.border, width: 1.5),
         boxShadow: const [
           BoxShadow(
@@ -107,7 +133,7 @@ class _TutorialSheet extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(22, 20, 22, 22),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -115,23 +141,23 @@ class _TutorialSheet extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
-                      width: 52,
-                      height: 52,
+                      width: 42,
+                      height: 42,
                       decoration: const BoxDecoration(
                         shape: BoxShape.circle,
                         color: Color(0x332C2D46),
                       ),
                       child: const Icon(Icons.auto_awesome,
-                          color: AbundanceColors.primaryGold, size: 28),
+                          color: AbundanceColors.primaryGold, size: 22),
                     ),
-                    const SizedBox(width: 14),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         step.eyebrow.toUpperCase(),
                         style: AbundanceTypography.eyebrow.copyWith(
                           color: AbundanceColors.accentCyan,
-                          fontSize: 12,
-                          letterSpacing: 2,
+                          fontSize: 10,
+                          letterSpacing: 1.4,
                           height: 1.3,
                         ),
                       ),
@@ -142,7 +168,7 @@ class _TutorialSheet extends StatelessWidget {
                       constraints: const BoxConstraints(),
                       onPressed: controller.pending ? null : controller.skip,
                       icon: const Icon(Icons.close,
-                          color: AbundanceColors.foreground, size: 30),
+                          color: AbundanceColors.foreground, size: 26),
                     ),
                   ],
                 ),
@@ -151,18 +177,18 @@ class _TutorialSheet extends StatelessWidget {
                     controller.stepIndex == 0
                         ? 'Welcome, ${controller.displayName?.trim().isNotEmpty == true ? controller.displayName!.trim() : 'Champion'}'
                         : step.title,
-                    style: AbundanceTypography.display.copyWith(fontSize: 27)),
-                const SizedBox(height: 18),
+                    style: AbundanceTypography.display.copyWith(fontSize: 21)),
+                const SizedBox(height: 12),
                 Text(step.description,
                     style: AbundanceTypography.body
-                        .copyWith(fontSize: 17, height: 1.5)),
+                        .copyWith(fontSize: 14, height: 1.42)),
                 if (controller.error != null) ...[
                   const SizedBox(height: 8),
                   Text(controller.error!,
                       style: const TextStyle(
                           color: AbundanceColors.scoreCritical)),
                 ],
-                const SizedBox(height: 20),
+                const SizedBox(height: 14),
                 Row(
                   children: [
                     Expanded(
@@ -170,17 +196,17 @@ class _TutorialSheet extends StatelessWidget {
                         'SHOWING · $showing',
                         style: AbundanceTypography.eyebrow.copyWith(
                             color: AbundanceColors.primaryGold,
-                            fontSize: 11,
-                            letterSpacing: 1.8),
+                            fontSize: 9,
+                            letterSpacing: 1.2),
                       ),
                     ),
                     Text(
                         '${controller.stepIndex + 1} of ${controller.steps.length}',
                         style: AbundanceTypography.body.copyWith(
-                            color: AbundanceColors.muted, fontSize: 16)),
+                            color: AbundanceColors.muted, fontSize: 12)),
                   ],
                 ),
-                const SizedBox(height: 22),
+                const SizedBox(height: 14),
                 Row(
                   children: [
                     if (controller.stepIndex > 0)
@@ -189,16 +215,16 @@ class _TutorialSheet extends StatelessWidget {
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AbundanceColors.foreground,
                           side: const BorderSide(color: AbundanceColors.border),
-                          minimumSize: const Size(118, 58),
+                          minimumSize: const Size(92, 44),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16)),
                         ),
                         child: const Text('‹  Back',
                             style: TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.w700)),
+                                fontSize: 14, fontWeight: FontWeight.w700)),
                       )
                     else
-                      const SizedBox(width: 118),
+                      const SizedBox(width: 92),
                     const Spacer(),
                     FilledButton(
                       onPressed: controller.pending
@@ -207,7 +233,7 @@ class _TutorialSheet extends StatelessWidget {
                       style: FilledButton.styleFrom(
                         backgroundColor: AbundanceColors.primaryGold,
                         foregroundColor: Colors.black,
-                        minimumSize: const Size(155, 60),
+                        minimumSize: const Size(132, 46),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16)),
                       ),
@@ -220,7 +246,7 @@ class _TutorialSheet extends StatelessWidget {
                                     : 'Finish tour  ✓')
                                 : 'Next',
                         style: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w800),
+                            fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                     ),
                   ],
