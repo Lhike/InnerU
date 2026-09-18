@@ -23,6 +23,27 @@ class AbundanceTutorialTarget extends StatefulWidget {
 class _AbundanceTutorialTargetState extends State<AbundanceTutorialTarget> {
   final _key = GlobalKey();
   String? _lastEnsuredTarget;
+  String? _lastControllerTarget;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller?.addListener(_onControllerChanged);
+  }
+
+  void _onControllerChanged() {
+    final controller = widget.controller;
+    if (!mounted || controller?.active != true) return;
+    final target = controller!.step.target;
+    if (target == _lastControllerTarget) return;
+    _lastControllerTarget = target;
+    if (target != widget.name) return;
+    _lastEnsuredTarget = null;
+    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _measure();
+    });
+  }
 
   void _measure() {
     if (widget.controller?.active != true) return;
@@ -43,7 +64,11 @@ class _AbundanceTutorialTargetState extends State<AbundanceTutorialTarget> {
         _lastEnsuredTarget != widget.name) {
       _lastEnsuredTarget = widget.name;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || widget.controller?.active != true) return;
+        if (!mounted ||
+            widget.controller?.active != true ||
+            widget.controller?.step.target != widget.name) {
+          return;
+        }
         final targetContext = _key.currentContext;
         if (targetContext == null) return;
         final render = targetContext.findRenderObject();
@@ -58,17 +83,25 @@ class _AbundanceTutorialTargetState extends State<AbundanceTutorialTarget> {
           alignment: targetHeight >= viewportHeight * .45 ? .78 : .08,
         );
       });
+      WidgetsBinding.instance.scheduleFrame();
     }
   }
 
   @override
   void didUpdateWidget(covariant AbundanceTutorialTarget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?.removeListener(_onControllerChanged);
+      widget.controller?.addListener(_onControllerChanged);
+      _lastControllerTarget = null;
+      _lastEnsuredTarget = null;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
   }
 
   @override
   void dispose() {
+    widget.controller?.removeListener(_onControllerChanged);
     widget.controller?.unregisterTarget(widget.name);
     super.dispose();
   }
