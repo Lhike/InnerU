@@ -404,6 +404,153 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
     // causes "TextEditingController was used after being disposed" assertions.
   }
 
+  Future<void> _openDailyMissionSetup() async {
+    await showDialog<void>(
+      context: context,
+      barrierColor: const Color(0xCC030717),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final dailyMissions = _tasks
+              .where((task) => task.goalType == GoalType.everyday)
+              .toList(growable: false);
+          return Dialog(
+            backgroundColor: AbundanceColors.surfaceRaised,
+            insetPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 28),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+              side: const BorderSide(color: AbundanceColors.border),
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 720),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('EVERYDAY MISSIONS',
+                                  style: AbundanceTypography.eyebrow),
+                              SizedBox(height: 6),
+                              Text('Set up your daily mission',
+                                  style: AbundanceTypography.title),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Close setup',
+                          onPressed: () => Navigator.pop(dialogContext),
+                          icon: const Icon(Icons.close,
+                              size: 28, color: AbundanceColors.muted),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Choose the missions you want to see every day. You can add new ones, edit the details, or remove a mission at any time.',
+                      style: AbundanceTypography.body,
+                    ),
+                    const SizedBox(height: 18),
+                    if (dailyMissions.isEmpty)
+                      const AbundanceCard(
+                        padding: EdgeInsets.all(18),
+                        child: Text(
+                          'No daily missions yet. Add one to start building your routine.',
+                          style: AbundanceTypography.body,
+                        ),
+                      )
+                    else
+                      for (final task in dailyMissions) ...[
+                        _dailySetupMissionCard(
+                          task,
+                          onEdit: () async {
+                            await _openEditor(task);
+                            if (dialogContext.mounted) setDialogState(() {});
+                          },
+                          onDelete: () async {
+                            await _deleteMission(task);
+                            if (dialogContext.mounted) setDialogState(() {});
+                          },
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: AbundanceButton(
+                        label: 'Add a daily mission',
+                        icon: Icons.add,
+                        onPressed: () async {
+                          await _openEditor();
+                          if (dialogContext.mounted) setDialogState(() {});
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _dailySetupMissionCard(
+    Task task, {
+    required VoidCallback onEdit,
+    required VoidCallback onDelete,
+  }) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+      decoration: BoxDecoration(
+        color: AbundanceColors.surfaceSunken,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AbundanceColors.border),
+      ),
+      child: Row(
+        children: [
+          Icon(task.tag.abundanceMissionIcon,
+              color: AbundanceColors.accentCyan, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(task.title,
+                    style: AbundanceTypography.title.copyWith(fontSize: 17)),
+                if (task.description.trim().isNotEmpty)
+                  Text(task.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AbundanceTypography.body.copyWith(
+                          color: AbundanceColors.muted, fontSize: 13)),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Edit ${task.title}',
+            onPressed: onEdit,
+            icon: const Icon(Icons.edit_outlined,
+                color: AbundanceColors.foreground),
+          ),
+          IconButton(
+            tooltip: 'Remove ${task.title}',
+            onPressed: onDelete,
+            icon: const Icon(Icons.delete_outline,
+                color: AbundanceColors.scoreCritical),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _missionModalCard(Task task, StateSetter setDialogState) {
     final completed = _completed(task);
     final enabled =
@@ -789,7 +936,7 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
                           child: AbundanceButton(
                             label: 'Set up your daily mission',
                             icon: Icons.add,
-                            onPressed: _openDayModal,
+                            onPressed: _openDailyMissionSetup,
                           ),
                         ),
                         // Gateway injection is used by the existing widget
