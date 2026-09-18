@@ -2,20 +2,29 @@ import 'package:flutter/material.dart';
 
 import 'package:selfcare_projects/src/features/authentication/screen/leaderboard/leaderboard_screen.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
+import 'package:selfcare_projects/src/services/profile_picture_bus.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_council_service.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_leaderboard_service.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_typography.dart';
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_header_profile_button.dart';
+import 'package:selfcare_projects/src/features/abundance/widgets/abundance_tutorial_target.dart';
+import 'package:selfcare_projects/src/features/abundance/tutorial/abundance_tutorial_controller.dart';
 
 /// Abundance's Guild route reuses the established company-scoped leaderboard
 /// data surface, but applies the source app's "Allies" title for this route.
 /// The default leaderboard title remains unchanged for every other company.
 class AbundanceGuildScreen extends StatefulWidget {
-  const AbundanceGuildScreen({super.key, this.onSignOut});
+  const AbundanceGuildScreen(
+      {super.key, this.onSignOut, this.tutorialController});
 
   final VoidCallback? onSignOut;
+  final AbundanceTutorialController? tutorialController;
 
-  Widget buildLeaderboard() => const Leaderboard(appBarTitle: 'Allies');
+  Widget buildLeaderboard() => Leaderboard(
+        appBarTitle: 'Allies',
+        apiLoader: AbundanceLeaderboardService().fetchLeaderboard,
+      );
 
   @override
   State<AbundanceGuildScreen> createState() => _AbundanceGuildScreenState();
@@ -24,11 +33,26 @@ class AbundanceGuildScreen extends StatefulWidget {
 class _AbundanceGuildScreenState extends State<AbundanceGuildScreen> {
   late Future<String?> _councilFuture;
   final _councils = AbundanceCouncilService();
+  final _leaderboard = AbundanceLeaderboardService();
+  String? _profilePictureVersion;
 
   @override
   void initState() {
     super.initState();
+    _profilePictureVersion = ProfilePictureBus.latestUrl.value;
+    ProfilePictureBus.latestUrl.addListener(_onProfilePictureChanged);
     _councilFuture = _loadCouncil();
+  }
+
+  @override
+  void dispose() {
+    ProfilePictureBus.latestUrl.removeListener(_onProfilePictureChanged);
+    super.dispose();
+  }
+
+  void _onProfilePictureChanged() {
+    if (!mounted) return;
+    setState(() => _profilePictureVersion = ProfilePictureBus.latestUrl.value);
   }
 
   Future<String?> _loadCouncil() async {
@@ -59,32 +83,29 @@ class _AbundanceGuildScreenState extends State<AbundanceGuildScreen> {
         }
         final councilName = snapshot.data;
         if (councilName != null) {
-          return Leaderboard(
-            appBarTitle: 'Allies',
-            onLeaveCouncil: _leaveCouncil,
-            onSignOut: widget.onSignOut,
+          return AbundanceTutorialTarget(
+            name: widget.tutorialController?.step.target ?? 'allies-overview',
+            controller: widget.tutorialController,
+            child: Leaderboard(
+              key: ValueKey('abundance-guild-$_profilePictureVersion'),
+              appBarTitle: 'Allies',
+              apiLoader: _leaderboard.fetchLeaderboard,
+              onSignOut: widget.onSignOut,
+              tutorialController: widget.tutorialController,
+            ),
           );
         }
-        return _NoCouncilView(
-          onJoin: () => _showJoinCouncil(context),
-          onRetry: () => setState(() => _councilFuture = _loadCouncil()),
-          onSignOut: widget.onSignOut,
+        return AbundanceTutorialTarget(
+          name: 'allies-overview',
+          controller: widget.tutorialController,
+          child: _NoCouncilView(
+            onJoin: () => _showJoinCouncil(context),
+            onRetry: () => setState(() => _councilFuture = _loadCouncil()),
+            onSignOut: widget.onSignOut,
+          ),
         );
       },
     );
-  }
-
-  Future<void> _leaveCouncil() async {
-    try {
-      await _councils.leave();
-      if (mounted) setState(() => _councilFuture = _loadCouncil());
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Unable to leave this council.')),
-        );
-      }
-    }
   }
 
   Future<void> _showJoinCouncil(BuildContext context) async {

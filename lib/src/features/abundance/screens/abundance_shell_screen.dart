@@ -124,6 +124,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         service: widget.service,
         onOpenMissions: () => _onTabTapped(1),
         onOpenAwards: () => _onTabTapped(3),
+        tutorialController: _tutorialController,
       );
 
   Widget _tabBodyFor(int index) {
@@ -131,7 +132,10 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       case 0:
         return _homeTabBody;
       case 1:
-        return AbundanceMissionsScreen(onMissionChanged: _refreshHomeTab);
+        return AbundanceMissionsScreen(
+          onMissionChanged: _refreshHomeTab,
+          tutorialController: _tutorialController,
+        );
       case 2:
         return _questsTabBody;
       case 3:
@@ -140,6 +144,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
           return AbundanceAchievementsScreen(
             key: UniqueKey(),
             loader: override,
+            tutorialController: _tutorialController,
           );
         }
         final gateway = InnerUAbundanceAchievementsGateway(
@@ -149,9 +154,13 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         return AbundanceAchievementsScreen(
           key: UniqueKey(),
           loader: gateway.load,
+          tutorialController: _tutorialController,
         );
       case 4:
-        return AbundanceGuildScreen(onSignOut: _confirmSignOut);
+        return AbundanceGuildScreen(
+          onSignOut: _confirmSignOut,
+          tutorialController: _tutorialController,
+        );
       case 5:
         return AbundanceCharacterScreen(
           uid: widget.uid,
@@ -165,6 +174,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
           onSignOut: _confirmSignOut,
           onReplayTutorial: () => unawaited(_openDestination('tutorial')),
           goalsService: widget.service,
+          tutorialController: _tutorialController,
         );
       default:
         return const SizedBox.shrink();

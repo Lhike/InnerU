@@ -11,6 +11,8 @@ import 'package:selfcare_projects/src/features/abundance/theme/abundance_mission
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_button.dart';
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_card.dart';
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_status_view.dart';
+import 'package:selfcare_projects/src/features/abundance/widgets/abundance_tutorial_target.dart';
+import 'package:selfcare_projects/src/features/abundance/tutorial/abundance_tutorial_controller.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/todo_list.dart';
 
 class AbundanceMissionsScreen extends StatefulWidget {
@@ -20,12 +22,14 @@ class AbundanceMissionsScreen extends StatefulWidget {
     this.initialDate,
     this.today,
     this.onMissionChanged,
+    this.tutorialController,
   });
 
   final AbundanceMissionsGateway? gateway;
   final DateTime? initialDate;
   final DateTime? today;
   final VoidCallback? onMissionChanged;
+  final AbundanceTutorialController? tutorialController;
 
   @override
   State<AbundanceMissionsScreen> createState() =>
@@ -744,26 +748,39 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(16, 22, 16, 110),
                       children: [
-                        const Text('EVERYDAY MISSIONS',
-                            style: AbundanceTypography.eyebrow),
-                        const SizedBox(height: 6),
-                        const Text('Everyday Missions',
-                            style: AbundanceTypography.display),
-                        const SizedBox(height: 8),
-                        const Text(
-                            'See every day. Tap a date to check off missions you finished.',
-                            style: AbundanceTypography.body),
-                        const SizedBox(height: 10),
-                        Row(children: [
-                          const Icon(Icons.access_time,
-                              size: 19, color: AbundanceColors.muted),
-                          const SizedBox(width: 8),
-                          Text('Resets in $_resetCountdown',
-                              style: AbundanceTypography.body
-                                  .copyWith(color: AbundanceColors.muted)),
-                        ]),
+                        AbundanceTutorialTarget(
+                          name: 'daily-overview',
+                          controller: widget.tutorialController,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('EVERYDAY MISSIONS',
+                                  style: AbundanceTypography.eyebrow),
+                              const SizedBox(height: 6),
+                              const Text('Everyday Missions',
+                                  style: AbundanceTypography.display),
+                              const SizedBox(height: 8),
+                              const Text(
+                                  'See every day. Tap a date to check off missions you finished.',
+                                  style: AbundanceTypography.body),
+                              const SizedBox(height: 10),
+                              Row(children: [
+                                const Icon(Icons.access_time,
+                                    size: 19, color: AbundanceColors.muted),
+                                const SizedBox(width: 8),
+                                Text('Resets in $_resetCountdown',
+                                    style: AbundanceTypography.body.copyWith(
+                                        color: AbundanceColors.muted)),
+                              ]),
+                            ],
+                          ),
+                        ),
                         const SizedBox(height: 22),
-                        _buildCalendar(),
+                        AbundanceTutorialTarget(
+                          name: 'daily-board',
+                          controller: widget.tutorialController,
+                          child: _buildCalendar(),
+                        ),
                         const SizedBox(height: 16),
                         _buildLegend(),
                         const SizedBox(height: 18),

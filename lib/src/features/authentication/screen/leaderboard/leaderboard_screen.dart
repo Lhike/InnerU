@@ -5,6 +5,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/abundance_company.dart';
+import 'package:selfcare_projects/src/features/abundance/tutorial/abundance_tutorial_controller.dart';
+import 'package:selfcare_projects/src/features/abundance/widgets/abundance_tutorial_target.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/domain.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/scoring.dart';
 import 'package:selfcare_projects/src/services/api_client.dart';
@@ -14,6 +16,7 @@ import 'package:selfcare_projects/src/services/leaderboard_api_service.dart';
 import 'package:selfcare_projects/src/services/company_theme_service.dart';
 import 'package:selfcare_projects/src/services/image_storage_service.dart';
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_header_profile_button.dart';
+import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 
 class UserActivity {
   const UserActivity({
@@ -138,6 +141,9 @@ class A12LeaderboardEntry {
     required this.rank,
     required this.leaderboardRank,
     required this.activity,
+    this.level,
+    this.levelName,
+    this.rankKey,
     this.profilePic,
     this.teamName,
     this.firstCompletedTrackerAt,
@@ -149,6 +155,9 @@ class A12LeaderboardEntry {
   final GoalRank rank;
   final int leaderboardRank;
   final UserActivity activity;
+  final int? level;
+  final String? levelName;
+  final String? rankKey;
   final String? profilePic;
   final String? teamName;
   final String? firstCompletedTrackerAt;
@@ -160,6 +169,9 @@ class A12LeaderboardEntry {
     GoalRank? rank,
     int? leaderboardRank,
     UserActivity? activity,
+    int? level,
+    String? levelName,
+    String? rankKey,
     String? profilePic,
     String? teamName,
     String? firstCompletedTrackerAt,
@@ -171,6 +183,9 @@ class A12LeaderboardEntry {
       rank: rank ?? this.rank,
       leaderboardRank: leaderboardRank ?? this.leaderboardRank,
       activity: activity ?? this.activity,
+      level: level ?? this.level,
+      levelName: levelName ?? this.levelName,
+      rankKey: rankKey ?? this.rankKey,
       profilePic: profilePic ?? this.profilePic,
       teamName: teamName ?? this.teamName,
       firstCompletedTrackerAt:
@@ -204,19 +219,23 @@ class Leaderboard extends StatefulWidget {
     super.key,
     this.isLoading = true,
     this.debugLoader,
+    this.apiLoader,
     this.appBarTitle = 'Leaderboard',
     this.onLeaveCouncil,
     this.onSignOut,
+    this.tutorialController,
   });
 
   final bool isLoading;
   final Future<LeaderboardApiSnapshot> Function()? debugLoader;
+  final Future<LeaderboardApiSnapshot> Function()? apiLoader;
 
   /// Optional branded title for an isolated company route. The default keeps
   /// every existing InnerU leaderboard unchanged.
   final String appBarTitle;
   final Future<void> Function()? onLeaveCouncil;
   final VoidCallback? onSignOut;
+  final AbundanceTutorialController? tutorialController;
 
   @override
   State<Leaderboard> createState() => _LeaderboardState();
@@ -287,7 +306,11 @@ class _LeaderboardState extends State<Leaderboard>
       name: entry.name,
       score: UserScore(
         userId: entry.userId,
-        categories: {for (final c in GoalCategory.values) c: 0.0},
+        categories: {
+          GoalCategory.personal: entry.personalScore?.toDouble() ?? 0,
+          GoalCategory.professional: entry.professionalScore?.toDouble() ?? 0,
+          GoalCategory.contribution: entry.contributionScore?.toDouble() ?? 0,
+        },
         goalScore: goalScore,
         coreTaskScore: dailyTrackerScore,
         consistencyScore: 0,
@@ -302,6 +325,9 @@ class _LeaderboardState extends State<Leaderboard>
       rank: rankForPercent(score),
       leaderboardRank: entry.rank,
       activity: const UserActivity(),
+      level: entry.level,
+      levelName: entry.levelName,
+      rankKey: entry.rankKey,
       profilePic: entry.profilePic,
       teamName: entry.teamName,
       firstCompletedTrackerAt: entry.firstCompletedTrackerAt,
@@ -330,7 +356,7 @@ class _LeaderboardState extends State<Leaderboard>
     }
 
     try {
-      final loader = widget.debugLoader;
+      final loader = widget.apiLoader ?? widget.debugLoader;
       final snapshot = loader != null
           ? await loader()
           : await LeaderboardApiService.instance.fetchLeaderboard();
@@ -504,7 +530,19 @@ class _LeaderboardState extends State<Leaderboard>
   @override
   Widget build(BuildContext context) {
     return CompanyThemeBuilder(
-      builder: (context, companyTheme) {
+      builder: (context, resolvedTheme) {
+        final companyTheme = widget.appBarTitle == 'Allies'
+            ? resolvedTheme.copyWith(
+                primaryColor: const Color(0xFFF2BD3F),
+                accentColor: const Color(0xFF43C8F3),
+                backgroundColor: const Color(0xFF070C25),
+                surfaceColor: const Color(0xFF101638),
+                inkColor: const Color(0xFFF2E8CF),
+                mutedInkColor: const Color(0xFFA8AEC8),
+                iconColor: const Color(0xFFF2BD3F),
+                isDark: true,
+              )
+            : resolvedTheme;
         return DefaultTabController(
           length: 2,
           child: Theme(
@@ -605,6 +643,8 @@ class _LeaderboardState extends State<Leaderboard>
                                                 .toString() ??
                                             '',
                                         onLeaveCouncil: widget.onLeaveCouncil,
+                                        tutorialController:
+                                            widget.tutorialController,
                                       )
                                     : _A12LeaderboardBoard(
                                         key: const ValueKey('company'),
@@ -2402,6 +2442,7 @@ class _AbundanceAlliesBoard extends StatefulWidget {
     required this.theme,
     required this.currentUserId,
     this.onLeaveCouncil,
+    this.tutorialController,
   });
 
   final List<A12LeaderboardEntry> entries;
@@ -2409,6 +2450,7 @@ class _AbundanceAlliesBoard extends StatefulWidget {
   final CompanyThemeData theme;
   final String currentUserId;
   final Future<void> Function()? onLeaveCouncil;
+  final AbundanceTutorialController? tutorialController;
 
   @override
   State<_AbundanceAlliesBoard> createState() => _AbundanceAlliesBoardState();
@@ -2420,6 +2462,21 @@ class _AbundanceAlliesBoardState extends State<_AbundanceAlliesBoard> {
   bool _hideZero = false;
   bool _studentsOnly = false;
   bool _activeQuestsOnly = false;
+
+  void _openMember(A12LeaderboardEntry entry) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: widget.theme.backgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (_) => _A12MemberQuestSheet(
+        entry: entry,
+        theme: widget.theme,
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -2454,17 +2511,55 @@ class _AbundanceAlliesBoardState extends State<_AbundanceAlliesBoard> {
     final panel = widget.theme.surfaceColor;
     final gold = const Color(0xFFF2BD3F);
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
+      padding: const EdgeInsets.fromLTRB(12, 11, 12, 20),
       children: [
-        Text('ALLIES',
-            style: TextStyle(
-                color: ink,
-                fontSize: 30,
-                fontWeight: FontWeight.w800,
-                fontFamily: 'Georgia')),
-        const SizedBox(height: 6),
-        Text('Champions of growth. Inspiring others by leading the way.',
-            style: TextStyle(color: muted, fontSize: 16, height: 1.4)),
+        AbundanceTutorialTarget(
+          name: 'allies-overview',
+          controller: widget.tutorialController,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('ALLIES',
+                  style: TextStyle(
+                      color: ink,
+                      fontSize: 23,
+                      fontWeight: FontWeight.w800,
+                      fontFamily: 'Georgia')),
+              const SizedBox(height: 4),
+              Text('Champions of growth. Inspiring others by leading the way.',
+                  style: TextStyle(color: muted, fontSize: 12, height: 1.3)),
+              const SizedBox(height: 11),
+              _AlliesPanel(
+                title: 'TOP PERFORMERS',
+                panel: panel,
+                border: gold,
+                child: top.isEmpty
+                    ? Text('No allies to display yet.',
+                        style: TextStyle(color: muted))
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          for (final entry
+                              in _podiumOrder(top.take(3).toList()))
+                            Expanded(
+                              child: InkWell(
+                                onTap: () => _openMember(entry),
+                                borderRadius: BorderRadius.circular(12),
+                                child: _TopAlly(
+                                  entry: entry,
+                                  gold: gold,
+                                  ink: ink,
+                                  muted: muted,
+                                  preserveArtwork: true,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        ),
         if (widget.onLeaveCouncil != null) ...[
           const SizedBox(height: 14),
           Align(
@@ -2479,130 +2574,192 @@ class _AbundanceAlliesBoardState extends State<_AbundanceAlliesBoard> {
             ),
           ),
         ],
-        const SizedBox(height: 18),
-        _AlliesPanel(
-          title: 'TOP PERFORMERS',
-          panel: panel,
-          border: gold,
-          child: top.isEmpty
-              ? Text('No allies to display yet.',
-                  style: TextStyle(color: muted))
-              : Wrap(
-                  alignment: WrapAlignment.spaceEvenly,
-                  spacing: 18,
-                  runSpacing: 14,
-                  children: [
-                    for (final entry in top.take(3))
-                      _TopAlly(entry: entry, gold: gold, ink: ink, muted: muted)
-                  ],
-                ),
-        ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         if (currentEntry != null)
-          _AlliesPanel(
-            title: 'YOUR RANK',
-            panel: panel,
-            border: widget.theme.primaryColor,
-            child: Row(
-              children: [
-                CircleAvatar(
-                    backgroundColor: widget.theme.primaryColor,
-                    foregroundColor: Colors.black,
-                    child: Text('${currentEntry.leaderboardRank}')),
-                const SizedBox(width: 12),
-                Expanded(
-                    child: Text(currentEntry.name,
+          AbundanceTutorialTarget(
+            name: 'allies-rank',
+            controller: widget.tutorialController,
+            child: _AlliesPanel(
+              title: 'YOUR RANK',
+              panel: panel,
+              border: widget.theme.primaryColor,
+              child: InkWell(
+                onTap: () => _openMember(currentEntry),
+                borderRadius: BorderRadius.circular(12),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                        backgroundColor: widget.theme.primaryColor,
+                        foregroundColor: Colors.black,
+                        child: Text('${currentEntry.leaderboardRank}')),
+                    const SizedBox(width: 12),
+                    Expanded(
+                        child: Text(currentEntry.name,
+                            style: TextStyle(
+                                color: ink,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700))),
+                    Text('${currentEntry.score.overallScore.round()}%',
                         style: TextStyle(
                             color: ink,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700))),
-                Text('${currentEntry.score.overallScore.round()}%',
-                    style: TextStyle(
-                        color: ink,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        fontFamily: 'Georgia')),
-              ],
+                            fontSize: 19,
+                            fontWeight: FontWeight.w800,
+                            fontFamily: 'Georgia')),
+                  ],
+                ),
+              ),
             ),
           ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            OutlinedButton(
-                onPressed: () {},
-                style: OutlinedButton.styleFrom(
-                    foregroundColor: gold, side: BorderSide(color: gold)),
-                child: const Text('Overall')),
-            const SizedBox(width: 10),
-            Expanded(
-                child: TextField(
-                    controller: _search,
-                    onChanged: (_) => setState(() {}),
-                    style: TextStyle(color: ink),
-                    decoration: InputDecoration(
-                        hintText: 'Search allies',
-                        hintStyle: TextStyle(color: muted),
-                        prefixIcon: Icon(Icons.search, color: muted),
-                        filled: true,
-                        fillColor: panel,
-                        border: const OutlineInputBorder()))),
-            const SizedBox(width: 10),
-            OutlinedButton(
-                onPressed: () => setState(() {}),
-                style: OutlinedButton.styleFrom(
-                    foregroundColor: ink,
-                    side: BorderSide(color: widget.theme.primaryColor)),
-                child: const Text('Search')),
-          ],
+        const SizedBox(height: 10),
+        AbundanceTutorialTarget(
+          name: 'allies-controls',
+          controller: widget.tutorialController,
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  OutlinedButton(
+                      onPressed: () {},
+                      style: OutlinedButton.styleFrom(
+                          foregroundColor: gold,
+                          side: BorderSide(color: gold),
+                          backgroundColor: panel,
+                          minimumSize: const Size(82, 48),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(17)),
+                          padding: const EdgeInsets.symmetric(horizontal: 10)),
+                      child: const Text('Overall')),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: SizedBox(
+                      height: 48,
+                      child: TextField(
+                        controller: _search,
+                        onChanged: (_) => setState(() {}),
+                        style: TextStyle(color: ink, fontSize: 14),
+                        decoration: InputDecoration(
+                          hintText: 'Search allies',
+                          hintStyle: TextStyle(color: muted, fontSize: 14),
+                          prefixIcon:
+                              Icon(Icons.search, color: muted, size: 19),
+                          prefixIconConstraints:
+                              const BoxConstraints(minWidth: 38, minHeight: 38),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 10),
+                          filled: true,
+                          fillColor: panel,
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(17),
+                            borderSide: BorderSide(
+                                color: widget.theme.primaryColor
+                                    .withValues(alpha: .35)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(17),
+                            borderSide: BorderSide(color: gold),
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(17),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  OutlinedButton(
+                      onPressed: () => setState(() {}),
+                      style: OutlinedButton.styleFrom(
+                          foregroundColor: ink,
+                          side: BorderSide(color: widget.theme.primaryColor),
+                          backgroundColor: panel,
+                          minimumSize: const Size(76, 48),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(17)),
+                          padding: const EdgeInsets.symmetric(horizontal: 10)),
+                      child: const Text('Search')),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(children: [
+                PopupMenuButton<String>(
+                    onSelected: (value) => setState(() => _period = value),
+                    itemBuilder: (_) => [
+                          for (final value in [
+                            'This Week',
+                            'This Month',
+                            'All Time'
+                          ])
+                            PopupMenuItem(value: value, child: Text(value))
+                        ],
+                    child: SizedBox(
+                        width: 132,
+                        height: 48,
+                        child: _AlliesControl(
+                            label: _period,
+                            icon: Icons.calendar_month_outlined,
+                            color: ink,
+                            panel: panel))),
+                const SizedBox(width: 10),
+                PopupMenuButton<String>(
+                    onSelected: (value) => setState(() {
+                          _hideZero = value == 'Hide zero scores';
+                          _studentsOnly = value == 'Students only';
+                          _activeQuestsOnly = value == 'Has active quests';
+                        }),
+                    itemBuilder: (_) => [
+                          const PopupMenuItem(
+                              value: 'Hide zero scores',
+                              child: Text('Hide zero scores')),
+                          const PopupMenuItem(
+                              value: 'Students only',
+                              child: Text('Students only')),
+                          const PopupMenuItem(
+                              value: 'Has active quests',
+                              child: Text('Has active quests'))
+                        ],
+                    child: SizedBox(
+                        width: 132,
+                        height: 48,
+                        child: _AlliesControl(
+                            label: 'Filters',
+                            icon: Icons.tune,
+                            color: ink,
+                            panel: panel))),
+              ]),
+            ],
+          ),
         ),
-        const SizedBox(height: 12),
-        Row(children: [
-          PopupMenuButton<String>(
-              onSelected: (value) => setState(() => _period = value),
-              itemBuilder: (_) => [
-                    for (final value in ['This Week', 'This Month', 'All Time'])
-                      PopupMenuItem(value: value, child: Text(value))
-                  ],
-              child: _AlliesControl(
-                  label: _period,
-                  icon: Icons.calendar_month_outlined,
-                  color: ink,
-                  panel: panel)),
-          const SizedBox(width: 10),
-          PopupMenuButton<String>(
-              onSelected: (value) => setState(() {
-                    _hideZero = value == 'Hide zero scores';
-                    _studentsOnly = value == 'Students only';
-                    _activeQuestsOnly = value == 'Has active quests';
-                  }),
-              itemBuilder: (_) => [
-                    const PopupMenuItem(
-                        value: 'Hide zero scores',
-                        child: Text('Hide zero scores')),
-                    const PopupMenuItem(
-                        value: 'Students only', child: Text('Students only')),
-                    const PopupMenuItem(
-                        value: 'Has active quests',
-                        child: Text('Has active quests'))
-                  ],
-              child: _AlliesControl(
-                  label: 'Filters',
-                  icon: Icons.tune,
-                  color: ink,
-                  panel: panel)),
-        ]),
-        const SizedBox(height: 16),
-        _AlliesPanel(
-            title: 'Company leaderboard',
-            panel: panel,
-            border: widget.theme.primaryColor,
-            child: Column(children: [
-              for (final entry in filtered)
-                _AllyRow(entry: entry, ink: ink, muted: muted, gold: gold)
-            ])),
+        const SizedBox(height: 10),
+        AbundanceTutorialTarget(
+          name: 'allies-board',
+          controller: widget.tutorialController,
+          child: _AlliesPanel(
+              title: '',
+              panel: panel,
+              border: widget.theme.primaryColor,
+              child: Column(children: [
+                for (final entry in filtered)
+                  InkWell(
+                    onTap: () => _openMember(entry),
+                    child: _AllyRow(
+                        entry: entry, ink: ink, muted: muted, gold: gold),
+                  )
+              ])),
+        ),
       ],
     );
   }
+}
+
+List<A12LeaderboardEntry> _podiumOrder(List<A12LeaderboardEntry> entries) {
+  final byRank = <int, A12LeaderboardEntry>{
+    for (final entry in entries) entry.leaderboardRank: entry,
+  };
+  return [
+    if (byRank[2] != null) byRank[2]!,
+    if (byRank[1] != null) byRank[1]!,
+    if (byRank[3] != null) byRank[3]!,
+  ];
 }
 
 class _AlliesPanel extends StatelessWidget {
@@ -2617,19 +2774,21 @@ class _AlliesPanel extends StatelessWidget {
   final Widget child;
   @override
   Widget build(BuildContext context) => Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
           color: panel,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(color: border.withValues(alpha: .55))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title,
-            style: TextStyle(
-                color: border,
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 2)),
-        const SizedBox(height: 14),
+        if (title.isNotEmpty) ...[
+          Text(title,
+              style: TextStyle(
+                  color: border,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2)),
+          const SizedBox(height: 8),
+        ],
         child
       ]));
 }
@@ -2639,29 +2798,145 @@ class _TopAlly extends StatelessWidget {
       {required this.entry,
       required this.gold,
       required this.ink,
-      required this.muted});
+      required this.muted,
+      this.preserveArtwork = false});
   final A12LeaderboardEntry entry;
   final Color gold;
   final Color ink;
   final Color muted;
+  final bool preserveArtwork;
   @override
-  Widget build(BuildContext context) => Column(children: [
-        CircleAvatar(
-            radius: 32,
-            backgroundColor: Colors.black26,
-            foregroundColor: ink,
-            child: Text(
-                entry.name.isEmpty
-                    ? '?'
-                    : entry.name.substring(0, 1).toUpperCase(),
-                style: const TextStyle(fontSize: 24, fontFamily: 'Georgia'))),
-        const SizedBox(height: 6),
-        Text(entry.name,
-            style: TextStyle(color: ink, fontWeight: FontWeight.w700)),
-        Text('${entry.score.overallScore.round()}%',
+  Widget build(BuildContext context) {
+    final first = entry.leaderboardRank == 1;
+    final ringColor = switch (entry.leaderboardRank) {
+      1 => const Color(0xFFF2BD3F),
+      2 => const Color(0xFFC3CBD8),
+      3 => const Color(0xFFB87333),
+      _ => ink.withValues(alpha: .72),
+    };
+    final flag = first ? const Color(0xFF5A2F96) : const Color(0xFF2A5391);
+    final initial = entry.name.trim().isEmpty
+        ? '?'
+        : entry.name.trim().substring(0, 1).toUpperCase();
+    return Column(
+      children: [
+        SizedBox(
+          height: 19,
+          child: first
+              ? AbundanceArtwork(
+                  enabled: preserveArtwork,
+                  child: Text('♛', style: TextStyle(color: gold, fontSize: 17)),
+                )
+              : null,
+        ),
+        AbundanceArtwork(
+          enabled: preserveArtwork,
+          child: Container(
+            width: first ? 52 : 47,
+            height: first ? 52 : 47,
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: ringColor,
+                width: first ? 2.5 : 2,
+              ),
+              boxShadow: first
+                  ? [
+                      BoxShadow(
+                        color: gold.withValues(alpha: .2),
+                        blurRadius: 8,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: CircleAvatar(
+              radius: first ? 22 : 20,
+              backgroundColor: Colors.black26,
+              foregroundColor: ink,
+              child: Text(initial,
+                  style: const TextStyle(fontSize: 18, fontFamily: 'Georgia')),
+            ),
+          ),
+        ),
+        Transform.translate(
+          offset: const Offset(0, -7),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              color: gold,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.black87, width: 2),
+            ),
+            child: Text('${entry.leaderboardRank}',
+                style: const TextStyle(
+                    color: Colors.black,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w900)),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Text(
+            entry.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
             style: TextStyle(
-                color: gold, fontSize: 18, fontWeight: FontWeight.w800))
-      ]);
+              color: ink,
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Georgia',
+            ),
+          ),
+        ),
+        const SizedBox(height: 3),
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          padding: const EdgeInsets.fromLTRB(5, 5, 5, 6),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: .42),
+            border: Border.all(color: Colors.black54),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                decoration: BoxDecoration(
+                  border: Border.all(color: gold.withValues(alpha: .7)),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '${entry.score.overallScore.round()}%',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: gold,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    fontFamily: 'Georgia',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 5),
+              Container(
+                width: 38,
+                height: 38,
+                color: flag,
+                alignment: Alignment.topCenter,
+                padding: const EdgeInsets.only(top: 5),
+                child: AbundanceArtwork(
+                  enabled: preserveArtwork,
+                  child: Text('♛', style: TextStyle(color: gold, fontSize: 12)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _AlliesControl extends StatelessWidget {
@@ -2676,7 +2951,7 @@ class _AlliesControl extends StatelessWidget {
   final Color panel;
   @override
   Widget build(BuildContext context) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
       decoration: BoxDecoration(
           color: panel,
           borderRadius: BorderRadius.circular(12),
@@ -2684,10 +2959,34 @@ class _AlliesControl extends StatelessWidget {
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(icon, color: color, size: 18),
         const SizedBox(width: 8),
-        Text(label, style: TextStyle(color: color)),
-        const SizedBox(width: 6),
-        Icon(Icons.keyboard_arrow_down, color: color, size: 18)
+        Text(label, style: TextStyle(color: color, fontSize: 13)),
+        const SizedBox(width: 4),
+        Icon(Icons.keyboard_arrow_down, color: color, size: 16)
       ]));
+}
+
+class _A12ResolvedProgression {
+  const _A12ResolvedProgression(this.name, this.level);
+
+  final String name;
+  final int level;
+}
+
+_A12ResolvedProgression _a12ProgressionForScore(num score) {
+  final value = score.clamp(0, 100).toDouble();
+  if (value >= 100) {
+    return const _A12ResolvedProgression('Immortal', 5);
+  }
+  if (value > 75) {
+    return const _A12ResolvedProgression('Divine', 4);
+  }
+  if (value > 50) {
+    return const _A12ResolvedProgression('Ancient', 3);
+  }
+  if (value > 25) {
+    return const _A12ResolvedProgression('Legend', 2);
+  }
+  return const _A12ResolvedProgression('Archon', 1);
 }
 
 class _AllyRow extends StatelessWidget {
@@ -2701,29 +3000,347 @@ class _AllyRow extends StatelessWidget {
   final Color muted;
   final Color gold;
   @override
-  Widget build(BuildContext context) => Container(
-      padding: const EdgeInsets.symmetric(vertical: 14),
+  Widget build(BuildContext context) {
+    // The API fields are authoritative. The score-derived fallback keeps the
+    // badge visible while an older leaderboard API is being rolled out.
+    final fallbackProgression = _a12ProgressionForScore(
+      entry.score.overallScore,
+    );
+    final level = entry.level ?? fallbackProgression.level;
+    final levelName = entry.levelName ?? fallbackProgression.name;
+    final rankRing = switch (entry.leaderboardRank) {
+      1 => const Color(0xFFF2BD3F),
+      2 => const Color(0xFFC3CBD8),
+      3 => const Color(0xFFB87333),
+      _ => gold,
+    };
+    return Container(
+      padding: const EdgeInsets.fromLTRB(5, 12, 5, 12),
       decoration: BoxDecoration(
-          border:
-              Border(bottom: BorderSide(color: muted.withValues(alpha: .18)))),
-      child: Row(children: [
-        CircleAvatar(
-            backgroundColor: Colors.black26,
-            foregroundColor: ink,
-            child: Text('${entry.leaderboardRank}')),
-        const SizedBox(width: 10),
-        Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(entry.name,
-              style: TextStyle(color: ink, fontWeight: FontWeight.w700)),
-          Text('Life Power · ${entry.rank.name}',
-              style: TextStyle(color: muted, fontSize: 12))
-        ])),
-        Text('${entry.score.overallScore.round()}%',
-            style: TextStyle(
-                color: gold, fontWeight: FontWeight.w800, fontSize: 18))
-      ]));
+        color: entry.userId ==
+                (AuthService.instance.currentSession?.id.toString() ?? '')
+            ? Colors.black.withValues(alpha: .2)
+            : null,
+        border: Border(
+          bottom: BorderSide(color: muted.withValues(alpha: .18)),
+          left: entry.userId ==
+                  (AuthService.instance.currentSession?.id.toString() ?? '')
+              ? BorderSide(color: gold, width: 2)
+              : BorderSide.none,
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              AbundanceArtwork(
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: rankRing, width: 2),
+                  ),
+                  child: Text('${entry.leaderboardRank}',
+                      style: TextStyle(
+                          color: AbundanceColors.lightAppearanceActive
+                              ? const Color(0xFF171C2E)
+                              : ink,
+                          fontSize: 12)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              CircleAvatar(
+                radius: 21,
+                backgroundColor: Colors.black26,
+                foregroundColor: ink,
+                child: Text(
+                  entry.name.trim().isEmpty
+                      ? '?'
+                      : entry.name.trim().substring(0, 1).toUpperCase(),
+                  style: const TextStyle(fontSize: 18, fontFamily: 'Georgia'),
+                ),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(entry.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: ink,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            fontFamily: 'Georgia')),
+                    Text(entry.teamName ?? 'I matter',
+                        style: TextStyle(color: muted, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Text(
+                      '△ ${entry.score.goalScore.round()}%   ▦ ${entry.score.coreTaskScore.round()}%   ♡ ${entry.score.overallScore.round()}%',
+                      style: TextStyle(color: muted, fontSize: 10),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 9),
+          Row(
+            children: [
+              const SizedBox(width: 45),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${entry.score.overallScore.round()}%',
+                        style: TextStyle(
+                            color: gold,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            fontFamily: 'Georgia')),
+                    const SizedBox(height: 5),
+                    LinearProgressIndicator(
+                      value: (entry.score.overallScore / 100).clamp(0, 1),
+                      minHeight: 5,
+                      backgroundColor: Colors.black54,
+                      color: gold,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 14),
+              Row(
+                children: [
+                  Text('♛', style: TextStyle(color: gold, fontSize: 15)),
+                  const SizedBox(width: 5),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('LEVEL $level',
+                          style: TextStyle(color: muted, fontSize: 7)),
+                      Text(levelName.toUpperCase(),
+                          style: TextStyle(
+                              color: gold,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800)),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _A12MemberQuestSheet extends StatelessWidget {
+  const _A12MemberQuestSheet({required this.entry, required this.theme});
+
+  final A12LeaderboardEntry entry;
+  final CompanyThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    final ink = theme.inkColor;
+    final muted = theme.mutedInkColor;
+    final total = entry.score.overallScore.round();
+    final team = entry.teamName ?? 'Guild';
+    final fallbackProgression = _a12ProgressionForScore(
+      entry.score.overallScore,
+    );
+    final level = entry.level ?? fallbackProgression.level;
+    final levelName = entry.levelName ?? fallbackProgression.name;
+    return DraggableScrollableSheet(
+      initialChildSize: .86,
+      minChildSize: .55,
+      maxChildSize: .96,
+      expand: false,
+      builder: (context, controller) => SingleChildScrollView(
+        controller: controller,
+        padding: const EdgeInsets.fromLTRB(18, 10, 18, 22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: muted.withValues(alpha: .5),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    "${entry.name.toUpperCase()}'S QUESTS",
+                    style: TextStyle(
+                      color: ink,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      fontFamily: 'Georgia',
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: Icon(Icons.close, color: ink),
+                ),
+              ],
+            ),
+            Text(
+              'Rank ${entry.leaderboardRank} in $team · Total Score $total%',
+              style: TextStyle(color: muted, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(13),
+              decoration: BoxDecoration(
+                color: theme.surfaceColor,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 25,
+                    backgroundColor: theme.primaryColor.withValues(alpha: .28),
+                    foregroundColor: ink,
+                    child: Text(
+                      entry.name.trim().isEmpty
+                          ? '?'
+                          : entry.name.trim().substring(0, 1).toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 21,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: 'Georgia',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(entry.name,
+                            style: TextStyle(
+                                color: ink,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                                fontFamily: 'Georgia')),
+                        Text(entry.teamName ?? 'I matter',
+                            style: TextStyle(color: muted, fontSize: 12)),
+                        const SizedBox(height: 4),
+                        Text(
+                          '♛ LEVEL $level · ${levelName.toUpperCase()}',
+                          style: TextStyle(
+                              color: theme.primaryColor,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                              letterSpacing: .8),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            for (final category in GoalCategory.values)
+              _A12MemberCategory(
+                category: category,
+                score: entry.score.categories[category] ?? 0,
+                theme: theme,
+              ),
+            const SizedBox(height: 12),
+            Divider(color: theme.primaryColor.withValues(alpha: .28)),
+            const SizedBox(height: 12),
+            Text(
+              '$levelName · Total score $total% is calculated from the available categories and activity data.',
+              style: TextStyle(color: muted, fontSize: 16, height: 1.45),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _A12MemberCategory extends StatelessWidget {
+  const _A12MemberCategory({
+    required this.category,
+    required this.score,
+    required this.theme,
+  });
+
+  final GoalCategory category;
+  final double score;
+  final CompanyThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = (score / 100).clamp(0.0, 1.0).toDouble();
+    final accent = Color(category.accent);
+    final muted = theme.mutedInkColor;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(category.label.toUpperCase(),
+                    style: TextStyle(
+                        color: theme.inkColor,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.5,
+                        fontFamily: 'Georgia')),
+              ),
+              Text('${score.round()}% OF 100',
+                  style: TextStyle(color: muted, fontSize: 11)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(5),
+            child: LinearProgressIndicator(
+              value: value,
+              minHeight: 7,
+              backgroundColor: muted.withValues(alpha: .16),
+              color: accent,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              border: Border.all(
+                  color: theme.primaryColor.withValues(alpha: .18),
+                  style: BorderStyle.solid),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              'No ${category.label.toLowerCase()} quest set — an empty category scores 0.',
+              style: TextStyle(color: muted, fontSize: 13, height: 1.3),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _A12LeaderboardBoard extends StatefulWidget {

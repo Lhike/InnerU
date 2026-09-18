@@ -1,55 +1,29 @@
 import 'package:flutter/material.dart';
 
+import 'package:selfcare_projects/src/features/abundance/services/abundance_achievement_presentation.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_achievements_service.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_typography.dart';
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_button.dart';
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_card.dart';
+import 'package:selfcare_projects/src/features/abundance/widgets/abundance_tutorial_target.dart';
+import 'package:selfcare_projects/src/features/abundance/tutorial/abundance_tutorial_controller.dart';
 
-class _AwardDefinition {
-  const _AwardDefinition(this.key, this.name, this.description);
-  final String key;
-  final String name;
-  final String description;
-}
-
-const _awards = <_AwardDefinition>[
-  _AwardDefinition(
-      'first-flame', 'First Flame', 'Complete your first mission.'),
-  _AwardDefinition('finding-rythm', 'Finding Rhythm', 'Build a steady streak.'),
-  _AwardDefinition(
-      '30-days-strong', '30 Days Strong', 'Show up for thirty days.'),
-  _AwardDefinition('unbroken', 'Unbroken', 'Protect an exceptional streak.'),
-  _AwardDefinition(
-      'discipline', 'Discipline', 'Master your everyday missions.'),
-  _AwardDefinition(
-      'finished-first', 'Finished First', 'Complete your first quest.'),
-  _AwardDefinition('closer', 'Closer', 'Bring several quests to completion.'),
-  _AwardDefinition(
-      'quest-architect', 'Quest Architect', 'Build a complete quest plan.'),
-  _AwardDefinition(
-      'high-performer', 'High Performer', 'Raise your Life Power.'),
-  _AwardDefinition(
-      'abundance-elite', 'Abundance Elite', 'Reach the highest standard.'),
-  _AwardDefinition(
-      'tended-ground', 'Tended Ground', 'Complete a personal quest.'),
-  _AwardDefinition(
-      'forged-craft', 'Forged Craft', 'Complete a professional quest.'),
-  _AwardDefinition(
-      'given-freely', 'Given Freely', 'Complete a contribution quest.'),
-  _AwardDefinition('immovable', 'Immovable', 'Keep a 20-day streak.'),
-  _AwardDefinition('examine-life', 'Examined Life', 'Reflect on your days.'),
-];
-
+/// The Awards page renders the achievement catalog supplied by the gateway.
+/// The optional legacy inputs remain for old callers/tests; production callers
+/// pass the typed gateway's [load] method.
 class AbundanceAchievementsScreen extends StatefulWidget {
   const AbundanceAchievementsScreen({
     super.key,
     this.unlockedKeys = const <String>{},
     this.loader,
+    this.tutorialController,
   });
 
   final Set<String> unlockedKeys;
-  final Future<Set<String>> Function()? loader;
+  final Future<dynamic> Function()? loader;
+  final AbundanceTutorialController? tutorialController;
 
   @override
   State<AbundanceAchievementsScreen> createState() =>
@@ -58,7 +32,7 @@ class AbundanceAchievementsScreen extends StatefulWidget {
 
 class _AbundanceAchievementsScreenState
     extends State<AbundanceAchievementsScreen> {
-  Future<Set<String>>? _future;
+  Future<dynamic>? _future;
 
   @override
   void initState() {
@@ -78,16 +52,17 @@ class _AbundanceAchievementsScreenState
 
   @override
   Widget build(BuildContext context) {
-    if (_future == null) return _content(widget.unlockedKeys);
-    return FutureBuilder<Set<String>>(
+    if (_future == null) return _content(_legacyRecords(widget.unlockedKeys));
+    return FutureBuilder<dynamic>(
       future: _future,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const ColoredBox(
             color: AbundanceColors.background,
             child: Center(
-              child:
-                  CircularProgressIndicator(color: AbundanceColors.primaryGold),
+              child: CircularProgressIndicator(
+                color: AbundanceColors.primaryGold,
+              ),
             ),
           );
         }
@@ -103,62 +78,75 @@ class _AbundanceAchievementsScreenState
             ),
           );
         }
-        return _content(snapshot.data ?? const <String>{});
+        return _content(_recordsFrom(snapshot.data));
       },
     );
   }
 
-  Widget _content(Set<String> unlockedKeys) {
-    final earned = _awards
-        .where((award) => unlockedKeys.contains(award.key))
-        .toList(growable: false);
-    final locked = _awards
-        .where((award) => !unlockedKeys.contains(award.key))
-        .toList(growable: false);
-    final discipline = _awards.sublist(0, 5);
-    final realms = _awards.sublist(10, 13);
-    final quests = _awards.sublist(5, 8);
-    final lifePower = _awards.sublist(8, 10);
+  Widget _content(List<AbundanceAchievementRecord> records) {
+    final catalog = AbundanceAchievementCatalog.fromRecords(records);
     final list = ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 104),
       children: [
-        const Text('THE HALL OF RECORDS', style: AbundanceTypography.eyebrow),
-        const SizedBox(height: 6),
-        const Text(
-          'Achievements',
-          style: TextStyle(
-            color: AbundanceColors.foreground,
-            fontFamily: AbundanceTypography.displayFamily,
-            fontSize: 28,
-            fontWeight: FontWeight.w700,
+        AbundanceTutorialTarget(
+          name: 'achievements-overview',
+          controller: widget.tutorialController,
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('THE HALL OF RECORDS', style: AbundanceTypography.eyebrow),
+              SizedBox(height: 6),
+              Text(
+                'Achievements',
+                style: TextStyle(
+                  color: AbundanceColors.foreground,
+                  fontFamily: AbundanceTypography.displayFamily,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Proof of the days you showed up. Every relic is earned, never given.',
+                style: TextStyle(
+                  color: AbundanceColors.muted,
+                  fontSize: 13,
+                  height: 1.46,
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 8),
-        const Text(
-          'Proof of the days you showed up. Every relic is earned, never given.',
-          style: TextStyle(
-              color: AbundanceColors.muted, fontSize: 13, height: 1.46),
-        ),
         const SizedBox(height: 16),
-        _SummaryRow(
-            unlocked: earned.length, inProgress: 0, locked: locked.length),
-        if (earned.isNotEmpty) ...[
+        AbundanceTutorialTarget(
+          name: 'achievements-tally',
+          controller: widget.tutorialController,
+          child: _SummaryRow(
+            unlocked: catalog.unlocked.length,
+            inProgress: catalog.inProgress.length,
+            locked: catalog.locked.length,
+          ),
+        ),
+        if (catalog.recent.isNotEmpty) ...[
           const SizedBox(height: 16),
           const Text('RECENTLY UNLOCKED', style: AbundanceTypography.eyebrow),
           const SizedBox(height: 10),
-          _AwardGrid(awards: earned, unlockedKeys: unlockedKeys),
+          AbundanceTutorialTarget(
+            name: 'achievements-wall',
+            controller: widget.tutorialController,
+            child: _AwardGrid(records: catalog.recent),
+          ),
         ],
-        for (final section in <({String title, List<_AwardDefinition> awards})>[
-          (title: 'DISCIPLINE', awards: discipline),
-          (title: 'THE THREE REALMS', awards: realms),
-          (title: 'QUESTS', awards: quests),
-          (title: 'LIFE POWER', awards: lifePower),
-        ]) ...[
+        for (final entry in catalog.groups.entries) ...[
           const SizedBox(height: 16),
-          Text(section.title, style: AbundanceTypography.eyebrow),
+          Text(entry.key.toUpperCase(), style: AbundanceTypography.eyebrow),
           const SizedBox(height: 10),
-          _AwardGrid(awards: section.awards, unlockedKeys: unlockedKeys),
+          AbundanceTutorialTarget(
+            name: 'achievements-wall',
+            controller: widget.tutorialController,
+            child: _AwardGrid(records: entry.value),
+          ),
         ],
       ],
     );
@@ -169,15 +157,36 @@ class _AbundanceAchievementsScreenState
           : RefreshIndicator(onRefresh: _refresh, child: list),
     );
   }
+
+  List<AbundanceAchievementRecord> _recordsFrom(dynamic value) {
+    if (value is List<AbundanceAchievementRecord>) return value;
+    if (value is Set<String>) return _legacyRecords(value);
+    return _legacyRecords(const <String>{});
+  }
+
+  List<AbundanceAchievementRecord> _legacyRecords(Set<String> unlockedKeys) {
+    return abundanceAchievementDefinitions.map((definition) {
+      final unlocked = unlockedKeys.contains(definition.key) ||
+          unlockedKeys.contains(definition.assetKey);
+      return AbundanceAchievementRecord(
+        definition: definition,
+        current: unlocked ? definition.target : 0,
+        unlocked: unlocked,
+      );
+    }).toList(growable: false);
+  }
 }
 
 class _AwardCard extends StatelessWidget {
-  const _AwardCard({required this.award, required this.unlocked});
-  final _AwardDefinition award;
-  final bool unlocked;
+  const _AwardCard({required this.record});
+
+  final AbundanceAchievementRecord record;
 
   @override
   Widget build(BuildContext context) {
+    final definition = record.definition;
+    final unlocked = record.unlocked;
+    final inProgress = !unlocked && record.current > 0;
     return Opacity(
       opacity: unlocked ? 1 : .52,
       child: AbundanceCard(
@@ -190,33 +199,58 @@ class _AwardCard extends StatelessWidget {
               width: 52,
               height: 52,
               child: unlocked
-                  ? Image.asset(abundanceAchievementAssets[award.key]!,
-                      fit: BoxFit.contain)
+                  ? AbundanceArtwork(
+                      child: Image.asset(
+                        abundanceAchievementAssets[definition.assetKey]!,
+                        fit: BoxFit.contain,
+                      ),
+                    )
                   : const _LockedRelic(),
             ),
             const SizedBox(height: 8),
             Text(
-              award.name,
+              definition.name,
               style: AbundanceTypography.title.copyWith(fontSize: 15),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),
             Text(
-              award.description,
-              style: AbundanceTypography.body
-                  .copyWith(color: AbundanceColors.muted, fontSize: 12),
+              definition.description,
+              maxLines: 5,
+              overflow: TextOverflow.ellipsis,
+              style: AbundanceTypography.body.copyWith(
+                color: AbundanceColors.muted,
+                fontSize: 12,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 6),
-            Text(unlocked ? 'UNLOCKED' : 'LOCKED',
-                style: TextStyle(
-                  color: unlocked
-                      ? AbundanceColors.accentCyan
-                      : AbundanceColors.muted,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.1,
-                )),
+            Text(
+              unlocked
+                  ? 'UNLOCKED'
+                  : inProgress
+                      ? abundanceAchievementHint(record)
+                      : 'LOCKED',
+              style: TextStyle(
+                color: unlocked
+                    ? AbundanceColors.accentCyan
+                    : inProgress
+                        ? AbundanceColors.primaryGold
+                        : AbundanceColors.muted,
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.1,
+              ),
+            ),
+            if (inProgress) ...[
+              const SizedBox(height: 5),
+              LinearProgressIndicator(
+                value: record.percent / 100,
+                minHeight: 3,
+                backgroundColor: AbundanceColors.surfaceSunken,
+                color: AbundanceColors.primaryGold,
+              ),
+            ],
           ],
         ),
       ),
@@ -225,31 +259,32 @@ class _AwardCard extends StatelessWidget {
 }
 
 class _AwardGrid extends StatelessWidget {
-  const _AwardGrid({required this.awards, required this.unlockedKeys});
-  final List<_AwardDefinition> awards;
-  final Set<String> unlockedKeys;
+  const _AwardGrid({required this.records});
+
+  final List<AbundanceAchievementRecord> records;
 
   @override
   Widget build(BuildContext context) => GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        itemCount: awards.length,
+        itemCount: records.length,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
           crossAxisSpacing: 10,
           mainAxisSpacing: 10,
-          childAspectRatio: .92,
+          mainAxisExtent: 238,
         ),
-        itemBuilder: (_, index) => _AwardCard(
-          award: awards[index],
-          unlocked: unlockedKeys.contains(awards[index].key),
-        ),
+        itemBuilder: (_, index) => _AwardCard(record: records[index]),
       );
 }
 
 class _SummaryRow extends StatelessWidget {
-  const _SummaryRow(
-      {required this.unlocked, required this.inProgress, required this.locked});
+  const _SummaryRow({
+    required this.unlocked,
+    required this.inProgress,
+    required this.locked,
+  });
+
   final int unlocked;
   final int inProgress;
   final int locked;
@@ -258,24 +293,33 @@ class _SummaryRow extends StatelessWidget {
   Widget build(BuildContext context) => Row(
         children: [
           _SummaryStat(
-              value: unlocked,
-              label: 'UNLOCKED',
-              color: AbundanceColors.accentCyan),
+            value: unlocked,
+            label: 'UNLOCKED',
+            color: AbundanceColors.accentCyan,
+          ),
           const SizedBox(width: 8),
           _SummaryStat(
-              value: inProgress,
-              label: 'IN PROGRESS',
-              color: AbundanceColors.primaryGold),
+            value: inProgress,
+            label: 'IN PROGRESS',
+            color: AbundanceColors.primaryGold,
+          ),
           const SizedBox(width: 8),
           _SummaryStat(
-              value: locked, label: 'LOCKED', color: AbundanceColors.muted),
+            value: locked,
+            label: 'LOCKED',
+            color: AbundanceColors.muted,
+          ),
         ],
       );
 }
 
 class _SummaryStat extends StatelessWidget {
-  const _SummaryStat(
-      {required this.value, required this.label, required this.color});
+  const _SummaryStat({
+    required this.value,
+    required this.label,
+    required this.color,
+  });
+
   final int value;
   final String label;
   final Color color;
@@ -285,36 +329,49 @@ class _SummaryStat extends StatelessWidget {
         child: AbundanceCard(
           margin: EdgeInsets.zero,
           padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 4),
-          child: Column(children: [
-            Text('$value',
+          child: Column(
+            children: [
+              Text(
+                '$value',
                 style: TextStyle(
-                    color: color,
-                    fontFamily: AbundanceTypography.displayFamily,
-                    fontSize: 20)),
-            const SizedBox(height: 3),
-            Text(label,
+                  color: color,
+                  fontFamily: AbundanceTypography.displayFamily,
+                  fontSize: 20,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                label,
                 style: const TextStyle(
-                    color: AbundanceColors.muted,
-                    fontSize: 8,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: .6)),
-          ]),
+                  color: AbundanceColors.muted,
+                  fontSize: 8,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: .6,
+                ),
+              ),
+            ],
+          ),
         ),
       );
 }
 
 class _LockedRelic extends StatelessWidget {
   const _LockedRelic();
+
   @override
   Widget build(BuildContext context) => Container(
         width: 48,
         height: 48,
         decoration: BoxDecoration(
-            color: AbundanceColors.surfaceSunken,
-            shape: BoxShape.circle,
-            border: Border.all(color: AbundanceColors.border, width: 2)),
+          color: AbundanceColors.surfaceSunken,
+          shape: BoxShape.circle,
+          border: Border.all(color: AbundanceColors.border, width: 2),
+        ),
         child: const Center(
-            child: Text('▣',
-                style: TextStyle(color: AbundanceColors.muted, fontSize: 20))),
+          child: Text(
+            '▣',
+            style: TextStyle(color: AbundanceColors.muted, fontSize: 20),
+          ),
+        ),
       );
 }

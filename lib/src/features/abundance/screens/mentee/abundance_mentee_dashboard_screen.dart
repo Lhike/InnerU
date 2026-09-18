@@ -14,6 +14,8 @@ import 'package:selfcare_projects/src/features/abundance/theme/abundance_mission
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_typography.dart';
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_header_profile_button.dart';
+import 'package:selfcare_projects/src/features/abundance/widgets/abundance_tutorial_target.dart';
+import 'package:selfcare_projects/src/features/abundance/tutorial/abundance_tutorial_controller.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/goal_detail_sheet.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/goal_form_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/goals_hub_screen.dart';
@@ -64,11 +66,15 @@ class AbundanceMenteeDashboardScreen extends StatefulWidget {
     this.initialCompanyTheme,
     this.service,
     this.onOpenMissions,
+    this.onOpenAwards,
+    this.tutorialController,
   });
 
   final CompanyThemeData? initialCompanyTheme;
   final GoalsService? service;
   final VoidCallback? onOpenMissions;
+  final VoidCallback? onOpenAwards;
+  final AbundanceTutorialController? tutorialController;
 
   @override
   State<AbundanceMenteeDashboardScreen> createState() =>
@@ -464,6 +470,20 @@ class _AbundanceMenteeDashboardScreenState
     );
   }
 
+  Future<void> _openMissionsFromHome() async {
+    final onOpenMissions = widget.onOpenMissions;
+    if (onOpenMissions != null) {
+      onOpenMissions();
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const AbundanceMissionsScreen(),
+      ),
+    );
+    if (mounted) await _reloadDashboard();
+  }
+
   Future<void> _openGoalsHub() async {
     final data = await _dashboardFuture;
     if (!mounted || !data.allowed) return;
@@ -635,7 +655,20 @@ class _AbundanceMenteeDashboardScreenState
             .toList()
           ..sort((a, b) => a.targetDate.compareTo(b.targetDate));
         final recentCheckIns = data.emotionLogs.take(5).toList();
-        final achievements = _buildAchievements(score, goals);
+        final achievements = _buildAchievements(
+          goals,
+          computeAbundanceAchievementRecords(
+            tasks: data.tasks,
+            quests: goals,
+          ),
+        );
+        final unlockedAchievements = achievements
+            .where((achievement) => achievement.unlocked)
+            .toList(growable: false);
+        final achievementRecords = computeAbundanceAchievementRecords(
+          tasks: data.tasks,
+          quests: goals,
+        );
         final momentumPoints = _buildMomentumPoints(data);
         final todayLog = data.dailyLogs.isNotEmpty
             ? data.dailyLogs.lastWhere(
@@ -673,11 +706,13 @@ class _AbundanceMenteeDashboardScreenState
               titleSpacing: 18,
               title: Row(
                 children: [
-                  Image.asset(
-                    abundanceLogoAsset,
-                    width: 46,
-                    height: 42,
-                    fit: BoxFit.contain,
+                  AbundanceArtwork(
+                    child: Image.asset(
+                      abundanceLogoAsset,
+                      width: 46,
+                      height: 42,
+                      fit: BoxFit.contain,
+                    ),
                   ),
                   const SizedBox(width: 9),
                   const Expanded(
@@ -753,9 +788,11 @@ class _AbundanceMenteeDashboardScreenState
                 Positioned.fill(
                   child: Opacity(
                     opacity: .26,
-                    child: Image.asset(
-                      abundanceBackdropAsset,
-                      fit: BoxFit.cover,
+                    child: AbundanceArtwork(
+                      child: Image.asset(
+                        abundanceBackdropAsset,
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
                 ),
@@ -764,37 +801,45 @@ class _AbundanceMenteeDashboardScreenState
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                     children: [
-                      _A12HomeHero(
-                        displayName: data.displayName,
-                        rankName: progression.name,
-                        rankKey: progression.key,
-                        level: progression.level,
-                        score: lifePower,
-                        profilePic: data.profilePic,
+                      AbundanceTutorialTarget(
+                        name: 'home-overview',
+                        controller: widget.tutorialController,
+                        child: _A12HomeHero(
+                          displayName: data.displayName,
+                          rankName: progression.name,
+                          rankKey: progression.key,
+                          level: progression.level,
+                          score: lifePower,
+                          profilePic: data.profilePic,
+                        ),
                       ),
                       const SizedBox(height: 16),
-                      _A12MissionPanel(
-                        tasks: data.tasks,
-                        selectedDay: DateUtils.dateOnly(DateTime.now()),
-                        onOpenMissions: widget.onOpenMissions ??
-                            () => Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        const AbundanceMissionsScreen(),
-                                  ),
-                                ),
-                        onToggleMission: _toggleMission,
+                      AbundanceTutorialTarget(
+                        name: 'home-missions',
+                        controller: widget.tutorialController,
+                        child: _A12MissionPanel(
+                          tasks: data.tasks,
+                          selectedDay: DateUtils.dateOnly(DateTime.now()),
+                          onOpenMissions: () =>
+                              unawaited(_openMissionsFromHome()),
+                          onToggleMission: _toggleMission,
+                        ),
                       ),
                       const SizedBox(height: 16),
-                      _A12GoalsPanel(
-                        goals: goals,
-                        onOpenGoals: () => unawaited(_openGoalsHub()),
-                        onGoalTap: _openGoalDetail,
+                      AbundanceTutorialTarget(
+                        name: 'home-goal',
+                        controller: widget.tutorialController,
+                        child: _A12GoalsPanel(
+                          goals: goals,
+                          onOpenGoals: () => unawaited(_openGoalsHub()),
+                          onGoalTap: _openGoalDetail,
+                        ),
                       ),
                       const SizedBox(height: 16),
                       _A12AchievementShelf(
-                        achievements: achievements,
-                        onOpenAwards: () => unawaited(_openAchievements()),
+                        records: achievementRecords,
+                        onOpenAwards: widget.onOpenAwards ??
+                            () => unawaited(_openAchievements()),
                       ),
                       const SizedBox(height: 16),
                       const _A12HomeQuote(),
@@ -939,7 +984,7 @@ class _AbundanceMenteeDashboardScreenState
                           child: ListView.separated(
                             scrollDirection: Axis.horizontal,
                             itemBuilder: (context, index) {
-                              final achievement = achievements[index];
+                              final achievement = unlockedAchievements[index];
                               return _AchievementCard(
                                 theme: data.theme,
                                 achievement: achievement,
@@ -947,7 +992,7 @@ class _AbundanceMenteeDashboardScreenState
                             },
                             separatorBuilder: (_, __) =>
                                 const SizedBox(width: 12),
-                            itemCount: achievements.length,
+                            itemCount: unlockedAchievements.length,
                           ),
                         ),
                         const SizedBox(height: 24),
@@ -1007,21 +1052,21 @@ class _AbundanceMenteeDashboardScreenState
   }
 
   List<_Achievement> _buildAchievements(
-    UserScore score,
     List<GoalSummary> goals,
+    List<AbundanceAchievementRecord> records,
   ) {
     final completed =
         goals.where((goal) => goal.status == GoalStatus.completed).length;
-    final hasAllCategories = requiredGoalGaps(goals).isEmpty;
-    final hasAnyGoal = goals.isNotEmpty;
-    final hasNoOverdue = goals.every((goal) => !goal.isOverdue);
+    bool unlocked(String assetKey) => records.any(
+          (record) => record.definition.assetKey == assetKey && record.unlocked,
+        );
 
     return [
       _Achievement(
         title: 'First goal',
         subtitle: 'A goal is on the board.',
         icon: Icons.flag_rounded,
-        unlocked: hasAnyGoal,
+        unlocked: unlocked('first-flame'),
         assetKey: 'first-flame',
       ),
       _Achievement(
@@ -1030,35 +1075,35 @@ class _AbundanceMenteeDashboardScreenState
         icon: Icons.balance_rounded,
         // An empty goal list has no missing categories by definition, but it
         // must not unlock the badge for a brand-new account.
-        unlocked: hasAnyGoal && hasAllCategories,
+        unlocked: unlocked('discipline'),
         assetKey: 'discipline',
       ),
       _Achievement(
         title: 'Momentum',
         subtitle: 'Current streak of 3 days.',
         icon: Icons.local_fire_department_rounded,
-        unlocked: score.currentStreak >= 3,
+        unlocked: unlocked('finding-rythm'),
         assetKey: 'finding-rythm',
       ),
       _Achievement(
         title: 'Consistency',
         subtitle: 'Current streak of 7 days.',
         icon: Icons.trending_up_rounded,
-        unlocked: score.currentStreak >= 7,
+        unlocked: unlocked('unbroken'),
         assetKey: 'unbroken',
       ),
       _Achievement(
         title: 'Finisher',
         subtitle: '$completed completed goals.',
         icon: Icons.verified_rounded,
-        unlocked: completed >= 3,
+        unlocked: unlocked('finished-first'),
         assetKey: 'finished-first',
       ),
       _Achievement(
         title: 'Clear runway',
         subtitle: 'No overdue goals left behind.',
         icon: Icons.check_circle_rounded,
-        unlocked: hasAnyGoal && hasNoOverdue,
+        unlocked: unlocked('closer'),
         assetKey: 'closer',
       ),
     ];
@@ -1149,7 +1194,9 @@ class _A12HomeHero extends StatelessWidget {
       child: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset(abundanceHomeSceneAsset, fit: BoxFit.cover),
+            child: AbundanceArtwork(
+              child: Image.asset(abundanceHomeSceneAsset, fit: BoxFit.cover),
+            ),
           ),
           Positioned.fill(
             child: ColoredBox(
@@ -1176,10 +1223,12 @@ class _A12HomeHero extends StatelessWidget {
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    Image.asset(
-                      abundanceRankMedalAsset(rankKey),
-                      width: 58,
-                      height: 58,
+                    AbundanceArtwork(
+                      child: Image.asset(
+                        abundanceRankMedalAsset(rankKey),
+                        width: 58,
+                        height: 58,
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Column(
@@ -1571,7 +1620,7 @@ class _A12GoalsPanel extends StatelessWidget {
                     onTap: () => onGoalTap(goal),
                     borderRadius: BorderRadius.circular(18),
                     child: Container(
-                      height: 150,
+                      height: 180,
                       margin: const EdgeInsets.only(bottom: 10),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -1585,10 +1634,13 @@ class _A12GoalsPanel extends StatelessWidget {
                                   abundanceQuestSceneAsset(goal.category.code)!,
                                 ),
                                 fit: BoxFit.cover,
-                                colorFilter: ColorFilter.mode(
-                                  Colors.black.withValues(alpha: .55),
-                                  BlendMode.darken,
-                                ),
+                                colorFilter: AbundanceColors
+                                        .lightAppearanceActive
+                                    ? AbundanceColors.restoreArtworkColorFilter
+                                    : ColorFilter.mode(
+                                        Colors.black.withValues(alpha: .55),
+                                        BlendMode.darken,
+                                      ),
                               ),
                       ),
                       child: Column(
@@ -1620,8 +1672,10 @@ class _A12GoalsPanel extends StatelessWidget {
                           const Spacer(),
                           Text(
                             goal.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                             style: AbundanceTypography.title.copyWith(
-                              fontSize: 18,
+                              fontSize: 16,
                             ),
                           ),
                           Text(
@@ -1656,39 +1710,48 @@ class _A12GoalsPanel extends StatelessWidget {
 
 class _A12AchievementShelf extends StatelessWidget {
   const _A12AchievementShelf({
-    required this.achievements,
+    required this.records,
     required this.onOpenAwards,
   });
-  final List<_Achievement> achievements;
+  final List<AbundanceAchievementRecord> records;
   final VoidCallback onOpenAwards;
 
   @override
-  Widget build(BuildContext context) => _A12Panel(
-        title: 'ACHIEVEMENTS',
-        action:
-            '${achievements.where((a) => a.unlocked).length} of 15 earned ›',
-        onAction: onOpenAwards,
-        flat: true,
-        child: SizedBox(
-          height: 112,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: achievements.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (_, index) {
-              final item = achievements[index];
-              return SizedBox(
+  Widget build(BuildContext context) {
+    final unlockedAchievements =
+        records.where((record) => record.unlocked).toList(growable: false);
+    return _A12Panel(
+      title: 'ACHIEVEMENTS',
+      action: '${unlockedAchievements.length} of 15 earned ›',
+      onAction: onOpenAwards,
+      flat: true,
+      child: SizedBox(
+        height: 112,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: unlockedAchievements.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 12),
+          itemBuilder: (_, index) {
+            final item = unlockedAchievements[index];
+            final definition = item.definition;
+            return InkWell(
+              onTap: onOpenAwards,
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
                 width: 84,
                 child: Column(
                   children: [
                     SizedBox(
                       width: 62,
                       height: 62,
-                      child: item.unlocked &&
-                              abundanceAchievementAssets[item.assetKey] != null
-                          ? Image.asset(
-                              abundanceAchievementAssets[item.assetKey]!,
-                              fit: BoxFit.contain,
+                      child: abundanceAchievementAssets[definition.assetKey] !=
+                              null
+                          ? AbundanceArtwork(
+                              child: Image.asset(
+                                abundanceAchievementAssets[
+                                    definition.assetKey]!,
+                                fit: BoxFit.contain,
+                              ),
                             )
                           : Icon(
                               Icons.diamond_outlined,
@@ -1698,18 +1761,20 @@ class _A12AchievementShelf extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      item.title,
+                      definition.name,
                       maxLines: 2,
                       textAlign: TextAlign.center,
                       style: AbundanceTypography.eyebrow.copyWith(fontSize: 8),
                     ),
                   ],
                 ),
-              );
-            },
-          ),
+              ),
+            );
+          },
         ),
-      );
+      ),
+    );
+  }
 }
 
 class _A12HomeQuote extends StatelessWidget {

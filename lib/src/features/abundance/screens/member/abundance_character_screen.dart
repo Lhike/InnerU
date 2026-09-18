@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.dart';
@@ -8,8 +10,17 @@ import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.d
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_typography.dart';
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_button.dart';
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_header_profile_button.dart';
+import 'package:selfcare_projects/src/features/abundance/widgets/abundance_tutorial_target.dart';
+import 'package:selfcare_projects/src/features/abundance/tutorial/abundance_tutorial_controller.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
+import 'package:selfcare_projects/src/services/app_session_service.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/UsersData/user_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_council_service.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_achievements_service.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_profile_service.dart';
+import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
+import 'package:selfcare_projects/src/services/image_storage_service.dart';
+import 'package:selfcare_projects/src/services/profile_picture_bus.dart';
 
 typedef CharacterLoader = Future<String?> Function(String uid);
 typedef CharacterSaver = Future<void> Function(String uid, String character);
@@ -24,8 +35,12 @@ class AbundanceCharacterScreen extends StatefulWidget {
     this.onSignOut,
     this.onReplayTutorial,
     this.appearance = 'dark',
+    this.isCoach = false,
     this.loadCharacter,
     this.saveCharacter,
+    this.profileService,
+    this.goalsService,
+    this.tutorialController,
   });
 
   final String uid;
@@ -35,8 +50,12 @@ class AbundanceCharacterScreen extends StatefulWidget {
   final VoidCallback? onSignOut;
   final VoidCallback? onReplayTutorial;
   final String appearance;
+  final bool isCoach;
   final CharacterLoader? loadCharacter;
   final CharacterSaver? saveCharacter;
+  final AbundanceProfileService? profileService;
+  final GoalsService? goalsService;
+  final AbundanceTutorialController? tutorialController;
 
   @override
   State<AbundanceCharacterScreen> createState() =>
@@ -47,14 +66,106 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
   String _selected = abundanceCharacterKeys.first;
   String? _councilName;
   String? _councilCoach;
+  AbundanceProfileSnapshot? _snapshot;
+  bool _profileLoading = false;
+  bool _profilePhotoUploading = false;
+  String? _profilePhotoOverride;
+  Object? _profileError;
+
+  AbundanceProfileService get _profileGateway =>
+      widget.profileService ?? AbundanceProfileService();
 
   String get _storageKey => 'abundance_character_${widget.uid}';
 
   @override
   void initState() {
     super.initState();
+    _profilePhotoOverride = ProfilePictureBus.latestUrl.value;
+    ProfilePictureBus.latestUrl.addListener(_onProfilePictureBusUpdate);
     _load();
     _loadCouncil();
+    _loadProfile();
+  }
+
+  @override
+  void dispose() {
+    ProfilePictureBus.latestUrl.removeListener(_onProfilePictureBusUpdate);
+    super.dispose();
+  }
+
+  void _onProfilePictureBusUpdate() {
+    if (!mounted) return;
+    setState(() => _profilePhotoOverride = ProfilePictureBus.latestUrl.value);
+  }
+
+  Future<void> _loadProfile() async {
+    if (AuthService.instance.currentSession == null) return;
+    setState(() {
+      _profileLoading = true;
+      _profileError = null;
+    });
+    try {
+      final snapshot = await _profileGateway.fetchSnapshot();
+      if (!mounted) return;
+      var achievements = snapshot.achievements;
+      if (achievements.isEmpty &&
+          widget.loadCharacter == null &&
+          widget.saveCharacter == null) {
+        try {
+          final records = await InnerUAbundanceAchievementsGateway(
+            uid: widget.uid,
+            goals: widget.goalsService ?? GoalsService(),
+          ).load();
+          achievements = records
+              .where((record) => record.unlocked)
+              .map(
+                (record) => AbundanceProfileAchievement(
+                  key: record.definition.key,
+                  name: record.definition.name,
+                  description: record.definition.description,
+                  art: record.definition.assetKey,
+                  tier: record.definition.tier,
+                  // The InnerU calculator returns earned state but not an
+                  // unlock timestamp. Keep the card honest instead of
+                  // inventing a date; the A12 profile API still supplies the
+                  // real timestamp whenever it is available.
+                  unlockedAt: null,
+                ),
+              )
+              .toList(growable: false);
+        } catch (_) {
+          // Keep the A12 profile response and its empty state if the
+          // compatibility achievement sources are unavailable.
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        // The profile endpoint does not always embed council membership. Do
+        // not let that partial response erase the council loaded from /guild
+        // while the screen is reloading after an appearance change.
+        final council = snapshot.council ?? _snapshot?.council;
+        _snapshot = AbundanceProfileSnapshot(
+          profile: snapshot.profile,
+          achievements: achievements,
+          council: council,
+        );
+        _profileLoading = false;
+        if (snapshot.profile.character != null &&
+            abundanceCharacterKeys.contains(snapshot.profile.character)) {
+          _selected = snapshot.profile.character!;
+        }
+        if (snapshot.council != null) {
+          _councilName = snapshot.council!.name;
+          _councilCoach = snapshot.council!.coachName;
+        }
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _profileLoading = false;
+        _profileError = error;
+      });
+    }
   }
 
   Future<void> _loadCouncil() async {
@@ -65,6 +176,21 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
       setState(() {
         _councilName = council.name;
         _councilCoach = council.coachName;
+        final profile = _snapshot;
+        if (profile != null) {
+          _snapshot = AbundanceProfileSnapshot(
+            profile: profile.profile,
+            achievements: profile.achievements,
+            council: AbundanceProfileCouncil(
+              id: council.id,
+              name: council.name,
+              description: council.description,
+              coachName: council.coachName,
+              memberCount: council.memberCount,
+              averageScore: council.averageScore,
+            ),
+          );
+        }
       });
     } catch (_) {
       // Council data is supplemental; keep the source empty state usable when
@@ -90,6 +216,8 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
     try {
       if (widget.saveCharacter != null) {
         await widget.saveCharacter!(widget.uid, character);
+      } else if (AuthService.instance.currentSession != null) {
+        await _profileGateway.updateCharacter(character);
       } else {
         final saved = await (await SharedPreferences.getInstance())
             .setString(_storageKey, character);
@@ -104,13 +232,80 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
     }
   }
 
+  Future<void> _pickProfilePhoto() async {
+    if (_profilePhotoUploading) return;
+
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 88,
+    );
+    if (picked == null || !mounted) return;
+
+    final profile = _snapshot?.profile;
+    if (profile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile data is still loading.')),
+      );
+      return;
+    }
+
+    setState(() => _profilePhotoUploading = true);
+    try {
+      final url = await ImageStorageService.uploadImageFile(File(picked.path));
+      if (url == null || url.trim().isEmpty) {
+        throw StateError(
+          ImageStorageService.lastError ?? 'Photo upload failed.',
+        );
+      }
+
+      await _profileGateway.updateProfile(
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        headline: profile.headline ?? '',
+        bio: profile.bio ?? '',
+        timezone: profile.timezone,
+        avatarUrl: url,
+      );
+      // The shell header reads InnerU's session while the profile card reads
+      // the A12 snapshot. Keep the canonical InnerU profile and both live
+      // surfaces in sync after the upload succeeds.
+      await UserService.updateUserFields({'profile_pic': url});
+      final currentSession = AuthService.instance.currentSession;
+      if (currentSession != null) {
+        await AppSessionService.instance.setSession(
+          currentSession.copyWith(profilePic: url),
+        );
+      }
+      if (!mounted) return;
+      setState(() => _profilePhotoOverride = url);
+      ProfilePictureBus.publish(url);
+      await _loadProfile();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile photo updated.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to update profile photo.')),
+      );
+    } finally {
+      if (mounted) setState(() => _profilePhotoUploading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = AuthService.instance.currentSession;
-    final displayName = session?.name.trim().isNotEmpty == true
-        ? session!.name.trim()
-        : 'Your champion';
-    final email = session?.email.trim() ?? '';
+    final profile = _snapshot?.profile;
+    final displayName = profile?.displayName.trim().isNotEmpty == true
+        ? profile!.displayName.trim()
+        : session?.name.trim().isNotEmpty == true
+            ? session!.name.trim()
+            : 'Your champion';
+    final email = profile?.email.trim().isNotEmpty == true
+        ? profile!.email.trim()
+        : session?.email.trim() ?? '';
     final sourceProfileLayout =
         widget.loadCharacter == null && widget.saveCharacter == null;
     return Scaffold(
@@ -123,64 +318,154 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
                   style: AbundanceTypography.eyebrow),
             )
           : AbundanceHeaderBar(
+              appearance: widget.appearance,
+              onAppearanceChanged: widget.onAppearanceChanged,
               onSelected: (value) {
-                if (value == 'sign_out') widget.onSignOut?.call();
+                switch (value) {
+                  case 'sign_out':
+                    widget.onSignOut?.call();
+                  case 'tutorial':
+                    widget.onReplayTutorial?.call();
+                }
               },
             ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+      body: Stack(
         children: [
-          const Text('Character Sheet', style: AbundanceTypography.display),
-          const SizedBox(height: 6),
-          const Text(
-            'Who you are here, and the settings that keep the account yours.',
-            style: AbundanceTypography.body,
-          ),
-          const SizedBox(height: 18),
-          _IdentityCard(
-            name: displayName,
-            email: email,
-            sourceLayout: sourceProfileLayout,
-          ),
-          const SizedBox(height: 18),
-          if (sourceProfileLayout)
-            _SelectedCharacterSection(
-              selected: _selected,
-              onChoose: () => _showCharacterPicker(context),
-            )
-          else ...[
-            const Text('Your character', style: AbundanceTypography.title),
-            const SizedBox(height: 6),
-            const _CharacterIntro(),
-            const SizedBox(height: 12),
-            _CharacterGrid(selected: _selected, onSelect: _select),
-          ],
-          const SizedBox(height: 18),
-          _CouncilCard(
-            councilName: _councilName,
-            coachName: _councilCoach,
-            onChange: () => _showCouncilPicker(context),
-          ),
-          const SizedBox(height: 18),
-          const _ProgressionCard(),
-          const SizedBox(height: 18),
-          _EarnedBadgesCard(onOpenAchievements: widget.onOpenAchievements),
-          const SizedBox(height: 18),
-          if (sourceProfileLayout) ...[
-            _EditProfileCard(name: displayName),
-            const SizedBox(height: 18),
-            const _ChangePasswordCard(),
-            const SizedBox(height: 18),
-            _AppearanceCard(
-              appearance: widget.appearance,
-              onChanged: widget.onAppearanceChanged,
-              onSignOut: widget.onSignOut,
-              onReplayTutorial: widget.onReplayTutorial,
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: AbundanceColors.background,
+                  image: const DecorationImage(
+                    image: AssetImage(abundanceHomeSceneAsset),
+                    fit: BoxFit.cover,
+                    opacity: .22,
+                  ),
+                ),
+                child: const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color(0x33080C1C),
+                        Color(0xCC080C1C),
+                        Color(0xF2080C1C),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
-            const SizedBox(height: 18),
-            const _DeleteAccountCard(),
-          ],
+          ),
+          ListView(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+            children: [
+              const Text('Character Sheet', style: AbundanceTypography.display),
+              const SizedBox(height: 6),
+              const Text(
+                'Who you are here, and the settings that keep the account yours.',
+                style: AbundanceTypography.body,
+              ),
+              const SizedBox(height: 18),
+              AbundanceTutorialTarget(
+                name: 'profile-character',
+                controller: widget.tutorialController,
+                child: _IdentityCard(
+                  name: displayName,
+                  email: email,
+                  profile: profile,
+                  profilePhotoOverride: _profilePhotoOverride,
+                  onEdit: () => _showEditProfile(context, displayName, profile),
+                  onAddProfilePhoto: _pickProfilePhoto,
+                  profilePhotoUploading: _profilePhotoUploading,
+                  sourceLayout: sourceProfileLayout,
+                ),
+              ),
+              const SizedBox(height: 18),
+              if (sourceProfileLayout)
+                _SelectedCharacterSection(
+                  selected: _selected,
+                  isCoach: widget.isCoach || session?.isCoach == true,
+                  onChoose: () => _showCharacterPicker(context),
+                )
+              else ...[
+                const Text('Your character', style: AbundanceTypography.title),
+                const SizedBox(height: 6),
+                const _CharacterIntro(),
+                const SizedBox(height: 12),
+                _CharacterGrid(selected: _selected, onSelect: _select),
+              ],
+              const SizedBox(height: 18),
+              AbundanceTutorialTarget(
+                name: 'profile-council',
+                controller: widget.tutorialController,
+                child: _CouncilCard(
+                  council: _snapshot?.council,
+                  councilName: _councilName,
+                  coachName: _councilCoach,
+                  onChange: () => _showCouncilPicker(context),
+                ),
+              ),
+              const SizedBox(height: 18),
+              AbundanceTutorialTarget(
+                name: 'profile-stats',
+                controller: widget.tutorialController,
+                child: _ProgressionCard(progression: profile?.progression),
+              ),
+              const SizedBox(height: 18),
+              _EarnedBadgesCard(
+                achievements: _snapshot?.achievements ?? const [],
+                loading: _profileLoading,
+                hasError: _profileError != null,
+                onRetry: _loadProfile,
+                onOpenAchievements: widget.onOpenAchievements,
+              ),
+              const SizedBox(height: 18),
+              if (sourceProfileLayout) ...[
+                _EditProfileCard(
+                  profile: profile,
+                  name: displayName,
+                  onSaved: _loadProfile,
+                  service: _profileGateway,
+                ),
+                const SizedBox(height: 18),
+                _ChangePasswordCard(service: _profileGateway),
+                const SizedBox(height: 18),
+                AbundanceTutorialTarget(
+                  name: 'profile-settings',
+                  controller: widget.tutorialController,
+                  child: _AppearanceCard(
+                    appearance: widget.appearance,
+                    onChanged: widget.onAppearanceChanged,
+                    onSignOut: widget.onSignOut,
+                    onReplayTutorial: widget.onReplayTutorial,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                _DeleteAccountCard(service: _profileGateway),
+              ],
+            ],
+          ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _showEditProfile(
+    BuildContext context,
+    String displayName,
+    AbundanceProfile? profile,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AbundanceColors.surfaceRaised,
+      builder: (_) => _EditProfileSheet(
+        name: displayName,
+        profile: profile,
+        service: _profileGateway,
+        onSaved: _loadProfile,
       ),
     );
   }
@@ -189,88 +474,100 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AbundanceColors.surfaceRaised,
+      backgroundColor: AbundanceColors.lightAppearanceActive
+          ? const Color(0xFFF2ECCE)
+          : AbundanceColors.surfaceRaised,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Choose your character',
-                      style: AbundanceTypography.title),
-                  IconButton(
-                    onPressed: () => Navigator.pop(sheetContext),
-                    icon: const Icon(Icons.close,
-                        color: AbundanceColors.foreground),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Select the champion you chose when you began your journey.',
-                style: AbundanceTypography.body,
-              ),
-              const SizedBox(height: 18),
-              SizedBox(
-                height: 300,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: abundanceCharacterKeys.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 12),
-                  itemBuilder: (context, index) {
-                    final character = abundanceCharacterKeys[index];
-                    final selected = character == _selected;
-                    return InkWell(
-                      key: ValueKey('character-$character'),
-                      onTap: () async {
-                        await _select(character);
-                        if (sheetContext.mounted) Navigator.pop(sheetContext);
-                      },
-                      borderRadius: BorderRadius.circular(18),
-                      child: Container(
-                        width: 220,
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: AbundanceColors.surfaceSunken,
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: selected
-                                ? AbundanceColors.primaryGold
-                                : AbundanceColors.border,
-                            width: selected ? 2 : 1,
+      builder: (sheetContext) {
+        final content = SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Choose your character',
+                        style: AbundanceTypography.title),
+                    IconButton(
+                      onPressed: () => Navigator.pop(sheetContext),
+                      icon: const Icon(Icons.close,
+                          color: AbundanceColors.foreground),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Select the champion you chose when you began your journey.',
+                  style: AbundanceTypography.body,
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  height: 300,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: abundanceCharacterKeys.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 12),
+                    itemBuilder: (context, index) {
+                      final character = abundanceCharacterKeys[index];
+                      final selected = character == _selected;
+                      return InkWell(
+                        key: ValueKey('character-$character'),
+                        onTap: () async {
+                          await _select(character);
+                          if (sheetContext.mounted) Navigator.pop(sheetContext);
+                        },
+                        borderRadius: BorderRadius.circular(18),
+                        child: Container(
+                          width: 220,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AbundanceColors.surfaceSunken,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(
+                              color: selected
+                                  ? AbundanceColors.primaryGold
+                                  : AbundanceColors.border,
+                              width: selected ? 2 : 1,
+                            ),
+                          ),
+                          child: Column(
+                            children: [
+                              Expanded(
+                                child: AbundanceArtwork(
+                                  child: Image.asset(
+                                    abundanceCharacterAsset(character)!,
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                character[0].toUpperCase() +
+                                    character.substring(1),
+                                style: AbundanceTypography.body,
+                              ),
+                            ],
                           ),
                         ),
-                        child: Column(
-                          children: [
-                            Expanded(
-                              child: Image.asset(
-                                abundanceCharacterAsset(character)!,
-                                fit: BoxFit.contain,
-                              ),
-                            ),
-                            Text(
-                              character[0].toUpperCase() +
-                                  character.substring(1),
-                              style: AbundanceTypography.body,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+        return AbundanceColors.lightAppearanceActive
+            ? ColorFiltered(
+                colorFilter: AbundanceColors.restoreArtworkColorFilter,
+                child: content,
+              )
+            : content;
+      },
     );
   }
 
@@ -450,11 +747,21 @@ class _IdentityCard extends StatelessWidget {
   const _IdentityCard({
     required this.name,
     required this.email,
+    this.profile,
+    this.profilePhotoOverride,
+    this.onEdit,
+    this.onAddProfilePhoto,
+    this.profilePhotoUploading = false,
     this.sourceLayout = true,
   });
 
   final String name;
   final String email;
+  final AbundanceProfile? profile;
+  final String? profilePhotoOverride;
+  final VoidCallback? onEdit;
+  final VoidCallback? onAddProfilePhoto;
+  final bool profilePhotoUploading;
   final bool sourceLayout;
 
   @override
@@ -511,117 +818,182 @@ class _IdentityCard extends StatelessWidget {
       );
     }
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AbundanceColors.surfaceRaised,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AbundanceColors.border),
-        image: const DecorationImage(
-          image: AssetImage(abundanceHomeSceneAsset),
-          fit: BoxFit.cover,
-          opacity: .22,
-        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Row(
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Container(
-                    width: 84,
-                    height: 84,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AbundanceColors.accentCyan,
-                      border: Border.all(
-                          color: AbundanceColors.primaryGold, width: 3),
-                    ),
-                    child: Center(
-                      child: Text(
-                        initials.isEmpty ? '?' : initials,
-                        style: const TextStyle(
-                            color: Colors.black,
-                            fontSize: 30,
-                            fontWeight: FontWeight.w900),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    right: -12,
-                    bottom: -10,
-                    child: Transform.rotate(
-                      angle: math.pi / 4,
-                      child: Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: AbundanceColors.surfaceSunken,
-                          border: Border.all(
-                              color: AbundanceColors.primaryGold, width: 2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Transform.rotate(
-                          angle: -math.pi / 4,
-                          child: const Center(
-                            child: Text('2', style: AbundanceTypography.title),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 24),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(name,
-                        style:
-                            AbundanceTypography.display.copyWith(fontSize: 26)),
-                    const SizedBox(height: 2),
-                    const Text('LEGEND', style: AbundanceTypography.title),
-                    const SizedBox(height: 10),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(99),
-                      child: const LinearProgressIndicator(
-                        value: .35,
-                        minHeight: 9,
-                        backgroundColor: AbundanceColors.border,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                            AbundanceColors.accentCyan),
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    const Text('Level 2', style: AbundanceTypography.body),
-                  ],
+          Positioned.fill(
+            child: AbundanceArtwork(
+              child: Opacity(
+                opacity: .36,
+                child: Image.asset(
+                  abundanceHomeSceneAsset,
+                  fit: BoxFit.cover,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          OutlinedButton(
-            onPressed: () {},
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(48),
-              foregroundColor: AbundanceColors.primaryGold,
-              side: const BorderSide(color: AbundanceColors.primaryGold),
             ),
-            child: const Text('Add profile photo'),
           ),
-          const SizedBox(height: 18),
-          if (email.isNotEmpty) Text(email, style: AbundanceTypography.body),
-          const SizedBox(height: 14),
-          const Text('Joined Sep 14, 2026', style: AbundanceTypography.body),
-          const SizedBox(height: 14),
-          const Text('I MATTER', style: AbundanceTypography.body),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          width: 84,
+                          height: 84,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AbundanceColors.accentCyan,
+                            border: Border.all(
+                                color: AbundanceColors.primaryGold, width: 3),
+                          ),
+                          child: (profilePhotoOverride ?? profile?.avatarUrl)
+                                      ?.startsWith('https://') ==
+                                  true
+                              ? AbundanceArtwork(
+                                  child: ClipOval(
+                                    child: Image.network(
+                                      profilePhotoOverride ??
+                                          profile!.avatarUrl!,
+                                      width: 84,
+                                      height: 84,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) =>
+                                          _initials(initials),
+                                    ),
+                                  ),
+                                )
+                              : _initials(initials),
+                        ),
+                        Positioned(
+                          right: -12,
+                          bottom: -10,
+                          child: Transform.rotate(
+                            angle: math.pi / 4,
+                            child: Container(
+                              width: 42,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                color: AbundanceColors.surfaceSunken,
+                                border: Border.all(
+                                    color: AbundanceColors.primaryGold,
+                                    width: 2),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Transform.rotate(
+                                angle: -math.pi / 4,
+                                child: Center(
+                                  child: Text(
+                                    '${profile?.progression?.level ?? 0}',
+                                    style: AbundanceTypography.title,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 24),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(name,
+                              style: AbundanceTypography.display
+                                  .copyWith(fontSize: 26)),
+                          const SizedBox(height: 2),
+                          Text(
+                            profile?.progression?.rank.toUpperCase() ?? '—',
+                            style: AbundanceTypography.title,
+                          ),
+                          const SizedBox(height: 10),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(99),
+                            child: LinearProgressIndicator(
+                              value:
+                                  ((profile?.progression?.lifePower ?? 0) / 100)
+                                      .clamp(0, 1)
+                                      .toDouble(),
+                              minHeight: 9,
+                              backgroundColor: AbundanceColors.border,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                  AbundanceColors.accentCyan),
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            'Level ${profile?.progression?.level ?? 0}',
+                            style: AbundanceTypography.body,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                OutlinedButton(
+                  onPressed: profilePhotoUploading ? null : onAddProfilePhoto,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                    foregroundColor: AbundanceColors.primaryGold,
+                    backgroundColor: AbundanceColors.surfaceRaised,
+                    side: const BorderSide(color: AbundanceColors.primaryGold),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: profilePhotoUploading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Add profile photo'),
+                ),
+                const SizedBox(height: 18),
+                if (email.isNotEmpty)
+                  Text(email, style: AbundanceTypography.body),
+                const SizedBox(height: 14),
+                Text(
+                  profile?.joinedAt == null
+                      ? 'Joined date unavailable'
+                      : 'Joined ${_formatDate(profile!.joinedAt!)}',
+                  style: AbundanceTypography.body,
+                ),
+                const SizedBox(height: 14),
+                Text(profile?.headline ?? 'No headline yet',
+                    style: AbundanceTypography.body),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
+
+  String _formatDate(DateTime value) =>
+      '${value.month}/${value.day}/${value.year}';
+
+  Widget _initials(String initials) => Center(
+        child: Text(
+          initials.isEmpty ? '?' : initials,
+          style: const TextStyle(
+            color: Colors.black,
+            fontSize: 30,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      );
 }
 
 class _CharacterIntro extends StatelessWidget {
@@ -647,9 +1019,17 @@ class _CharacterIntro extends StatelessWidget {
 }
 
 class _EditProfileCard extends StatelessWidget {
-  const _EditProfileCard({required this.name});
+  const _EditProfileCard({
+    required this.name,
+    required this.profile,
+    required this.service,
+    required this.onSaved,
+  });
 
   final String name;
+  final AbundanceProfile? profile;
+  final AbundanceProfileService service;
+  final Future<void> Function() onSaved;
 
   @override
   Widget build(BuildContext context) {
@@ -658,7 +1038,10 @@ class _EditProfileCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Timezone: Asia/Manila', style: AbundanceTypography.body),
+          Text(
+            'Timezone: ${profile?.timezone.isNotEmpty == true ? profile!.timezone : 'Not set'}',
+            style: AbundanceTypography.body,
+          ),
           const SizedBox(height: 14),
           _GoldOutlineButton(
             label: 'Edit details',
@@ -666,7 +1049,12 @@ class _EditProfileCard extends StatelessWidget {
               context: context,
               isScrollControlled: true,
               backgroundColor: AbundanceColors.surfaceRaised,
-              builder: (_) => _EditProfileSheet(name: name),
+              builder: (_) => _EditProfileSheet(
+                name: name,
+                profile: profile,
+                service: service,
+                onSaved: onSaved,
+              ),
             ),
           ),
         ],
@@ -676,9 +1064,17 @@ class _EditProfileCard extends StatelessWidget {
 }
 
 class _EditProfileSheet extends StatefulWidget {
-  const _EditProfileSheet({required this.name});
+  const _EditProfileSheet({
+    required this.name,
+    required this.profile,
+    required this.service,
+    required this.onSaved,
+  });
 
   final String name;
+  final AbundanceProfile? profile;
+  final AbundanceProfileService service;
+  final Future<void> Function() onSaved;
 
   @override
   State<_EditProfileSheet> createState() => _EditProfileSheetState();
@@ -687,10 +1083,14 @@ class _EditProfileSheet extends StatefulWidget {
 class _EditProfileSheetState extends State<_EditProfileSheet> {
   late final _firstName = TextEditingController(text: _namePart(0));
   late final _lastName = TextEditingController(text: _namePart(1));
-  final _headline = TextEditingController(text: 'I MATTER');
-  final _bio = TextEditingController();
-  final _timezone = TextEditingController(text: 'Asia/Manila');
-  final _avatarUrl = TextEditingController();
+  late final _headline =
+      TextEditingController(text: widget.profile?.headline ?? '');
+  late final _bio = TextEditingController(text: widget.profile?.bio ?? '');
+  late final _timezone =
+      TextEditingController(text: widget.profile?.timezone ?? '');
+  late final _avatarUrl =
+      TextEditingController(text: widget.profile?.avatarUrl ?? '');
+  bool _saving = false;
 
   String _namePart(int index) {
     final parts = widget.name.trim().split(RegExp(r'\s+'));
@@ -733,7 +1133,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
               TextField(
                 controller: field.$2,
                 style: AbundanceTypography.body,
-                decoration: const InputDecoration(),
+                decoration: _abundanceInputDecoration(),
               ),
               const SizedBox(height: 14),
             ],
@@ -744,7 +1144,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
             const SizedBox(height: 18),
             _GoldFilledButton(
               label: 'Save profile',
-              onPressed: () => Navigator.pop(context),
+              onPressed: _saving ? null : _save,
             ),
             const SizedBox(height: 10),
             _GoldOutlineButton(
@@ -756,10 +1156,35 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
       ),
     );
   }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      await widget.service.updateProfile(
+        firstName: _firstName.text.trim(),
+        lastName: _lastName.text.trim(),
+        headline: _headline.text.trim(),
+        bio: _bio.text.trim(),
+        timezone: _timezone.text.trim(),
+        avatarUrl:
+            _avatarUrl.text.trim().isEmpty ? null : _avatarUrl.text.trim(),
+      );
+      await widget.onSaved();
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to save profile.')),
+      );
+    }
+  }
 }
 
 class _ChangePasswordCard extends StatefulWidget {
-  const _ChangePasswordCard();
+  const _ChangePasswordCard({required this.service});
+
+  final AbundanceProfileService service;
 
   @override
   State<_ChangePasswordCard> createState() => _ChangePasswordCardState();
@@ -791,16 +1216,28 @@ class _ChangePasswordCardState extends State<_ChangePasswordCard> {
           _PasswordField(label: 'CONFIRM NEW PASSWORD', controller: _confirm),
           _GoldFilledButton(
             label: 'Change password',
-            onPressed: () {
+            onPressed: () async {
               if (_next.text.isEmpty || _next.text != _confirm.text) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Passwords do not match.')),
                 );
                 return;
               }
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Password change requested.')),
-              );
+              try {
+                await widget.service.changePassword(
+                  currentPassword: _current.text,
+                  newPassword: _next.text,
+                );
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Password changed.')),
+                );
+              } catch (_) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Unable to change password.')),
+                );
+              }
             },
           ),
         ],
@@ -828,7 +1265,7 @@ class _PasswordField extends StatelessWidget {
             controller: controller,
             obscureText: true,
             style: AbundanceTypography.body,
-            decoration: const InputDecoration(),
+            decoration: _abundanceInputDecoration(),
           ),
         ],
       ),
@@ -856,6 +1293,15 @@ class _AppearanceCard extends StatefulWidget {
 class _AppearanceCardState extends State<_AppearanceCard> {
   late String _selected = widget.appearance;
 
+  @override
+  void didUpdateWidget(covariant _AppearanceCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.appearance != widget.appearance &&
+        const ['light', 'dark', 'system'].contains(widget.appearance)) {
+      _selected = widget.appearance;
+    }
+  }
+
   void _setAppearance(String value) {
     setState(() => _selected = value);
     widget.onChanged?.call(value);
@@ -877,6 +1323,8 @@ class _AppearanceCardState extends State<_AppearanceCard> {
                     onPressed: () => _setAppearance(option),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size(0, 52),
+                      backgroundColor: AbundanceColors.surfaceRaised,
+                      foregroundColor: AbundanceColors.foreground,
                       side: BorderSide(
                         color: _selected == option
                             ? AbundanceColors.primaryGold
@@ -885,7 +1333,9 @@ class _AppearanceCardState extends State<_AppearanceCard> {
                     ),
                     child: Text(
                       option[0].toUpperCase() + option.substring(1),
-                      style: AbundanceTypography.body,
+                      style: AbundanceTypography.body.copyWith(
+                        color: AbundanceColors.foreground,
+                      ),
                     ),
                   ),
                 ),
@@ -906,7 +1356,9 @@ class _AppearanceCardState extends State<_AppearanceCard> {
 }
 
 class _DeleteAccountCard extends StatelessWidget {
-  const _DeleteAccountCard();
+  const _DeleteAccountCard({required this.service});
+
+  final AbundanceProfileService service;
 
   @override
   Widget build(BuildContext context) {
@@ -930,7 +1382,18 @@ class _DeleteAccountCard extends StatelessWidget {
                 child: const Text('Cancel'),
               ),
               TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
+                onPressed: () async {
+                  try {
+                    await service.deleteAccount();
+                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  } catch (_) {
+                    if (!dialogContext.mounted) return;
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
+                      const SnackBar(
+                          content: Text('Unable to delete account.')),
+                    );
+                  }
+                },
                 child: const Text('Delete'),
               ),
             ],
@@ -990,6 +1453,8 @@ class _GoldFilledButton extends StatelessWidget {
           onPressed: onPressed,
           style: FilledButton.styleFrom(
             backgroundColor: AbundanceColors.primaryGold,
+            disabledBackgroundColor:
+                AbundanceColors.primaryGold.withValues(alpha: .55),
             foregroundColor: Colors.black,
             minimumSize: const Size.fromHeight(52),
           ),
@@ -1011,8 +1476,12 @@ class _GoldOutlineButton extends StatelessWidget {
           onPressed: onPressed,
           style: OutlinedButton.styleFrom(
             foregroundColor: AbundanceColors.primaryGold,
+            backgroundColor: AbundanceColors.surfaceRaised,
             side: const BorderSide(color: AbundanceColors.primaryGold),
             minimumSize: const Size.fromHeight(52),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
           ),
           child: Text(label),
         ),
@@ -1061,8 +1530,10 @@ class _CharacterGrid extends StatelessWidget {
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.all(8),
-                    child: Image.asset(abundanceCharacterAsset(character)!,
-                        fit: BoxFit.contain),
+                    child: AbundanceArtwork(
+                      child: Image.asset(abundanceCharacterAsset(character)!,
+                          fit: BoxFit.contain),
+                    ),
                   ),
                 ),
                 Padding(
@@ -1082,11 +1553,30 @@ class _CharacterGrid extends StatelessWidget {
   }
 }
 
+InputDecoration _abundanceInputDecoration() => InputDecoration(
+      filled: true,
+      fillColor: AbundanceColors.surfaceSunken,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: AbundanceColors.border),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: AbundanceColors.primaryGold),
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: AbundanceColors.border),
+      ),
+    );
+
 class _SelectedCharacterSection extends StatelessWidget {
   const _SelectedCharacterSection(
-      {required this.selected, required this.onChoose});
+      {required this.selected, required this.isCoach, required this.onChoose});
 
   final String selected;
+  final bool isCoach;
   final VoidCallback onChoose;
 
   @override
@@ -1111,8 +1601,10 @@ class _SelectedCharacterSection extends StatelessWidget {
               SizedBox(
                 width: 118,
                 height: 180,
-                child: Image.asset(abundanceCharacterAsset(selected)!,
-                    fit: BoxFit.contain),
+                child: AbundanceArtwork(
+                  child: Image.asset(abundanceCharacterAsset(selected)!,
+                      fit: BoxFit.contain),
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -1134,7 +1626,11 @@ class _SelectedCharacterSection extends StatelessWidget {
             style: OutlinedButton.styleFrom(
               minimumSize: const Size.fromHeight(54),
               foregroundColor: AbundanceColors.primaryGold,
+              backgroundColor: AbundanceColors.surfaceRaised,
               side: const BorderSide(color: AbundanceColors.primaryGold),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
             ),
             child: const Text('Choose your character'),
           ),
@@ -1143,7 +1639,7 @@ class _SelectedCharacterSection extends StatelessWidget {
             spacing: 10,
             children: [
               _RoleChip(label: 'STUDENT'),
-              _RoleChip(label: 'COACH'),
+              if (isCoach) _RoleChip(label: 'COACH'),
             ],
           ),
         ],
@@ -1162,7 +1658,11 @@ class _RoleChip extends StatelessWidget {
         onPressed: () {},
         style: OutlinedButton.styleFrom(
           foregroundColor: AbundanceColors.primaryGold,
+          backgroundColor: AbundanceColors.surfaceRaised,
           side: const BorderSide(color: AbundanceColors.primaryGold),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
         ),
         child: Text(label),
       );
@@ -1170,9 +1670,10 @@ class _RoleChip extends StatelessWidget {
 
 class _CouncilCard extends StatelessWidget {
   const _CouncilCard(
-      {required this.onChange, this.councilName, this.coachName});
+      {required this.onChange, this.council, this.councilName, this.coachName});
 
   final VoidCallback onChange;
+  final AbundanceProfileCouncil? council;
   final String? councilName;
   final String? coachName;
 
@@ -1192,9 +1693,18 @@ class _CouncilCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Your council', style: AbundanceTypography.title),
-              TextButton(
+              OutlinedButton(
                 onPressed: onChange,
-                child: Text(councilName == null ? 'Join council' : 'Change'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  foregroundColor: AbundanceColors.primaryGold,
+                  side: const BorderSide(color: AbundanceColors.border),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: Text(councilName == null ? 'Join' : 'Change'),
               ),
             ],
           ),
@@ -1222,8 +1732,15 @@ class _CouncilCard extends StatelessWidget {
                       Text(councilName!, style: AbundanceTypography.title),
                       const SizedBox(height: 6),
                       Text(
-                        'Coached by ${coachName?.isNotEmpty == true ? coachName : 'your coach'}',
+                        'Coached by ${coachName?.isNotEmpty == true ? coachName : 'your coach'} · ${council?.memberCount ?? 0} members',
                         style: AbundanceTypography.body,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${council?.averageScore ?? 0}% average Life Power',
+                        style: AbundanceTypography.body.copyWith(
+                          color: AbundanceColors.accentCyan,
+                        ),
                       ),
                     ],
                   ),
@@ -1235,7 +1752,9 @@ class _CouncilCard extends StatelessWidget {
 }
 
 class _ProgressionCard extends StatelessWidget {
-  const _ProgressionCard();
+  const _ProgressionCard({required this.progression});
+
+  final AbundanceProgression? progression;
 
   @override
   Widget build(BuildContext context) {
@@ -1257,14 +1776,18 @@ class _ProgressionCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('LEVEL 1', style: AbundanceTypography.eyebrow),
+                    Text('LEVEL ${progression?.level ?? 0}',
+                        style: AbundanceTypography.eyebrow),
                     const SizedBox(height: 4),
-                    const Text('NOVICE', style: AbundanceTypography.display),
+                    Text(progression?.rank.toUpperCase() ?? '—',
+                        style: AbundanceTypography.display),
                     const SizedBox(height: 12),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(99),
-                      child: const LinearProgressIndicator(
-                        value: 0,
+                      child: LinearProgressIndicator(
+                        value: ((progression?.lifePower ?? 0) / 100)
+                            .clamp(0, 1)
+                            .toDouble(),
                         minHeight: 8,
                         backgroundColor: AbundanceColors.border,
                         valueColor: AlwaysStoppedAnimation<Color>(
@@ -1276,36 +1799,93 @@ class _ProgressionCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 18),
-              Container(
-                width: 82,
-                height: 82,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: AbundanceColors.border,
-                    width: 8,
-                  ),
-                ),
-                child: const Center(
-                  child: Text('0%', style: AbundanceTypography.title),
-                ),
-              ),
+              _LifePowerRing(value: progression?.lifePower ?? 0),
             ],
           ),
           const SizedBox(height: 14),
-          const Row(
+          Row(
             children: [
-              Expanded(child: _ProfileStat(value: '0', label: 'Quests')),
+              Expanded(
+                  child: _ProfileStat(
+                      value: '${progression?.stats['goalsTotal'] ?? 0}',
+                      label: 'Quests')),
               SizedBox(width: 8),
-              Expanded(child: _ProfileStat(value: '0', label: 'Completed')),
+              Expanded(
+                  child: _ProfileStat(
+                      value: '${progression?.stats['goalsCompleted'] ?? 0}',
+                      label: 'Completed')),
               SizedBox(width: 8),
-              Expanded(child: _ProfileStat(value: '0', label: 'Day streak')),
+              Expanded(
+                  child: _ProfileStat(
+                      value: '${progression?.stats['currentStreak'] ?? 0}',
+                      label: 'Day streak')),
             ],
           ),
         ],
       ),
     );
   }
+}
+
+class _LifePowerRing extends StatelessWidget {
+  const _LifePowerRing({required this.value});
+
+  final num value;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = (value / 100).clamp(0, 1).toDouble();
+    return SizedBox(
+      width: 96,
+      height: 96,
+      child: CustomPaint(
+        painter: _LifePowerRingPainter(progress),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('$value%', style: AbundanceTypography.title),
+              Text('of 100',
+                  style: AbundanceTypography.body.copyWith(fontSize: 11)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LifePowerRingPainter extends CustomPainter {
+  const _LifePowerRingPainter(this.progress);
+
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = size.shortestSide / 2 - 7;
+    final track = Paint()
+      ..color = AbundanceColors.border
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 7;
+    final fill = Paint()
+      ..color = AbundanceColors.primaryGold
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 7
+      ..strokeCap = StrokeCap.round;
+    canvas.drawCircle(center, radius, track);
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2,
+      math.pi * 2 * progress,
+      false,
+      fill,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _LifePowerRingPainter oldDelegate) =>
+      oldDelegate.progress != progress;
 }
 
 class _ProfileStat extends StatelessWidget {
@@ -1336,8 +1916,18 @@ class _ProfileStat extends StatelessWidget {
 }
 
 class _EarnedBadgesCard extends StatelessWidget {
-  const _EarnedBadgesCard({required this.onOpenAchievements});
+  const _EarnedBadgesCard({
+    required this.achievements,
+    required this.loading,
+    required this.hasError,
+    required this.onRetry,
+    required this.onOpenAchievements,
+  });
 
+  final List<AbundanceProfileAchievement> achievements;
+  final bool loading;
+  final bool hasError;
+  final Future<void> Function() onRetry;
   final VoidCallback? onOpenAchievements;
 
   @override
@@ -1354,18 +1944,82 @@ class _EarnedBadgesCard extends StatelessWidget {
         children: [
           const Text('Earned badges', style: AbundanceTypography.title),
           const SizedBox(height: 14),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AbundanceColors.surfaceSunken,
-              borderRadius: BorderRadius.circular(16),
+          if (loading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(18),
+                child: CircularProgressIndicator(
+                    color: AbundanceColors.primaryGold),
+              ),
+            )
+          else if (hasError)
+            AbundanceButton(
+                label: 'Retry', icon: Icons.refresh, onPressed: onRetry)
+          else if (achievements.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AbundanceColors.surfaceSunken,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Text(
+                'Complete your first quest to earn a badge.',
+                style: AbundanceTypography.body,
+              ),
+            )
+          else
+            SizedBox(
+              height: 170,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: achievements.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 10),
+                itemBuilder: (context, index) {
+                  final achievement = achievements[index];
+                  final definition = abundanceAchievementDefinitions
+                      .where((item) => item.key == achievement.key)
+                      .firstOrNull;
+                  final assetKey = achievement.art ??
+                      definition?.assetKey ??
+                      achievement.name.toLowerCase().replaceAll(' ', '-');
+                  final asset = abundanceAchievementAssets[assetKey] ??
+                      abundanceAchievementAssets[achievement.key] ??
+                      abundanceAchievementAssets[
+                          achievement.name.toLowerCase().replaceAll(' ', '-')];
+                  return SizedBox(
+                    width: 150,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: asset == null
+                                ? const Icon(Icons.workspace_premium,
+                                    color: AbundanceColors.primaryGold,
+                                    size: 48)
+                                : AbundanceArtwork(
+                                    child:
+                                        Image.asset(asset, fit: BoxFit.contain),
+                                  ),
+                          ),
+                          Text(achievement.name,
+                              style: AbundanceTypography.body,
+                              textAlign: TextAlign.center),
+                          Text(
+                              achievement.unlockedAt == null
+                                  ? 'UNLOCKED'
+                                  : 'Earned ${achievement.unlockedAt!.month}/${achievement.unlockedAt!.day}/${achievement.unlockedAt!.year}',
+                              style: AbundanceTypography.body
+                                  .copyWith(fontSize: 11),
+                              textAlign: TextAlign.center),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
-            child: const Text(
-              'Complete your first quest to earn a badge.',
-              style: AbundanceTypography.body,
-            ),
-          ),
           const SizedBox(height: 12),
           AbundanceButton(
             label: 'View all achievements',
