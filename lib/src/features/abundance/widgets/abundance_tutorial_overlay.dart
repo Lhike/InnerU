@@ -215,7 +215,11 @@ class _TutorialSheet extends StatelessWidget {
                       OutlinedButton(
                         onPressed: controller.pending ? null : controller.back,
                         style: OutlinedButton.styleFrom(
+                          backgroundColor: AbundanceColors.surfaceSunken,
+                          disabledBackgroundColor:
+                              AbundanceColors.surfaceSunken,
                           foregroundColor: AbundanceColors.foreground,
+                          disabledForegroundColor: AbundanceColors.muted,
                           side: const BorderSide(color: AbundanceColors.border),
                           minimumSize: const Size(92, 44),
                           shape: RoundedRectangleBorder(
