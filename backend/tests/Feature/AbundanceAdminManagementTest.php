@@ -57,14 +57,15 @@ class AbundanceAdminManagementTest extends TestCase
         ])->assertForbidden();
     }
 
-    public function test_non_abundance_admin_and_coach_cannot_use_abundance_assignment_endpoints(): void
+    public function test_global_admin_can_use_the_abundance_tool_but_coaches_cannot_assign(): void
     {
         $otherAdmin = User::factory()->create(['role' => 'admin', 'is_admin' => true, 'company_code' => 'OTHER']);
         $coach = User::factory()->create(['role' => 'coach', 'is_coach' => true, 'company_code' => 'ABU15DN']);
         $student = User::factory()->create(['company_code' => 'ABU15DN']);
 
         Sanctum::actingAs($otherAdmin);
-        $this->getJson('/api/admin/abundance')->assertForbidden();
+        $this->getJson('/api/admin/abundance')->assertOk()
+            ->assertJsonPath('companyCode', 'ABU15DN');
 
         Sanctum::actingAs($coach);
         $this->postJson('/api/admin/abundance/assignments', [

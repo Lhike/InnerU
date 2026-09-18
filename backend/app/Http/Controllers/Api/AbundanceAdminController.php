@@ -107,7 +107,10 @@ class AbundanceAdminController extends Controller
     private function authorizeAdmin(Request $request): ?JsonResponse
     {
         $user = $request->user();
-        return $user instanceof User && $this->isAdmin($user) && $this->isAbundance($user) ? null : $this->forbidden();
+        // The Admin Control is cross-company. The data and target validation
+        // below remain strictly scoped to ABU15DN, so a global InnerU admin
+        // can manage Abundance without changing their active company.
+        return $user instanceof User && $this->isAdmin($user) ? null : $this->forbidden();
     }
 
     private function forbidden(): JsonResponse { return response()->json(['message' => 'Abundance admin access required.'], Response::HTTP_FORBIDDEN); }
