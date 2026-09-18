@@ -36,5 +36,17 @@ void main() {
     await tester.tap(find.text('Profile & settings'));
     await tester.pumpAndSettle();
     expect(selected, 'profile');
+
+    await tester.tap(control);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Notifications'));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(selected, 'notifications');
+
+    await tester.tap(control);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('More'));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(selected, 'more');
   });
 }

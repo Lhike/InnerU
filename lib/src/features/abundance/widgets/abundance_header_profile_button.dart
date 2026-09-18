@@ -232,7 +232,14 @@ class AbundanceHeaderProfileButton extends StatelessWidget {
                     onAppearanceChanged: onAppearanceChanged,
                     onSelected: (value) {
                       Navigator.of(dialogContext).pop();
-                      onSelected(value);
+                      // Let the overlay finish its exit transition before
+                      // pushing another route or opening the More sheet.
+                      // Starting either action synchronously races the dialog
+                      // pop and makes Notifications/More appear unresponsive.
+                      Future<void>.delayed(const Duration(milliseconds: 200),
+                          () {
+                        if (context.mounted) onSelected(value);
+                      });
                     },
                     onClose: () => Navigator.of(dialogContext).pop(),
                   ),
