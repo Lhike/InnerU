@@ -813,18 +813,14 @@ class _AbundanceMenteeDashboardScreenState
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                     children: [
-                      AbundanceTutorialTarget(
-                        name: 'home-overview',
-                        controller: widget.tutorialController,
-                        child: _A12HomeHero(
-                          displayName: data.displayName,
-                          rankName: progression.name,
-                          rankKey: progression.key,
-                          level: progression.level,
-                          score: lifePower,
-                          profilePic: data.profilePic,
-                          tutorialController: widget.tutorialController,
-                        ),
+                      _A12HomeHero(
+                        displayName: data.displayName,
+                        rankName: progression.name,
+                        rankKey: progression.key,
+                        level: progression.level,
+                        score: lifePower,
+                        profilePic: data.profilePic,
+                        tutorialController: widget.tutorialController,
                       ),
                       const SizedBox(height: 16),
                       AbundanceTutorialTarget(

@@ -85,6 +85,12 @@ class _AbundanceAchievementsScreenState
 
   Widget _content(List<AbundanceAchievementRecord> records) {
     final catalog = AbundanceAchievementCatalog.fromRecords(records);
+    final remainingGroups = catalog.groups.entries
+        .map((entry) => MapEntry(
+              entry.key,
+              entry.value.where((record) => !record.unlocked).toList(),
+            ))
+        .where((entry) => entry.value.isNotEmpty);
     final list = ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 104),
@@ -137,16 +143,22 @@ class _AbundanceAchievementsScreenState
             controller: widget.tutorialController,
             child: _AwardGrid(records: catalog.recent),
           ),
-        ],
-        for (final entry in catalog.groups.entries) ...[
-          const SizedBox(height: 16),
-          Text(entry.key.toUpperCase(), style: AbundanceTypography.eyebrow),
-          const SizedBox(height: 10),
+        ] else
           AbundanceTutorialTarget(
             name: 'achievements-wall',
             controller: widget.tutorialController,
-            child: _AwardGrid(records: entry.value),
+            child: _AwardGrid(
+              records: catalog.groups.values
+                  .expand((records) => records)
+                  .take(2)
+                  .toList(),
+            ),
           ),
+        for (final entry in remainingGroups) ...[
+          const SizedBox(height: 16),
+          Text(entry.key.toUpperCase(), style: AbundanceTypography.eyebrow),
+          const SizedBox(height: 10),
+          _AwardGrid(records: entry.value),
         ],
       ],
     );

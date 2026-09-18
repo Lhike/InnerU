@@ -585,7 +585,9 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
           ? _buildShellHeader()
           : null,
       body: AbundanceTutorialTarget(
-        name: _tutorialController.step.target ?? 'tutorial-shell',
+        // Screen-level targets own their own exact containers. Keep this
+        // wrapper available only for the welcome step, which has no target.
+        name: 'tutorial-shell',
         controller: _tutorialController,
         child: IndexedStack(index: _index, children: _builtTabs),
       ),

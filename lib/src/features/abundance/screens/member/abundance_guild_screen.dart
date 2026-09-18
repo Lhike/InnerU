@@ -83,16 +83,12 @@ class _AbundanceGuildScreenState extends State<AbundanceGuildScreen> {
         }
         final councilName = snapshot.data;
         if (councilName != null) {
-          return AbundanceTutorialTarget(
-            name: widget.tutorialController?.step.target ?? 'allies-overview',
-            controller: widget.tutorialController,
-            child: Leaderboard(
-              key: ValueKey('abundance-guild-$_profilePictureVersion'),
-              appBarTitle: 'Allies',
-              apiLoader: _leaderboard.fetchLeaderboard,
-              onSignOut: widget.onSignOut,
-              tutorialController: widget.tutorialController,
-            ),
+          return Leaderboard(
+            key: ValueKey('abundance-guild-$_profilePictureVersion'),
+            appBarTitle: 'Allies',
+            apiLoader: _leaderboard.fetchLeaderboard,
+            onSignOut: widget.onSignOut,
+            tutorialController: widget.tutorialController,
           );
         }
         return AbundanceTutorialTarget(
