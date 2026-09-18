@@ -211,7 +211,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         await Navigator.of(context).pushNamed('/activityLogs');
         return;
       case 'tutorial':
-        _tutorialController.start();
+        _startTutorial();
         return;
       case 'sign_out':
         await _confirmSignOut();
@@ -366,11 +366,24 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       '/profile' => 5,
       _ => 0,
     };
-    if (_index != index) {
-      _index = index;
-      _ensureBuilt(index);
-    }
+    _ensureBuilt(index);
+    if (_index != index) _index = index;
     setState(() {});
+    // Replay can be launched from a different tab while its page is still
+    // mounted in the IndexedStack. Give the destination one frame to build so
+    // its section target can measure before the spotlight is painted.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _tutorialController.active) setState(() {});
+    });
+  }
+
+  void _startTutorial() {
+    // A replay always begins at Home, matching the source tutorial's first
+    // navigable lesson instead of leaving the previous tab underneath it.
+    _index = 0;
+    _ensureBuilt(0);
+    _tutorialController.start();
+    if (mounted) setState(() {});
   }
 
   void _onProfilePictureBusUpdate() {
@@ -422,7 +435,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         ) ??
         false;
     if (!mounted || completed) return;
-    _tutorialController.start();
+    _startTutorial();
   }
 
   void _onTabTapped(int newIndex) {
