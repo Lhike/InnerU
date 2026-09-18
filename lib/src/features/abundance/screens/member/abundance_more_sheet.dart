@@ -26,8 +26,8 @@ class AbundanceMoreSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = abundanceNavigationFor(isCoach: isCoach).where((item) =>
-        item.key == 'notifications' || (item.coachOnly && item.key != 'more'));
+    final items = abundanceNavigationFor(isCoach: isCoach)
+        .where((item) => item.coachOnly && item.key != 'more');
     // ListTile paints ink/background on its nearest Material ancestor. Using
     // Material here keeps the sheet's surface while avoiding Flutter's
     // invisible-ink assertion when this menu is opened in tests or on device.
@@ -61,6 +61,23 @@ class AbundanceMoreSheet extends StatelessWidget {
                   title: Text(item.label, style: AbundanceTypography.body),
                   onTap: () => onDestination(item.key),
                 ),
+              if (isCoach) ...[
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.auto_awesome_outlined,
+                      color: AbundanceColors.foreground),
+                  title: const Text('Replay tutorial',
+                      style: AbundanceTypography.body),
+                  onTap: () => onDestination('tutorial'),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.logout_rounded,
+                      color: AbundanceColors.scoreCritical),
+                  title: const Text('Log out', style: AbundanceTypography.body),
+                  onTap: () => onDestination('sign_out'),
+                ),
+              ],
             ],
           ),
         ),
