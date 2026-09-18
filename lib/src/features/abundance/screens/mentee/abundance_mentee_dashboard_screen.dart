@@ -823,6 +823,7 @@ class _AbundanceMenteeDashboardScreenState
                           level: progression.level,
                           score: lifePower,
                           profilePic: data.profilePic,
+                          tutorialController: widget.tutorialController,
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -1189,6 +1190,7 @@ class _A12HomeHero extends StatelessWidget {
     required this.level,
     required this.score,
     required this.profilePic,
+    this.tutorialController,
   });
 
   final String displayName;
@@ -1197,6 +1199,7 @@ class _A12HomeHero extends StatelessWidget {
   final int level;
   final double score;
   final String profilePic;
+  final AbundanceTutorialController? tutorialController;
 
   @override
   Widget build(BuildContext context) {
@@ -1271,31 +1274,35 @@ class _A12HomeHero extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 14),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 14,
-                    horizontal: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AbundanceColors.surfaceRaised,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AbundanceColors.border),
-                  ),
-                  child: Column(
-                    children: [
-                      const Text(
-                        'LIFE POWER',
-                        style: AbundanceTypography.eyebrow,
-                      ),
-                      const SizedBox(height: 8),
-                      _LifePowerRing(progress: progress, score: score),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'The kingdom answers to you.',
-                        style: AbundanceTypography.body,
-                      ),
-                    ],
+                AbundanceTutorialTarget(
+                  name: 'home-overview',
+                  controller: tutorialController,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 14,
+                      horizontal: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AbundanceColors.surfaceRaised,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AbundanceColors.border),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text(
+                          'LIFE POWER',
+                          style: AbundanceTypography.eyebrow,
+                        ),
+                        const SizedBox(height: 8),
+                        _LifePowerRing(progress: progress, score: score),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'The kingdom answers to you.',
+                          style: AbundanceTypography.body,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
