@@ -149,7 +149,7 @@ class _TutorialSheet extends StatelessWidget {
                 const SizedBox(height: 10),
                 Text(
                     controller.stepIndex == 0
-                        ? 'Welcome to Abundance 12'
+                        ? 'Welcome, ${controller.displayName?.trim().isNotEmpty == true ? controller.displayName!.trim() : 'Champion'}'
                         : step.title,
                     style: AbundanceTypography.display.copyWith(fontSize: 27)),
                 const SizedBox(height: 18),

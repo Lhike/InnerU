@@ -9,6 +9,7 @@ class AbundanceTutorialController extends ChangeNotifier {
   AbundanceTutorialController({
     required this.uid,
     required Set<AbundanceTutorialRole> roles,
+    this.displayName,
     AbundanceTutorialService? service,
     List<AbundanceTutorialStep>? stepsOverride,
     this.completionSaver,
@@ -16,6 +17,7 @@ class AbundanceTutorialController extends ChangeNotifier {
         _service = service ?? AbundanceTutorialService();
 
   final String uid;
+  final String? displayName;
   final List<AbundanceTutorialStep> steps;
   final AbundanceTutorialService _service;
   final Future<void> Function(String uid)? completionSaver;

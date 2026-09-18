@@ -335,6 +335,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
     super.initState();
     _tutorialController = AbundanceTutorialController(
       uid: widget.uid,
+      displayName: AuthService.instance.currentSession?.name,
       roles: {
         AbundanceTutorialRole.member,
         if (widget.isCoach) AbundanceTutorialRole.coach,
