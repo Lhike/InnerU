@@ -31,7 +31,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Profile & settings'), findsOneWidget);
     expect(find.text('Notifications'), findsOneWidget);
-    expect(find.text('More'), findsOneWidget);
+    expect(find.text('More'), findsNothing);
 
     await tester.tap(find.text('Profile & settings'));
     await tester.pumpAndSettle();
@@ -42,11 +42,5 @@ void main() {
     await tester.tap(find.text('Notifications'));
     await tester.pump(const Duration(milliseconds: 250));
     expect(selected, 'notifications');
-
-    await tester.tap(control);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('More'));
-    await tester.pump(const Duration(milliseconds: 250));
-    expect(selected, 'more');
   });
 }

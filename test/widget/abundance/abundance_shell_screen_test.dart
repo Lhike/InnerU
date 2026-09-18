@@ -245,7 +245,7 @@ void main() {
   });
 
   testWidgets(
-      'profile menu still exposes the overflow actions without changing the selected tab',
+      'profile menu omits More without changing the selected tab',
       (tester) async {
     final service = GoalsService(FakeFirebaseFirestore());
 
@@ -275,13 +275,9 @@ void main() {
 
     await tester.tap(find.byType(CircleAvatar));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('More'));
-    await tester.pumpAndSettle();
-
-    // The Abundance overflow keeps essential existing account actions.
-    expect(find.text('Log out'), findsOneWidget);
-    expect(find.text('Activity Logs'), findsOneWidget);
-    // The tab underneath is untouched: still Quests, not some 5th "More" body.
+    expect(find.text('More'), findsNothing);
+    expect(find.text('Notifications'), findsOneWidget);
+    // The tab underneath is untouched: still Quests.
     expect(find.textContaining('Life Power'), findsWidgets);
   });
 

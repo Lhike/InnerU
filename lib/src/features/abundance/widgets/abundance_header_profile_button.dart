@@ -369,11 +369,6 @@ class _ProfileOverlayContentState extends State<_ProfileOverlayContent> {
             label: 'Notifications',
             onTap: () => widget.onSelected('notifications'),
           ),
-          _OverlayAction(
-            icon: Icons.more_horiz,
-            label: 'More',
-            onTap: () => widget.onSelected('more'),
-          ),
           const _OverlayDivider(),
           const Text('Appearance', style: _OverlayLabelStyle()),
           const SizedBox(height: 8),
