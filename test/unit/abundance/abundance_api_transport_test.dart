@@ -10,66 +10,37 @@ class _MissingBridgeSession extends A12SessionService {
       );
 }
 
-class _RecordingFallback implements AbundanceApiTransport {
-  String? token;
-  String? path;
-
-  @override
-  Future<Map<String, dynamic>> getJson(String path, {String? token}) async {
-    this.path = path;
-    this.token = token;
-    return const <String, dynamic>{'goals': <dynamic>[]};
-  }
-
-  @override
-  Future<Map<String, dynamic>> postJson(String path, Map<String, dynamic> body,
-      {String? token}) async {
-    this.path = path;
-    this.token = token;
-    return const <String, dynamic>{'goal': <String, dynamic>{}};
-  }
-
-  @override
-  Future<Map<String, dynamic>> patchJson(String path, Map<String, dynamic> body,
-      {String? token}) async {
-    this.token = token;
-    return const <String, dynamic>{};
-  }
-
-  @override
-  Future<Map<String, dynamic>> deleteJson(String path, {String? token}) async {
-    this.token = token;
-    return const <String, dynamic>{};
-  }
-}
-
 void main() {
-  test('InnerU fallback preserves the caller bearer token', () async {
-    final fallback = _RecordingFallback();
+  test('A12 session failure never falls back to InnerU goal storage', () async {
     final transport = A12ApiTransport(
       sessions: _MissingBridgeSession(),
-      fallback: fallback,
     );
 
-    await transport.postJson(
-      '/api/goals',
-      const <String, dynamic>{'title': 'A goal'},
-      token: 'inneru-token',
+    await expectLater(
+      transport.postJson(
+        '/api/goals',
+        const <String, dynamic>{'title': 'A goal'},
+        token: 'inneru-token',
+      ),
+      throwsA(
+        isA<ApiException>().having(
+          (error) => error.statusCode,
+          'statusCode',
+          503,
+        ),
+      ),
     );
-
-    expect(fallback.token, 'inneru-token');
   });
 
-  test('council fallback uses the InnerU coach-group compatibility route',
+  test('A12 session failure never falls back to InnerU council storage',
       () async {
-    final fallback = _RecordingFallback();
     final transport = A12ApiTransport(
       sessions: _MissingBridgeSession(),
-      fallback: fallback,
     );
 
-    await transport.getJson('/councils', token: 'inneru-token');
-
-    expect(fallback.path, '/api/abundance/councils');
+    await expectLater(
+      transport.getJson('/councils', token: 'inneru-token'),
+      throwsA(isA<ApiException>()),
+    );
   });
 }

@@ -66,12 +66,9 @@ class InnerUAbundanceApiTransport implements AbundanceApiTransport {
 class A12ApiTransport implements AbundanceApiTransport {
   A12ApiTransport({
     A12SessionService? sessions,
-    AbundanceApiTransport? fallback,
-  })  : _sessions = sessions ?? A12SessionService(),
-        _inneruFallback = fallback ?? InnerUAbundanceApiTransport();
+  }) : _sessions = sessions ?? A12SessionService();
 
   final A12SessionService _sessions;
-  final AbundanceApiTransport _inneruFallback;
 
   Future<Map<String, dynamic>> _request(
     String method,
@@ -80,23 +77,7 @@ class A12ApiTransport implements AbundanceApiTransport {
     String? token, {
     bool retryingAfterUnauthorized = false,
   }) async {
-    late final A12Session session;
-    try {
-      session = await _sessions.ensureSession();
-    } on ApiException catch (error) {
-      // Guild/council data is also available from InnerU's coach-group
-      // tables. This keeps the mobile surface usable while the A12 bridge is
-      // being configured, and for stale A12 sessions or temporary outages.
-      if (_shouldFallback(path, error)) {
-        return _fallbackRequest(method, path, body, token);
-      }
-      rethrow;
-    } on Exception {
-      if (_isCouncilPath(path)) {
-        return _fallbackRequest(method, path, body, token);
-      }
-      rethrow;
-    }
+    final session = await _sessions.ensureSession();
     final translated = _translatePath(path);
     final translatedBody = _translateRequestBody(path, body ?? const {});
     final uri = Uri.parse('${ApiConfig.a12BaseUrl}${translated.path}');
@@ -115,16 +96,13 @@ class A12ApiTransport implements AbundanceApiTransport {
               headers: headers, body: jsonEncode(translatedBody));
         case 'PATCH':
           response = await http.patch(uri,
-              headers: headers, body: jsonEncode(body ?? {}));
+              headers: headers, body: jsonEncode(translatedBody));
         case 'DELETE':
           response = await http.delete(uri, headers: headers);
         default:
           throw ArgumentError.value(method, 'method');
       }
     } on Exception {
-      if (_isCouncilPath(path)) {
-        return _fallbackRequest(method, path, body, token);
-      }
       rethrow;
     }
     final data = response.body.trim().isEmpty
@@ -139,17 +117,10 @@ class A12ApiTransport implements AbundanceApiTransport {
         return _request(method, path, body, token,
             retryingAfterUnauthorized: true);
       }
-      if (_isCouncilPath(path) && method == 'POST') {
-        throw ApiException(
-            401, 'Your Abundance session expired. Please try again.');
-      }
-      return _fallbackRequest(method, path, body, token);
+      throw ApiException(
+          401, 'Your Abundance session expired. Please try again.');
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      if (_isCouncilPath(path) &&
-          (response.statusCode == 404 || response.statusCode >= 500)) {
-        return _fallbackRequest(method, path, body, token);
-      }
       throw ApiException(
         response.statusCode,
         data is Map
@@ -157,74 +128,7 @@ class A12ApiTransport implements AbundanceApiTransport {
             : 'A12 request failed.',
       );
     }
-    final translatedResponse = _translateResponse(path, data);
-    if (_isCouncilPath(path) &&
-        (path == '/councils' || path == '/guild') &&
-        _hasNoCouncilData(translatedResponse)) {
-      try {
-        final fallback = await _fallbackRequest(method, path, body, token);
-        if (!_hasNoCouncilData(fallback)) return fallback;
-      } catch (_) {
-        // Keep the A12 response (including an intentional empty state) when
-        // the compatibility route is unavailable as well.
-      }
-    }
-    return translatedResponse;
-  }
-
-  bool _hasNoCouncilData(Map<String, dynamic> response) {
-    final councils = response['councils'];
-    return councils is! List || councils.isEmpty;
-  }
-
-  bool _isCouncilPath(String path) {
-    final normalized = path.startsWith('/') ? path : '/$path';
-    return normalized == '/guild' ||
-        normalized == '/councils' ||
-        normalized == '/guild/join' ||
-        normalized == '/guild/leave';
-  }
-
-  bool _shouldFallback(String path, ApiException error) {
-    if (error.statusCode == 503 &&
-        error.message.contains('missing the Abundance A12 bridge route')) {
-      return true;
-    }
-    if (!_isCouncilPath(path)) return false;
-    return error.statusCode == 401 ||
-        error.statusCode == 404 ||
-        error.statusCode >= 500;
-  }
-
-  Future<Map<String, dynamic>> _fallbackRequest(
-    String method,
-    String path,
-    Map<String, dynamic>? body,
-    String? token,
-  ) {
-    final fallbackPath = _fallbackPath(path);
-    final fallbackToken = token ?? AuthService.instance.currentSession?.token;
-    return switch (method) {
-      'GET' => _inneruFallback.getJson(fallbackPath, token: fallbackToken),
-      'POST' => _inneruFallback.postJson(fallbackPath, body ?? const {},
-          token: fallbackToken),
-      'PATCH' => _inneruFallback.patchJson(fallbackPath, body ?? const {},
-          token: fallbackToken),
-      'DELETE' =>
-        _inneruFallback.deleteJson(fallbackPath, token: fallbackToken),
-      _ => throw ArgumentError.value(method, 'method'),
-    };
-  }
-
-  String _fallbackPath(String path) {
-    final normalized = path.startsWith('/') ? path : '/$path';
-    return switch (normalized) {
-      '/councils' => '/api/abundance/councils',
-      '/guild' => '/api/abundance/guild',
-      '/guild/join' => '/api/abundance/guild/join',
-      '/guild/leave' => '/api/abundance/guild/leave',
-      _ => normalized,
-    };
+    return _translateResponse(path, data);
   }
 
   ({String path, bool plans, bool history}) _translatePath(String path) {
@@ -411,7 +315,7 @@ class A12SessionService {
     late final Map<String, dynamic> response;
     try {
       response = await ApiClient.instance.postJson(
-        '/api/abundance/session',
+        '/api/abundance/a12/session',
         const <String, dynamic>{},
         token: innerToken,
       );
