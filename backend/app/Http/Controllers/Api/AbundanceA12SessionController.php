@@ -28,7 +28,12 @@ class AbundanceA12SessionController extends Controller
             'inneruUserId' => (string) $user->id,
             'email' => strtolower(trim((string) $user->email)),
             'name' => (string) $user->name,
-            'role' => (bool) ($user->is_coach ?? false) ? 'COACH' : 'MEMBER',
+            // A12 owns Abundance roles. InnerU can only attest its existing
+            // administrator authorization for the A12 admin console; it must
+            // not promote a local Coach flag into an A12 Coach role.
+            'role' => ((bool) ($user->is_admin ?? false) || strtolower(trim((string) ($user->role ?? ''))) === 'admin')
+                ? 'ADMIN'
+                : 'MEMBER',
             'companyCode' => 'ABU15DN',
             'emailVerified' => $user->email_verified_at !== null,
         ];
