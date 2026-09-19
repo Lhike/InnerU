@@ -8,9 +8,10 @@ import 'package:selfcare_projects/src/features/abundance/widgets/abundance_card.
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_status_view.dart';
 
 class AbundanceNotificationsScreen extends StatefulWidget {
-  const AbundanceNotificationsScreen({super.key, this.gateway});
+  const AbundanceNotificationsScreen({super.key, this.gateway, this.onNotificationTap});
 
   final AbundanceNotificationsGateway? gateway;
+  final ValueChanged<AbundanceNotification>? onNotificationTap;
 
   @override
   State<AbundanceNotificationsScreen> createState() =>
@@ -117,7 +118,10 @@ class _AbundanceNotificationsScreenState
           final item = _items[index];
           return AbundanceCard(
             child: InkWell(
-              onTap: () => _markRead(item),
+              onTap: () async {
+                await _markRead(item);
+                if (mounted) widget.onNotificationTap?.call(item);
+              },
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

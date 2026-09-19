@@ -172,6 +172,12 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/coach/mentees/{menteeId}/goals', [CoachManagementController::class, 'menteeGoals']);
     Route::get('/coach/goals', [GoalController::class, 'coachGoalsRoster']);
     Route::get('/coach/mentees/{menteeId}/todo-tasks', [CoachManagementController::class, 'menteeTodoTasks']);
+    Route::get('/coach/mentees/{menteeId}/abundance-notes', [CoachManagementController::class, 'abundanceNotes']);
+    Route::post('/coach/mentees/{menteeId}/abundance-notes', [CoachManagementController::class, 'createAbundanceNote']);
+    Route::get('/coach/mentees/{menteeId}/abundance-action-items', [CoachManagementController::class, 'abundanceActionItems']);
+    Route::post('/coach/mentees/{menteeId}/abundance-action-items', [CoachManagementController::class, 'createAbundanceActionItem']);
+    Route::get('/abundance/coaching-notes', [CoachManagementController::class, 'abundanceStudentNotes']);
+    Route::get('/abundance/coaching-action-items', [CoachManagementController::class, 'abundanceStudentActionItems']);
     Route::post('/coach/mentees/assign', [CoachManagementController::class, 'assignMentee']);
     Route::delete('/coach/mentees/{menteeId}', [CoachManagementController::class, 'removeMentee']);
     Route::get('/coach/requests', [CoachManagementController::class, 'requests']);

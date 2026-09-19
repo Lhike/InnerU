@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\DailyTracker;
 use App\Models\CoachGroup;
 use App\Models\CoachMentee;
+use App\Models\AbundanceActionItem;
+use App\Models\AbundanceCoachingNote;
 use App\Models\CoachRequest;
 use App\Models\Goal;
 use App\Models\Notification;
@@ -368,10 +370,13 @@ class CoachManagementController extends Controller
         // list every group the mentee is in with this coach.
         $mentees = $relations
             ->groupBy(fn (CoachMentee $relation) => (string) $relation->mentee_id)
-            ->map(function ($menteeRelations) use ($scores) {
+            ->map(function ($menteeRelations) use ($scores, $menteeUsers) {
                 $primary = $menteeRelations->first();
                 $payload = $this->menteePayload($primary, $menteeRelations);
-                $payload['score'] = (int) round($scores[(string) $primary->mentee_id] ?? 0);
+                $score = (int) round($scores[(string) $primary->mentee_id] ?? 0);
+                $payload['score'] = $score;
+                $payload['levelName'] = $score > 75 ? 'Divine' : ($score > 50 ? 'Ancient' : ($score > 25 ? 'Legend' : 'Archon'));
+                $payload['headline'] = $menteeUsers->get((string) $primary->mentee_id)?->bio;
                 return $payload;
             })
             ->values();
@@ -530,6 +535,74 @@ class CoachManagementController extends Controller
             ]);
 
         return response()->json(['tasks' => $tasks]);
+    }
+
+    public function abundanceNotes(Request $request, string $menteeId): JsonResponse
+    {
+        $this->assertAbundanceCoachOwnsMentee($request, $menteeId);
+        $notes = AbundanceCoachingNote::query()->where('coach_id', (string) $request->user()->id)->where('mentee_id', $menteeId)->latest()->get();
+        return response()->json(['notes' => $notes->map(fn (AbundanceCoachingNote $note) => [
+            'id' => (string) $note->id, 'body' => $note->body,
+            'createdAt' => $note->created_at?->toIso8601String(), 'updatedAt' => $note->updated_at?->toIso8601String(),
+        ])->values()]);
+    }
+
+    public function createAbundanceNote(Request $request, string $menteeId): JsonResponse
+    {
+        $this->assertAbundanceCoachOwnsMentee($request, $menteeId);
+        $data = $request->validate(['body' => ['required', 'string', 'max:5000']]);
+        $note = AbundanceCoachingNote::create(['id' => (string) Str::uuid(), 'coach_id' => (string) $request->user()->id, 'mentee_id' => $menteeId, 'body' => trim($data['body'])]);
+        Notification::createFor($menteeId, 'abundance_coaching_note', 'New coaching note', 'Your coach sent you a new coaching note.', ['coachingNoteId' => (string) $note->id, 'coachId' => (string) $request->user()->id]);
+        return response()->json(['note' => ['id' => (string) $note->id, 'body' => $note->body, 'createdAt' => $note->created_at?->toIso8601String()]], Response::HTTP_CREATED);
+    }
+
+    public function abundanceActionItems(Request $request, string $menteeId): JsonResponse
+    {
+        $this->assertAbundanceCoachOwnsMentee($request, $menteeId);
+        $items = AbundanceActionItem::query()->where('coach_id', (string) $request->user()->id)->where('mentee_id', $menteeId)->orderBy('status')->orderBy('due_date')->get();
+        return response()->json(['items' => $items->map(fn (AbundanceActionItem $item) => $this->abundanceActionItemPayload($item))->values()]);
+    }
+
+    public function createAbundanceActionItem(Request $request, string $menteeId): JsonResponse
+    {
+        $this->assertAbundanceCoachOwnsMentee($request, $menteeId);
+        $data = $request->validate(['title' => ['required', 'string', 'max:180'], 'dueDate' => ['nullable', 'date_format:Y-m-d']]);
+        $item = AbundanceActionItem::create(['id' => (string) Str::uuid(), 'coach_id' => (string) $request->user()->id, 'mentee_id' => $menteeId, 'title' => trim($data['title']), 'due_date' => $data['dueDate'] ?? null]);
+        Notification::createFor($menteeId, 'abundance_action_item', 'New coaching action item', 'Your coach assigned you a new action item.', ['actionItemId' => (string) $item->id, 'coachId' => (string) $request->user()->id]);
+        return response()->json($this->abundanceActionItemPayload($item), Response::HTTP_CREATED);
+    }
+
+    public function abundanceStudentNotes(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($user !== null && $this->isAbundanceUser($user), Response::HTTP_FORBIDDEN);
+        $notes = AbundanceCoachingNote::query()->where('mentee_id', (string) $user->id)->latest()->get();
+        return response()->json(['notes' => $notes->map(fn (AbundanceCoachingNote $note) => ['id' => (string) $note->id, 'body' => $note->body, 'coachId' => (string) $note->coach_id, 'createdAt' => $note->created_at?->toIso8601String()])->values()]);
+    }
+
+    public function abundanceStudentActionItems(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($user !== null && $this->isAbundanceUser($user), Response::HTTP_FORBIDDEN);
+        $items = AbundanceActionItem::query()
+            ->where('mentee_id', (string) $user->id)
+            ->orderBy('status')
+            ->orderBy('due_date')
+            ->get();
+
+        return response()->json(['items' => $items->map(fn (AbundanceActionItem $item) => $this->abundanceActionItemPayload($item))->values()]);
+    }
+
+    private function assertAbundanceCoachOwnsMentee(Request $request, string $menteeId): void
+    {
+        $user = $request->user();
+        abort_unless($user !== null && $this->isCoach($user) && $this->isAbundanceUser($user), Response::HTTP_FORBIDDEN);
+        abort_unless(CoachMentee::query()->where('coach_id', (string) $user->id)->where('mentee_id', $menteeId)->exists(), Response::HTTP_FORBIDDEN);
+    }
+
+    private function abundanceActionItemPayload(AbundanceActionItem $item): array
+    {
+        return ['id' => (string) $item->id, 'title' => $item->title, 'dueDate' => $item->due_date?->toDateString(), 'status' => $item->status, 'completedAt' => $item->completed_at?->toIso8601String()];
     }
 
     public function assignMentee(Request $request): JsonResponse

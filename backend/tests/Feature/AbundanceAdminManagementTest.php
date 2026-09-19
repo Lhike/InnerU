@@ -48,6 +48,16 @@ class AbundanceAdminManagementTest extends TestCase
             'mentee_id' => (string) $student->id,
         ]);
 
+        Sanctum::actingAs($coachTwo);
+        $this->getJson('/api/coach/mentees')
+            ->assertOk()
+            ->assertJsonPath('mentees.0.menteeId', (string) $student->id);
+        Sanctum::actingAs($coachOne);
+        $this->getJson('/api/coach/mentees')
+            ->assertOk()
+            ->assertJsonCount(0, 'mentees');
+
+        Sanctum::actingAs($admin);
         $this->deleteJson('/api/admin/abundance/assignments/'.$student->id)->assertOk();
         $this->assertDatabaseMissing('coach_mentees', ['mentee_id' => (string) $student->id]);
 

@@ -365,6 +365,14 @@ class CoachApiService {
         .toList();
   }
 
+  Future<List<Map<String, dynamic>>> fetchAbundanceGoalsRoster() async {
+    final response = await _api.getJson('/api/coach/goals', token: _token);
+    return (response['roster'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
   Future<List<Map<String, dynamic>>> fetchMenteeTodoTasks(
     String menteeId,
   ) async {
@@ -378,6 +386,61 @@ class CoachApiService {
     }
 
     return tasks
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAbundanceNotes(
+      String menteeId) async {
+    final response = await _api
+        .getJson('/api/coach/mentees/$menteeId/abundance-notes', token: _token);
+    return (response['notes'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Future<void> createAbundanceNote(
+      {required String menteeId, required String body}) async {
+    await _api.postJson(
+        '/api/coach/mentees/$menteeId/abundance-notes', {'body': body},
+        token: _token);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAbundanceActionItems(
+      String menteeId) async {
+    final response = await _api.getJson(
+        '/api/coach/mentees/$menteeId/abundance-action-items',
+        token: _token);
+    return (response['items'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Future<void> createAbundanceActionItem(
+      {required String menteeId,
+      required String title,
+      String? dueDate}) async {
+    await _api.postJson('/api/coach/mentees/$menteeId/abundance-action-items',
+        {'title': title, 'dueDate': dueDate},
+        token: _token);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAbundanceStudentNotes() async {
+    final response =
+        await _api.getJson('/api/abundance/coaching-notes', token: _token);
+    return (response['notes'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAbundanceStudentActionItems() async {
+    final response = await _api.getJson('/api/abundance/coaching-action-items',
+        token: _token);
+    return (response['items'] as List? ?? const [])
         .whereType<Map>()
         .map((item) => Map<String, dynamic>.from(item))
         .toList();

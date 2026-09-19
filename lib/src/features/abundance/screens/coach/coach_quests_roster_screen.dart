@@ -23,10 +23,12 @@ class CoachQuestsRosterScreen extends StatefulWidget {
     super.key,
     required this.service,
     required this.coachUid,
+    this.rosterLoader,
   });
 
   final GoalsService service;
   final String coachUid;
+  final Future<List<CoachMenteeGoals>> Function()? rosterLoader;
 
   @override
   State<CoachQuestsRosterScreen> createState() =>
@@ -47,12 +49,14 @@ class _CoachQuestsRosterScreenState extends State<CoachQuestsRosterScreen> {
   @override
   void initState() {
     super.initState();
-    _rosterFuture = widget.service.fetchCoachGoalsRoster();
+    _rosterFuture =
+        widget.rosterLoader?.call() ?? widget.service.fetchCoachGoalsRoster();
   }
 
   void _retryRoster() {
     setState(() {
-      _rosterFuture = widget.service.fetchCoachGoalsRoster();
+      _rosterFuture =
+          widget.rosterLoader?.call() ?? widget.service.fetchCoachGoalsRoster();
     });
   }
 

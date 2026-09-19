@@ -1055,6 +1055,21 @@ class GoalsService {
         .toList();
   }
 
+  /// Returns the assigned Abundance students from the A12 coach surface.
+  ///
+  /// The A12 bridge provisions a linked mobile account, so its student id is
+  /// not guaranteed to be the same as InnerU's id. Callers should use the
+  /// returned email to reconcile a linked student before reading `goals`.
+  Future<List<Map<String, dynamic>>> fetchA12CoachRoster() async {
+    final response = await _api.getJson('/coach/roster', token: _token);
+    final raw = response['students'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw
+        .whereType<Map>()
+        .map((student) => Map<String, dynamic>.from(student))
+        .toList();
+  }
+
   Stream<List<GoalSummary>> watchGoals(String uid) => _usesLegacyFirestore
       ? _legacyWatchGoals(uid)
       : _poll(() => _fetchGoals(uid), fallback: const <GoalSummary>[]);

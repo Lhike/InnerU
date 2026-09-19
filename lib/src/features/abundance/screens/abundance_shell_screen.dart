@@ -9,10 +9,12 @@ import 'package:selfcare_projects/src/features/abundance/screens/member/abundanc
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_missions_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_more_sheet.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_notifications_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_coaching_note_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_tutorial_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/coach/abundance_coach_management_screens.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/coach/abundance_coach_student_file_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/coach/coach_quests_roster_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/coach/abundance_coach_directory_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/abundance_mentee_dashboard_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/goals_hub_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
@@ -27,7 +29,6 @@ import 'package:selfcare_projects/src/features/abundance/tutorial/abundance_tuto
 import 'package:selfcare_projects/src/features/abundance/tutorial/abundance_tutorial_steps.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/coach_dashboard/coach_dashboard_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/coach_dashboard/coach_accountability_meetings_screen.dart';
-import 'package:selfcare_projects/src/features/authentication/screen/coaches/coaches_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/login/login_screen.dart';
 import 'package:selfcare_projects/src/services/app_session_service.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
@@ -206,7 +207,16 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         );
         return;
       case 'notifications':
-        await _push(const AbundanceNotificationsScreen());
+        await _push(AbundanceNotificationsScreen(
+          onNotificationTap: (notification) {
+            if (notification.title.toLowerCase().contains('coaching') ||
+                notification.data?['coachingNoteId'] != null ||
+                notification.data?['actionItemId'] != null) {
+              unawaited(_push(
+                  AbundanceCoachingNoteScreen(notification: notification)));
+            }
+          },
+        ));
         return;
       case 'activity_logs':
         await Navigator.of(context).pushNamed('/activityLogs');
@@ -224,7 +234,10 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         await _openCoachDestination(key);
         return;
       case 'coach_directory':
-        await _push(const CoachesScreen());
+        await _push(AbundanceCoachDirectoryScreen(
+          service: widget.service,
+          coachUid: widget.uid,
+        ));
         return;
     }
   }
@@ -236,7 +249,14 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
           AbundanceCoachStudentsScreen(
             onOpenManagement: () => _push(const CoachDashboardScreen()),
             onOpenStudent: (student) => _push(
-              AbundanceCoachStudentFileScreen(student: student),
+              AbundanceCoachStudentFileScreen(
+                student: student,
+                goalsService: widget.service,
+                onTabSelected: (index) {
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                  _onTabTapped(index);
+                },
+              ),
             ),
           ),
         );
@@ -250,18 +270,39 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         );
         return;
       case 'coach_core_tasks':
-        await _push(const AbundanceCoachCoreTasksScreen());
+        await _push(AbundanceCoachCoreTasksScreen(service: widget.service));
         return;
       case 'coach_quests':
         await _push(
           CoachQuestsRosterScreen(
             service: widget.service,
             coachUid: widget.uid,
+            rosterLoader: () async {
+              final roster = await widget.service.fetchA12CoachRoster();
+              return roster.map((student) {
+                final first = (student['firstName'] ?? '').toString();
+                final last = (student['lastName'] ?? '').toString();
+                return CoachMenteeGoals(
+                  menteeId: (student['id'] ?? '').toString(),
+                  menteeName: '$first $last'.trim(),
+                  goals: (student['goals'] is List
+                          ? (student['goals'] as List).whereType<Map>()
+                          : const <Map>[])
+                      .map((goal) => GoalSummary.fromJson(
+                            Map<String, dynamic>.from(goal),
+                          ))
+                      .toList(),
+                );
+              }).toList();
+            },
           ),
         );
         return;
       case 'coach_directory':
-        await _push(const CoachesScreen());
+        await _push(AbundanceCoachDirectoryScreen(
+          service: widget.service,
+          coachUid: widget.uid,
+        ));
         return;
     }
   }
