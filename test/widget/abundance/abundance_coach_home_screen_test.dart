@@ -98,6 +98,15 @@ void main() {
     await tester.pump();
     await tester.pumpAndSettle();
 
+    // Keep waiting for the loaded content for a bounded period. This avoids a
+    // race on slower Linux runners without allowing a broken loader to hang
+    // the test indefinitely.
+    for (var attempt = 0;
+        attempt < 20 && find.text('Build a daily practice').evaluate().isEmpty;
+        attempt++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
     expect(find.text('Aria Stone'), findsOneWidget);
     expect(find.text('Build a daily practice'), findsOneWidget);
   });
