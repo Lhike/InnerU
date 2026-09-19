@@ -1,7 +1,7 @@
 /// * App Image Strings--
 const String tSplashTopIcon = "assets/images/splashscreen.gif"; // Correct path
 
-const String meditationGirl = "assets/images/des2_trans.gif";
+const String meditationGirl = "assets/images/meditate.gif";
 
 const String tWelcomeScreensImage = "assets/images/login-image/login.png";
 
