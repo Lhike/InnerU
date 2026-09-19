@@ -131,8 +131,10 @@ class _AbundanceCoachStudentFileScreenState
       final rosterStudent = a12Roster.where((item) {
         final a12Id = (item['id'] ?? '').toString();
         final a12Email = (item['email'] ?? '').toString().trim().toLowerCase();
+        final canonicalUserId = (item['canonicalUserId'] ?? '').toString();
         return (_id.isNotEmpty && a12Id == _id) ||
-            (_email.isNotEmpty && a12Email == _email);
+            (_email.isNotEmpty && a12Email == _email) ||
+            (_id.isNotEmpty && canonicalUserId == 'inneru-$_id');
       }).firstOrNull;
       if (rosterStudent == null) return null;
 
