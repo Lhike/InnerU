@@ -251,7 +251,6 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
             onOpenStudent: (student) => _push(
               AbundanceCoachStudentFileScreen(
                 student: student,
-                goalsService: widget.service,
                 onTabSelected: (index) {
                   Navigator.of(context).popUntil((route) => route.isFirst);
                   _onTabTapped(index);

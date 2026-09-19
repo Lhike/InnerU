@@ -120,14 +120,14 @@ class _AbundanceCoachStudentFileScreenState
 
   Future<Map<String, dynamic>?> _loadA12Student() async {
     // Abundance quests are owned by the A12 mobile account. InnerU and A12
-    // link the same person by canonical email, but their numeric ids differ.
-    // Read the existing A12 coach roster (already scoped to this coach) and
-    // reconcile the selected student by email. The returned record is the
-    // single source for both quests and today's missions.
+    // may have different numeric ids, so always use the A12 transport here
+    // and reconcile the selected student from A12's already-scoped roster.
+    // Keep an injected service for widget tests, but never use the shell's
+    // default InnerU transport for these A12-owned records.
     try {
-      final a12Roster =
-          await (widget.goalsService ?? GoalsService(null, A12ApiTransport()))
-              .fetchA12CoachRoster();
+      final a12Service =
+          widget.goalsService ?? GoalsService(null, A12ApiTransport());
+      final a12Roster = await a12Service.fetchA12CoachRoster();
       final rosterStudent = a12Roster.where((item) {
         final a12Id = (item['id'] ?? '').toString();
         final a12Email = (item['email'] ?? '').toString().trim().toLowerCase();
@@ -144,9 +144,7 @@ class _AbundanceCoachStudentFileScreenState
       final a12Id = (rosterStudent['id'] ?? '').toString();
       if (a12Id.isEmpty) return rosterStudent;
       try {
-        final detail =
-            await (widget.goalsService ?? GoalsService(null, A12ApiTransport()))
-                .fetchA12CoachStudentDetail(a12Id);
+        final detail = await a12Service.fetchA12CoachStudentDetail(a12Id);
         final student = detail['student'];
         return <String, dynamic>{
           ...rosterStudent,
