@@ -1771,7 +1771,7 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen>
                 CupertinoIcons.leaf_arrow_circlepath,
                 const Color(0xFFE1EDDF),
                 const CalorieTrackerScreen(),
-                backgroundImage: 'assets/images/calorie.gif',
+                backgroundImage: 'assets/images/calories.gif',
               ),
               const SizedBox(width: 14),
               _buildClickableInfoCard(
