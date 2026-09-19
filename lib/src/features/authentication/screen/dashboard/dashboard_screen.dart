@@ -2533,7 +2533,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 CupertinoIcons.leaf_arrow_circlepath,
                 const Color(0xFFE1EDDF),
                 const CalorieTrackerScreen(),
-                backgroundImage: 'assets/images/calories.gif',
+                backgroundImage: 'assets/images/calorie.gif',
               ),
               const SizedBox(width: 14),
               _buildClickableInfoCard(
