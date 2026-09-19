@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/coach/abundance_coach_home_screen.dart';
@@ -83,29 +84,16 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: AbundanceCoachStudentFileScreen(
         student: const {'id': 'student-1', 'name': 'Aria Stone'},
-        loader: (_) async => <Map<String, dynamic>>[
+        loader: (_) => SynchronousFuture<List<Map<String, dynamic>>>([
           {
             'title': 'Build a daily practice',
             'progress': 40,
             'status': 'active'
           },
-        ],
+        ]),
       ),
     ));
-    // The student-file future is intentionally asynchronous. Give the
-    // FutureBuilder a frame to attach its completion callback before settling
-    // the remaining scheduled frames on slower CI runners.
-    await tester.pump();
     await tester.pumpAndSettle();
-
-    // Keep waiting for the loaded content for a bounded period. This avoids a
-    // race on slower Linux runners without allowing a broken loader to hang
-    // the test indefinitely.
-    for (var attempt = 0;
-        attempt < 20 && find.text('Build a daily practice').evaluate().isEmpty;
-        attempt++) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
 
     expect(find.text('Aria Stone'), findsOneWidget);
     expect(find.text('Build a daily practice'), findsOneWidget);
