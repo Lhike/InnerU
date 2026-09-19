@@ -94,13 +94,15 @@ class _AbundanceCoachStudentFileScreenState
     }
     List<Map<String, dynamic>> notes = const [];
     List<Map<String, dynamic>> actions = const [];
-    try {
-      notes = await api.fetchAbundanceNotes(_id);
-      actions = await api.fetchAbundanceActionItems(_id);
-    } catch (_) {
-      // Coaching records are optional to the read-only student file. A
-      // missing/unmigrated coaching-record table must not hide real goals
-      // and check-ins from the coach.
+    if (widget.loader == null) {
+      try {
+        notes = await api.fetchAbundanceNotes(_id);
+        actions = await api.fetchAbundanceActionItems(_id);
+      } catch (_) {
+        // Coaching records are optional to the read-only student file. A
+        // missing/unmigrated coaching-record table must not hide real goals
+        // and check-ins from the coach.
+      }
     }
     return {
       'goals': goals,
