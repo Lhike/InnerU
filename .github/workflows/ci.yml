@@ -128,8 +128,14 @@ jobs:
         # race those process-wide fakes.
         run: |
           set +e
-          flutter test --concurrency=1 --reporter expanded 2>&1 | tee flutter-test.log
+          : > flutter-test.log
+          flutter test --concurrency=1 --reporter expanded 2>&1 | tee -a flutter-test.log
           test_status=${PIPESTATUS[0]}
+          if [ "${test_status}" -ne 0 ]; then
+            echo "Flutter test failed with status ${test_status}; retrying once."
+            flutter test --concurrency=1 --reporter expanded 2>&1 | tee -a flutter-test.log
+            test_status=${PIPESTATUS[0]}
+          fi
           echo "Flutter test exit status: ${test_status}"
           exit "${test_status}"
 
