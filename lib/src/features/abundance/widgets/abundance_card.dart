@@ -26,7 +26,13 @@ class AbundanceCard extends StatelessWidget {
         border: Border.all(color: AbundanceColors.border),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: child,
+      // ListTile paints its ink and tile background on the nearest Material.
+      // Keep the card decoration, but provide a local transparent Material so
+      // ListTile children do not trigger Flutter's invisible-ink assertion.
+      child: Material(
+        type: MaterialType.transparency,
+        child: child,
+      ),
     );
     if (onTap == null) return content;
     return Semantics(
