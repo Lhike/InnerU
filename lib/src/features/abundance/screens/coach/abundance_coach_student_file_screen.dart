@@ -76,11 +76,18 @@ class _AbundanceCoachStudentFileScreenState
   }
 
   Future<Map<String, dynamic>> _load() async {
+    if (widget.loader != null) {
+      return {
+        'goals': await widget.loader!(_id),
+        'tasks': const <Map<String, dynamic>>[],
+        'missionCalendar': null,
+        'notes': const <Map<String, dynamic>>[],
+        'actions': const <Map<String, dynamic>>[],
+      };
+    }
     final api = CoachApiService.instance;
-    final a12Student = widget.loader == null ? await _loadA12Student() : null;
-    final goals = widget.loader != null
-        ? await widget.loader!(_id)
-        : _mapRecords(a12Student?['goals']);
+    final a12Student = await _loadA12Student();
+    final goals = _mapRecords(a12Student?['goals']);
     List<Map<String, dynamic>> tasks = const [];
     final a12Missions = a12Student?['missions'];
     if (a12Missions is List) {
@@ -94,15 +101,13 @@ class _AbundanceCoachStudentFileScreenState
     }
     List<Map<String, dynamic>> notes = const [];
     List<Map<String, dynamic>> actions = const [];
-    if (widget.loader == null) {
-      try {
-        notes = await api.fetchAbundanceNotes(_id);
-        actions = await api.fetchAbundanceActionItems(_id);
-      } catch (_) {
-        // Coaching records are optional to the read-only student file. A
-        // missing/unmigrated coaching-record table must not hide real goals
-        // and check-ins from the coach.
-      }
+    try {
+      notes = await api.fetchAbundanceNotes(_id);
+      actions = await api.fetchAbundanceActionItems(_id);
+    } catch (_) {
+      // Coaching records are optional to the read-only student file. A
+      // missing/unmigrated coaching-record table must not hide real goals
+      // and check-ins from the coach.
     }
     return {
       'goals': goals,
