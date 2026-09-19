@@ -1070,6 +1070,19 @@ class GoalsService {
         .toList();
   }
 
+  /// Loads the authoritative A12 record for one assigned student. The roster
+  /// is useful for listing, but this detail endpoint returns the complete
+  /// `mobile_goals` and `mobile_missions` data needed by the student file.
+  /// Authorization and coach/student assignment checks remain server-side.
+  Future<Map<String, dynamic>> fetchA12CoachStudentDetail(
+      String studentId) async {
+    final response = await _api.getJson(
+      '/coach/students/$studentId',
+      token: _token,
+    );
+    return Map<String, dynamic>.from(response);
+  }
+
   Stream<List<GoalSummary>> watchGoals(String uid) => _usesLegacyFirestore
       ? _legacyWatchGoals(uid)
       : _poll(() => _fetchGoals(uid), fallback: const <GoalSummary>[]);

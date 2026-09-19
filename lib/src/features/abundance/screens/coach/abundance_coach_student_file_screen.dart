@@ -128,12 +128,33 @@ class _AbundanceCoachStudentFileScreenState
       final a12Roster =
           await (widget.goalsService ?? GoalsService(null, A12ApiTransport()))
               .fetchA12CoachRoster();
-      return a12Roster.where((item) {
+      final rosterStudent = a12Roster.where((item) {
         final a12Id = (item['id'] ?? '').toString();
         final a12Email = (item['email'] ?? '').toString().trim().toLowerCase();
         return (_id.isNotEmpty && a12Id == _id) ||
             (_email.isNotEmpty && a12Email == _email);
       }).firstOrNull;
+      if (rosterStudent == null) return null;
+
+      // The roster summary can be stale or omit nested goal/mission records.
+      // Fetch the selected student's detail record so the UI reads the same
+      // mobile_goals/mobile_missions data the student sees.
+      final a12Id = (rosterStudent['id'] ?? '').toString();
+      if (a12Id.isEmpty) return rosterStudent;
+      try {
+        final detail =
+            await (widget.goalsService ?? GoalsService(null, A12ApiTransport()))
+                .fetchA12CoachStudentDetail(a12Id);
+        final student = detail['student'];
+        return <String, dynamic>{
+          ...rosterStudent,
+          ...detail,
+          if (student is Map) ...Map<String, dynamic>.from(student),
+          'id': a12Id,
+        };
+      } catch (_) {
+        return rosterStudent;
+      }
     } catch (_) {
       // Keep the InnerU compatibility source when the A12 bridge is
       // temporarily unavailable.
@@ -240,6 +261,7 @@ class _AbundanceCoachStudentFileScreenState
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
+                        key: ValueKey('mission-date-$key'),
                         onTap: () => setState(() => _selectedMissionDate = key),
                         borderRadius: BorderRadius.circular(8),
                         child: Container(
