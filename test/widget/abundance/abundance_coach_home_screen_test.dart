@@ -92,6 +92,10 @@ void main() {
         ],
       ),
     ));
+    // The student-file future is intentionally asynchronous. Give the
+    // FutureBuilder a frame to attach its completion callback before settling
+    // the remaining scheduled frames on slower CI runners.
+    await tester.pump();
     await tester.pumpAndSettle();
 
     expect(find.text('Aria Stone'), findsOneWidget);
