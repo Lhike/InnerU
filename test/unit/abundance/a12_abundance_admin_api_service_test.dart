@@ -5,6 +5,7 @@ import 'package:selfcare_projects/src/services/app_session_service.dart';
 
 class _AdminTransport implements AbundanceApiTransport {
   final requests = <String>[];
+  final bodies = <Map<String, dynamic>>[];
 
   @override
   Future<Map<String, dynamic>> deleteJson(String path, {String? token}) async {
@@ -57,6 +58,7 @@ class _AdminTransport implements AbundanceApiTransport {
   Future<Map<String, dynamic>> patchJson(String path, Map<String, dynamic> body,
       {String? token}) async {
     requests.add('PATCH $path');
+    bodies.add(body);
     return const {'ok': true};
   }
 
@@ -98,5 +100,9 @@ void main() {
 
     await service.remove('student-1');
     expect(transport.requests.last, 'DELETE /admin/councils/assign/student-1');
+
+    await service.makeCoach(snapshot.students.single);
+    expect(transport.requests.last, 'PATCH /admin/users/student-1/roles');
+    expect(transport.bodies.last['roles'], containsAll(['MENTEE', 'COACH']));
   });
 }

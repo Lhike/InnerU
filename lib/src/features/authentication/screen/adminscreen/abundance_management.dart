@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:selfcare_projects/src/services/abundance_admin_api_service.dart';
 
 class AbundanceManagementScreen extends StatefulWidget {
-  const AbundanceManagementScreen({super.key});
+  const AbundanceManagementScreen({super.key, this.service});
+
+  final AbundanceAdminApiService? service;
+
   @override
   State<AbundanceManagementScreen> createState() =>
       _AbundanceManagementScreenState();
@@ -12,17 +15,25 @@ class AbundanceManagementScreen extends StatefulWidget {
 class _AbundanceManagementScreenState extends State<AbundanceManagementScreen> {
   late Future<AbundanceAdminSnapshot> _future;
   final _search = TextEditingController();
+
+  AbundanceAdminApiService get _service =>
+      widget.service ?? AbundanceAdminApiService.instance;
+
   @override
   void initState() {
     super.initState();
-    _future = AbundanceAdminApiService.instance.fetch();
+    _future = _service.fetch();
   }
 
-  void _refresh() =>
-      setState(() => _future = AbundanceAdminApiService.instance.fetch());
+  void _refresh() {
+    setState(() {
+      _future = _service.fetch();
+    });
+  }
+
   Future<void> _assign(
       AbundanceAdminCoach coach, AbundanceAdminStudent student) async {
-    await AbundanceAdminApiService.instance.assign(coach.id, student.id);
+    await _service.assign(coach.id, student.id);
     if (!mounted) return;
     Navigator.pop(context);
     _refresh();
@@ -54,12 +65,40 @@ class _AbundanceManagementScreenState extends State<AbundanceManagementScreen> {
   }
 
   Future<void> _remove(AbundanceAdminStudent student) async {
-    await AbundanceAdminApiService.instance.remove(student.id);
+    await _service.remove(student.id);
     _refresh();
   }
 
   Future<void> _makeCoach(AbundanceAdminStudent student) async {
-    await AbundanceAdminApiService.instance.makeCoach(student);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Make ${student.name} a coach?'),
+        content: const Text('This gives the user Abundance Coach access.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Make coach'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await _service.makeCoach(student);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Unable to make ${student.name} a coach: $error')),
+      );
+      return;
+    }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('${student.name} is now an Abundance coach.')),
@@ -106,12 +145,11 @@ class _AbundanceManagementScreenState extends State<AbundanceManagementScreen> {
           FilledButton(
             onPressed: () async {
               if (student.goals.isNotEmpty && title.text.trim().isNotEmpty) {
-                await AbundanceAdminApiService.instance.updateGoal(
-                    student.goals.first['id'].toString(),
+                await _service.updateGoal(student.goals.first['id'].toString(),
                     {'title': title.text.trim()});
               }
               if (student.goals.isNotEmpty && quest.text.trim().isNotEmpty) {
-                await AbundanceAdminApiService.instance.addQuest(
+                await _service.addQuest(
                     student.goals.first['id'].toString(), quest.text.trim());
               }
               if (context.mounted) Navigator.pop(context);
@@ -197,8 +235,7 @@ class _AbundanceManagementScreenState extends State<AbundanceManagementScreen> {
                     leading: const Icon(CupertinoIcons.person),
                     title: Text(s.name),
                     subtitle: Text(s.email),
-                    trailing: AbundanceAdminApiService
-                            .instance.isA12AbundanceManagement
+                    trailing: _service.isA12AbundanceManagement
                         ? TextButton.icon(
                             onPressed: () => _makeCoach(s),
                             icon: const Icon(CupertinoIcons.person_badge_plus),
