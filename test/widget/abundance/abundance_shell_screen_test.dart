@@ -138,6 +138,26 @@ void main() {
     expect(find.byType(GoalsHubScreen), findsOneWidget);
   });
 
+  testWidgets('refreshes coach navigation from the Abundance role',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceShellScreen(
+        isCoach: false,
+        service: GoalsService(FakeFirebaseFirestore()),
+        uid: 'role-refresh-user',
+        companyTheme: CompanyThemeData.standard.copyWith(
+          companyCode: 'ABU15DN',
+          companyName: 'Abundance',
+          isCompanyTheme: true,
+        ),
+        coachRoleResolverOverride: () async => true,
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Coaching'), findsOneWidget);
+  });
+
   testWidgets(
       'defaults to the Home tab and shows the mentee dashboard when initialIndex is not supplied',
       (tester) async {

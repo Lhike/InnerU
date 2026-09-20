@@ -18,6 +18,7 @@ import 'package:selfcare_projects/src/features/abundance/screens/coach/abundance
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/abundance_mentee_dashboard_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/goals_hub_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_api_transport.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_achievements_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_missions_service.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/abundance_company.dart';
@@ -54,6 +55,7 @@ class AbundanceShellScreen extends StatefulWidget {
     this.initialIndex = 0,
     this.questsAccessResolverOverride,
     this.achievementsLoaderOverride,
+    this.coachRoleResolverOverride,
   });
 
   final bool isCoach;
@@ -84,6 +86,10 @@ class AbundanceShellScreen extends StatefulWidget {
   final Future<bool> Function(String uid)? questsAccessResolverOverride;
   final Future<Set<String>> Function()? achievementsLoaderOverride;
 
+  /// Test seam for the server-owned A12 role lookup. Production uses
+  /// [A12SessionService.resolveIsCoach], never an account-specific check.
+  final Future<bool?> Function()? coachRoleResolverOverride;
+
   @override
   State<AbundanceShellScreen> createState() => _AbundanceShellScreenState();
 }
@@ -93,6 +99,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   // Seeded from
   // widget.initialIndex (defaults to Home) in initState below.
   late int _index;
+  late bool _isCoach;
   String _appearance = 'dark';
   String? _profilePictureOverride;
   late final AbundanceTutorialController _tutorialController;
@@ -201,7 +208,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
             onOpenAccountSettings: () {},
             onOpenAchievements: () => _onTabTapped(3),
             appearance: _appearance,
-            isCoach: widget.isCoach,
+            isCoach: _isCoach,
             onAppearanceChanged: (value) => unawaited(_setAppearance(value)),
             onSignOut: _confirmSignOut,
             onReplayTutorial: () => unawaited(_openDestination('tutorial')),
@@ -349,10 +356,10 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       context: context,
       barrierColor: Colors.black.withValues(alpha: .72),
       builder: (_) => AbundanceMoreSheet(
-        isCoach: widget.isCoach,
+        isCoach: _isCoach,
         displayName: AuthService.instance.currentSession?.name ?? '',
         email: AuthService.instance.currentSession?.email ?? '',
-        roleLabel: widget.isCoach ? 'Coach' : 'Student',
+        roleLabel: _isCoach ? 'Coach' : 'Student',
         appearance: _appearance,
         onAppearanceChanged: (value) => unawaited(_setAppearance(value)),
         onDestination: (key) {
@@ -383,12 +390,13 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   @override
   void initState() {
     super.initState();
+    _isCoach = widget.isCoach;
     _tutorialController = AbundanceTutorialController(
       uid: widget.uid,
       displayName: AuthService.instance.currentSession?.name,
       roles: {
         AbundanceTutorialRole.member,
-        if (widget.isCoach) AbundanceTutorialRole.coach,
+        if (_isCoach) AbundanceTutorialRole.coach,
       },
     )..addListener(_onTutorialChanged);
     ProfilePictureBus.latestUrl.addListener(_onProfilePictureBusUpdate);
@@ -396,7 +404,16 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
     _index = widget.initialIndex.clamp(0, 5);
     _ensureBuilt(_index);
     _loadAppearance();
+    unawaited(_refreshCoachRole());
     WidgetsBinding.instance.addPostFrameCallback((_) => _showFirstRunGuide());
+  }
+
+  Future<void> _refreshCoachRole() async {
+    final resolver = widget.coachRoleResolverOverride ??
+        A12SessionService().resolveIsCoach;
+    final resolved = await resolver();
+    if (!mounted || resolved == null || resolved == _isCoach) return;
+    setState(() => _isCoach = resolved);
   }
 
   @override
@@ -593,7 +610,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
               '',
           displayName: AuthService.instance.currentSession?.name ?? '',
           email: AuthService.instance.currentSession?.email ?? '',
-          roleLabel: widget.isCoach ? 'Coach' : 'Student',
+          roleLabel: _isCoach ? 'Coach' : 'Student',
           appearance: _appearance,
           onAppearanceChanged: (value) => unawaited(_setAppearance(value)),
           onSelected: (value) {
@@ -644,7 +661,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       ),
       bottomNavigationBar: _AbundanceBottomNavigationBar(
         currentIndex: _index,
-        isCoach: widget.isCoach,
+        isCoach: _isCoach,
         onTap: _onTabTapped,
         onMore: _showMore,
       ),
