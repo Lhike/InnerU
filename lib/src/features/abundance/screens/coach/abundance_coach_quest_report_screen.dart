@@ -598,7 +598,12 @@ class _ChoiceSheet extends StatelessWidget {
             Text(title, style: AbundanceTypography.title),
             for (final option in options)
               ListTile(
-                title: Text(option),
+                title: Text(
+                  option,
+                  style: AbundanceTypography.body.copyWith(
+                    color: AbundanceColors.foreground,
+                  ),
+                ),
                 onTap: () => Navigator.pop(context, option),
               ),
           ],
@@ -621,7 +626,12 @@ class _IndexedChoiceSheet extends StatelessWidget {
             Text(title, style: AbundanceTypography.title),
             for (var index = 0; index < options.length; index++)
               ListTile(
-                title: Text(options[index]),
+                title: Text(
+                  options[index],
+                  style: AbundanceTypography.body.copyWith(
+                    color: AbundanceColors.foreground,
+                  ),
+                ),
                 onTap: () => Navigator.pop(context, index),
               ),
           ],

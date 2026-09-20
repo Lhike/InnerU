@@ -73,11 +73,19 @@ void main() {
       isNot(AbundanceColors.foreground),
     );
 
+    await tester.tap(find.bySemanticsLabel('Choose report council'));
+    await tester.pumpAndSettle();
+    expect(find.text('Choose report council'), findsOneWidget);
+    final councilOption = tester.widget<Text>(find.text('Dawn Council'));
+    expect(councilOption.style?.color, AbundanceColors.foreground);
+    await tester.tap(find.text('Dawn Council'));
+    await tester.pumpAndSettle();
+
     await tester.drag(find.byType(ListView), const Offset(0, -500));
     await tester.pump();
     expect(find.text('STUDENT'), findsOneWidget);
     expect(find.text('QUEST'), findsOneWidget);
-    expect(find.textContaining('Dawn Council'), findsOneWidget);
+    expect(find.textContaining('Dawn Council'), findsAtLeastNWidgets(1));
     expect(find.text('Read every day'), findsOneWidget);
 
     final table = tester.widget<DataTable>(find.byType(DataTable));
