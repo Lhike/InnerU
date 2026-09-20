@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:selfcare_projects/src/features/abundance/screens/coach/abundance_coach_quest_report_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 
 void main() {
   final roster = <Map<String, dynamic>>[
@@ -56,12 +57,32 @@ void main() {
     expect(find.bySemanticsLabel('Choose report student'), findsOneWidget);
     expect(find.text('Start date'), findsOneWidget);
     expect(find.text('End date'), findsOneWidget);
+
+    final councilButton = tester.widget<OutlinedButton>(
+      find.ancestor(
+        of: find.text('All councils'),
+        matching: find.byType(OutlinedButton),
+      ),
+    );
+    expect(
+      councilButton.style?.backgroundColor?.resolve(<WidgetState>{})?.a,
+      greaterThan(.9),
+    );
+    expect(
+      councilButton.style?.foregroundColor?.resolve(<WidgetState>{}),
+      isNot(AbundanceColors.foreground),
+    );
+
     await tester.drag(find.byType(ListView), const Offset(0, -500));
     await tester.pump();
     expect(find.text('STUDENT'), findsOneWidget);
     expect(find.text('QUEST'), findsOneWidget);
-    expect(find.text('Dawn Council'), findsOneWidget);
+    expect(find.textContaining('Dawn Council'), findsOneWidget);
     expect(find.text('Read every day'), findsOneWidget);
+
+    final table = tester.widget<DataTable>(find.byType(DataTable));
+    expect(table.dataTextStyle?.color, AbundanceColors.foreground);
+    expect(table.headingTextStyle?.color, AbundanceColors.muted);
   });
 
   testWidgets('renders assigned-student scope and a real empty state',

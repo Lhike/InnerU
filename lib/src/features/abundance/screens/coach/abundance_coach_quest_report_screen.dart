@@ -4,6 +4,9 @@ import 'package:selfcare_projects/src/features/abundance/coach/coach_quest_repor
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_typography.dart';
 
+const _reportFieldBackground = Color(0xFFFDFDFD);
+const _reportFieldText = Color(0xFF329B98);
+
 enum AbundanceCoachReportScope { allStudents, assignedStudents }
 
 class AbundanceCoachQuestReportScreen extends StatefulWidget {
@@ -396,10 +399,21 @@ class _FilterButton extends StatelessWidget {
         label: accessibilityLabel,
         child: OutlinedButton(
           onPressed: onPressed,
-          style: OutlinedButton.styleFrom(
+          style: ButtonStyle(
             alignment: Alignment.centerLeft,
-            minimumSize: const Size.fromHeight(42),
-            side: const BorderSide(color: AbundanceColors.border),
+            minimumSize: const WidgetStatePropertyAll(Size.fromHeight(42)),
+            padding: const WidgetStatePropertyAll(
+              EdgeInsets.symmetric(horizontal: 12),
+            ),
+            backgroundColor:
+                const WidgetStatePropertyAll(_reportFieldBackground),
+            foregroundColor: const WidgetStatePropertyAll(_reportFieldText),
+            side: const WidgetStatePropertyAll(
+              BorderSide(color: _reportFieldBackground),
+            ),
+            shape: WidgetStatePropertyAll(
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
           ),
           child: Row(
             children: [
@@ -428,11 +442,21 @@ class _DateButton extends StatelessWidget {
         label: label,
         child: OutlinedButton(
           onPressed: onPressed,
-          style: OutlinedButton.styleFrom(
+          style: ButtonStyle(
             alignment: Alignment.centerLeft,
-            minimumSize: const Size.fromHeight(52),
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            side: const BorderSide(color: AbundanceColors.border),
+            minimumSize: const WidgetStatePropertyAll(Size.fromHeight(52)),
+            padding: const WidgetStatePropertyAll(
+              EdgeInsets.symmetric(horizontal: 10),
+            ),
+            backgroundColor:
+                const WidgetStatePropertyAll(_reportFieldBackground),
+            foregroundColor: const WidgetStatePropertyAll(_reportFieldText),
+            side: const WidgetStatePropertyAll(
+              BorderSide(color: _reportFieldBackground),
+            ),
+            shape: WidgetStatePropertyAll(
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -513,16 +537,30 @@ class _ReportTable extends StatelessWidget {
   Widget build(BuildContext context) => SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: DataTable(
-          headingRowColor: WidgetStatePropertyAll(
+          headingRowColor: const WidgetStatePropertyAll(
             AbundanceColors.surfaceRaised,
           ),
+          dataRowColor:
+              const WidgetStatePropertyAll(AbundanceColors.background),
+          headingTextStyle: const TextStyle(
+            color: AbundanceColors.muted,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+          ),
+          dataTextStyle: const TextStyle(
+            color: AbundanceColors.foreground,
+            fontSize: 11,
+            height: 1.4,
+          ),
+          dividerThickness: 1,
+          headingRowHeight: 54,
           dataRowMinHeight: 58,
           dataRowMaxHeight: 76,
+          horizontalMargin: 12,
           columnSpacing: 18,
           columns: [
             'STUDENT',
-            'COUNCIL',
-            'CATEGORY',
+            'REALM',
             'QUEST',
             'TARGET',
             for (final week in weeks) '${week.start}\n${week.end}',
@@ -532,7 +570,6 @@ class _ReportTable extends StatelessWidget {
                 (row) => DataRow(
                   cells: [
                     DataCell(Text('${row.studentName}\n${row.council}')),
-                    DataCell(Text(row.council)),
                     DataCell(Text(row.category)),
                     DataCell(Text(row.title)),
                     DataCell(Text(row.target)),
