@@ -165,6 +165,37 @@ void main() {
     expect(find.text('Jamie Rivera'), findsOneWidget);
   });
 
+  testWidgets('quest filters use the Abundance white selector treatment',
+      (tester) async {
+    final service = _FakeGoalsService(const [
+      CoachMenteeGoals(
+          menteeId: '1', menteeName: 'Maychell Alcorin', goals: []),
+    ]);
+
+    await tester.pumpWidget(MaterialApp(
+      home: CoachQuestsRosterScreen(service: service, coachUid: 'coach1'),
+    ));
+    await tester.pumpAndSettle();
+
+    final categoryField = tester.widget<DropdownButtonFormField<GoalCategory?>>(
+      find.byType(DropdownButtonFormField<GoalCategory?>),
+    );
+    expect(categoryField.decoration.labelText, 'Category');
+    expect(categoryField.decoration.filled, isTrue);
+    expect(categoryField.decoration.fillColor, const Color(0xFFFDFDFD));
+    expect(categoryField.decoration.labelStyle?.color, const Color(0xFF7E879B));
+    expect(find.text('All categories'), findsOneWidget);
+
+    final minimumScoreField = tester.widget<TextField>(find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.decoration?.hintText == 'Minimum score',
+    ));
+    expect(minimumScoreField.decoration?.labelText, isNull);
+    expect(minimumScoreField.decoration?.filled, isTrue);
+    expect(minimumScoreField.decoration?.fillColor, const Color(0xFFFDFDFD));
+    expect(minimumScoreField.style?.color, const Color(0xFF329B98));
+  });
+
   testWidgets(
       'tapping a quest opens GoalDetailScreen for the mentee, not the coach',
       (tester) async {
