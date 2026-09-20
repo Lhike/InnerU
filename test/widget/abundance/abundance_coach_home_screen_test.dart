@@ -59,6 +59,28 @@ void main() {
     expect(find.text('Morning focus'), findsOneWidget);
   });
 
+  testWidgets('Abundance students render the assigned A12 roster shape',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceCoachStudentsScreen(
+        loader: () async => <Map<String, dynamic>>[
+          {
+            'id': 'a12-student-1',
+            'firstName': 'Cookie',
+            'lastName': 'Milo',
+            'email': 'cookie@example.test',
+            'council': 'Dawn Council',
+          },
+        ],
+        onOpenManagement: () {},
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cookie Milo'), findsOneWidget);
+    expect(find.text('Dawn Council'), findsOneWidget);
+  });
+
   testWidgets('council workspace exposes source-aligned creation controls',
       (tester) async {
     await tester.pumpWidget(MaterialApp(

@@ -31,18 +31,29 @@ class AbundanceCoachStudentsScreen extends StatelessWidget {
         title: 'Students',
         copy: 'Your Abundance students and their current council placement.',
         emptyMessage: 'No students are assigned to you yet.',
-        loader: loader ?? CoachApiService.instance.fetchMentees,
-        label: (item) => _value(
-            item, const ['menteeName', 'name', 'fullName', 'username'],
-            fallback: 'Student'),
+        loader: loader ??
+            GoalsService(null, A12ApiTransport()).fetchA12CoachRoster,
+        label: _abundanceStudentName,
         subtitle: (item) => _value(
           item,
-          const ['groupName', 'group_name', 'menteeEmail', 'email'],
+          const ['council', 'groupName', 'group_name', 'menteeEmail', 'email'],
           fallback: 'Abundance member',
         ),
         itemActionLabel: 'Open student file',
         onItemTap: onOpenStudent,
       );
+}
+
+String _abundanceStudentName(Map<String, dynamic> item) {
+  final first = item['firstName']?.toString().trim() ?? '';
+  final last = item['lastName']?.toString().trim() ?? '';
+  final fullName = '$first $last'.trim();
+  if (fullName.isNotEmpty) return fullName;
+  return _value(
+    item,
+    const ['menteeName', 'name', 'fullName', 'username'],
+    fallback: 'Student',
+  );
 }
 
 class AbundanceCoachCouncilsScreen extends StatelessWidget {
