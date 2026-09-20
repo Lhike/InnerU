@@ -11,6 +11,10 @@ class _RecordingCouncilTransport implements AbundanceApiTransport {
     if (path == '/guild') {
       return {
         'members': const [],
+        'coach': {
+          'id': 'coach-1',
+          'name': 'Arlene Mae',
+        },
         'councils': [
           {
             'id': 'council-1',
@@ -62,6 +66,7 @@ void main() {
     final service = AbundanceCouncilService(transport: transport);
 
     final current = await service.fetchCurrent();
+    final assignedCoach = await service.fetchAssignedCoachName();
     final available = await service.fetchAvailable();
     await service.join('council-1');
     await service.leave();
@@ -69,8 +74,10 @@ void main() {
     expect(current?.name, 'Dawn');
     expect(current?.memberCount, 2);
     expect(current?.averageScore, 34);
+    expect(assignedCoach, 'Arlene Mae');
     expect(available.single.description, 'Rise together.');
     expect(transport.requests, [
+      'GET /guild',
       'GET /guild',
       'GET /councils',
       'POST /guild/join council-1',

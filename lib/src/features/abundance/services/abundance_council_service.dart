@@ -86,6 +86,31 @@ class AbundanceCouncilService {
     return first;
   }
 
+  /// Returns the coach assigned to the authenticated Abundance student.
+  ///
+  /// Abundance Guild is a company-wide leaderboard, so its response does not
+  /// use the legacy council list for student assignments. The A12 API exposes
+  /// the student's own coach separately while keeping the relationship
+  /// server-owned.
+  Future<String?> fetchAssignedCoachName() async {
+    final response = await _transport.getJson('/guild');
+    final raw = response['coach'] ??
+        response['assignedCoach'] ??
+        response['assigned_coach'];
+    if (raw is String) {
+      final name = raw.trim();
+      return name.isEmpty ? null : name;
+    }
+    if (raw is! Map) return null;
+    final json = Map<String, dynamic>.from(raw);
+    final direct = json['name']?.toString().trim();
+    if (direct != null && direct.isNotEmpty) return direct;
+    final first = json['firstName'] ?? json['first_name'] ?? '';
+    final last = json['lastName'] ?? json['last_name'] ?? '';
+    final name = '$first $last'.trim();
+    return name.isEmpty ? null : name;
+  }
+
   Future<void> join(String councilId) async {
     await _transport.postJson('/guild/join', {'councilId': councilId});
   }

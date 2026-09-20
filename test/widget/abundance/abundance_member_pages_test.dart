@@ -542,13 +542,5 @@ class _CouncilServiceWithCoach extends AbundanceCouncilService {
   _CouncilServiceWithCoach() : super();
 
   @override
-  Future<AbundanceCouncil?> fetchCurrent() async => const AbundanceCouncil(
-        id: 'council-1',
-        name: 'Dawn Council',
-        description: null,
-        coachName: 'Coach One',
-        memberCount: 2,
-        averageScore: 34,
-        isCurrent: true,
-      );
+  Future<String?> fetchAssignedCoachName() async => 'Coach One';
 }

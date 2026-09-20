@@ -180,25 +180,10 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
       return;
     }
     try {
-      final council = await _councilGateway.fetchCurrent();
-      if (!mounted || council == null) return;
+      final coachName = await _councilGateway.fetchAssignedCoachName();
+      if (!mounted || coachName == null || coachName.trim().isEmpty) return;
       setState(() {
-        _coachName = council.coachName;
-        final profile = _snapshot;
-        if (profile != null) {
-          _snapshot = AbundanceProfileSnapshot(
-            profile: profile.profile,
-            achievements: profile.achievements,
-            council: AbundanceProfileCouncil(
-              id: council.id,
-              name: council.name,
-              description: council.description,
-              coachName: council.coachName,
-              memberCount: council.memberCount,
-              averageScore: council.averageScore,
-            ),
-          );
-        }
+        _coachName = coachName;
       });
     } catch (_) {
       // Council data is supplemental; keep the source empty state usable when
