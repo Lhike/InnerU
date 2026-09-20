@@ -32,6 +32,7 @@ void main() {
     final items = abundanceNavigationFor(isCoach: true);
     expect(items.any((item) => item.key == 'coach_students'), isTrue);
     expect(items.any((item) => item.key == 'coach_core_tasks'), isTrue);
+    expect(items.any((item) => item.key == 'coach_councils'), isFalse);
     expect(items.any((item) => item.key == 'home'), isTrue);
   });
 

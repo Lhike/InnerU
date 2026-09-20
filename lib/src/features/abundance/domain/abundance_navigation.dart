@@ -78,13 +78,6 @@ const List<AbundanceDestination> _coachDestinations = <AbundanceDestination>[
     coachOnly: true,
   ),
   AbundanceDestination(
-    key: 'coach_councils',
-    label: 'Councils',
-    icon: Icons.diversity_3_outlined,
-    kind: AbundanceDestinationKind.overflow,
-    coachOnly: true,
-  ),
-  AbundanceDestination(
     key: 'coach_core_tasks',
     label: 'Core Tasks',
     icon: Icons.checklist_outlined,

@@ -15,7 +15,6 @@ class AbundanceCoachHomeScreen extends StatelessWidget {
 
   static const _tools = <({String key, String label, IconData icon})>[
     (key: 'coach_students', label: 'Students', icon: Icons.groups_outlined),
-    (key: 'coach_councils', label: 'Councils', icon: Icons.groups_outlined),
     (
       key: 'coach_core_tasks',
       label: 'Core Tasks',
