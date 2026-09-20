@@ -125,4 +125,28 @@ void main() {
     expect(navigation.currentIndex, 6);
     expect(find.text('Coaching'), findsOneWidget);
   });
+
+  testWidgets('student file uses a calendar picker for optional due dates',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceCoachStudentFileScreen(
+        student: const {'id': 'student-1', 'name': 'Aria Stone'},
+        loader: (_) => SynchronousFuture<List<Map<String, dynamic>>>(const []),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    for (var index = 0; index < 4; index += 1) {
+      await tester.fling(find.byType(ListView).first, const Offset(0, -500), 1000);
+      await tester.pumpAndSettle();
+    }
+
+    expect(find.byType(TextField), findsNWidgets(3));
+    expect(find.text('ACTION ITEM'), findsOneWidget);
+    expect(find.text('DUE DATE (OPTIONAL)'), findsOneWidget);
+    expect(find.byIcon(Icons.calendar_month_outlined), findsWidgets);
+
+    await tester.tap(find.byType(TextField).last);
+    await tester.pumpAndSettle();
+    expect(find.byType(CalendarDatePicker), findsOneWidget);
+  });
 }
