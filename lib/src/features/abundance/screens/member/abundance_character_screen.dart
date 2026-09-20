@@ -39,6 +39,7 @@ class AbundanceCharacterScreen extends StatefulWidget {
     this.loadCharacter,
     this.saveCharacter,
     this.profileService,
+    this.councilService,
     this.goalsService,
     this.tutorialController,
   });
@@ -54,6 +55,7 @@ class AbundanceCharacterScreen extends StatefulWidget {
   final CharacterLoader? loadCharacter;
   final CharacterSaver? saveCharacter;
   final AbundanceProfileService? profileService;
+  final AbundanceCouncilService? councilService;
   final GoalsService? goalsService;
   final AbundanceTutorialController? tutorialController;
 
@@ -64,8 +66,7 @@ class AbundanceCharacterScreen extends StatefulWidget {
 
 class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
   String _selected = abundanceCharacterKeys.first;
-  String? _councilName;
-  String? _councilCoach;
+  String? _coachName;
   AbundanceProfileSnapshot? _snapshot;
   bool _profileLoading = false;
   bool _profilePhotoUploading = false;
@@ -75,6 +76,9 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
   AbundanceProfileService get _profileGateway =>
       widget.profileService ?? AbundanceProfileService();
 
+  AbundanceCouncilService get _councilGateway =>
+      widget.councilService ?? AbundanceCouncilService();
+
   String get _storageKey => 'abundance_character_${widget.uid}';
 
   @override
@@ -83,7 +87,7 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
     _profilePhotoOverride = ProfilePictureBus.latestUrl.value;
     ProfilePictureBus.latestUrl.addListener(_onProfilePictureBusUpdate);
     _load();
-    _loadCouncil();
+    _loadCoachAssignment();
     _loadProfile();
   }
 
@@ -99,7 +103,10 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
   }
 
   Future<void> _loadProfile() async {
-    if (AuthService.instance.currentSession == null) return;
+    if (AuthService.instance.currentSession == null &&
+        widget.profileService == null) {
+      return;
+    }
     setState(() {
       _profileLoading = true;
       _profileError = null;
@@ -140,8 +147,8 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
       }
       if (!mounted) return;
       setState(() {
-        // The profile endpoint does not always embed council membership. Do
-        // not let that partial response erase the council loaded from /guild
+        // The profile endpoint does not always embed the coach relationship.
+        // Do not let that partial response erase the coach loaded from /guild
         // while the screen is reloading after an appearance change.
         final council = snapshot.council ?? _snapshot?.council;
         _snapshot = AbundanceProfileSnapshot(
@@ -155,8 +162,7 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
           _selected = snapshot.profile.character!;
         }
         if (snapshot.council != null) {
-          _councilName = snapshot.council!.name;
-          _councilCoach = snapshot.council!.coachName;
+          _coachName = snapshot.council!.coachName;
         }
       });
     } catch (error) {
@@ -168,14 +174,16 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
     }
   }
 
-  Future<void> _loadCouncil() async {
-    if (AuthService.instance.currentSession == null) return;
+  Future<void> _loadCoachAssignment() async {
+    if (AuthService.instance.currentSession == null &&
+        widget.councilService == null) {
+      return;
+    }
     try {
-      final council = await AbundanceCouncilService().fetchCurrent();
+      final council = await _councilGateway.fetchCurrent();
       if (!mounted || council == null) return;
       setState(() {
-        _councilName = council.name;
-        _councilCoach = council.coachName;
+        _coachName = council.coachName;
         final profile = _snapshot;
         if (profile != null) {
           _snapshot = AbundanceProfileSnapshot(
@@ -398,13 +406,10 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
               ],
               const SizedBox(height: 18),
               AbundanceTutorialTarget(
-                name: 'profile-council',
+                name: 'profile-coach',
                 controller: widget.tutorialController,
-                child: _CouncilCard(
-                  council: _snapshot?.council,
-                  councilName: _councilName,
-                  coachName: _councilCoach,
-                  onChange: () => _showCouncilPicker(context),
+                child: _CoachCard(
+                  coachName: _coachName ?? _snapshot?.council?.coachName,
                 ),
               ),
               const SizedBox(height: 18),
@@ -568,177 +573,6 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
               )
             : content;
       },
-    );
-  }
-
-  Future<void> _showCouncilPicker(BuildContext context) async {
-    List<AbundanceCouncil> available = const [];
-    Object? loadError;
-    try {
-      available = await AbundanceCouncilService().fetchAvailable();
-    } catch (error) {
-      loadError = error;
-    }
-    if (!context.mounted) return;
-    String? selectedId;
-    for (final council in available) {
-      if (council.isCurrent || council.name == _councilName) {
-        selectedId = council.id;
-        break;
-      }
-    }
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AbundanceColors.surfaceRaised,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, setSheetState) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(22, 14, 22, 22),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Align(
-                  alignment: Alignment.center,
-                  child: Container(
-                    width: 64,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: AbundanceColors.muted,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Choose your council',
-                        style: AbundanceTypography.title),
-                    IconButton(
-                      tooltip: 'Close',
-                      onPressed: () => Navigator.pop(sheetContext),
-                      icon: const Icon(Icons.close,
-                          color: AbundanceColors.foreground),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Choose the council you want to climb with.',
-                  style: AbundanceTypography.body,
-                ),
-                const SizedBox(height: 18),
-                if (loadError != null)
-                  const Text('Councils could not be loaded. Try again later.',
-                      style: AbundanceTypography.body)
-                else if (available.isEmpty)
-                  Text(
-                      'No councils are available right now. Ask your coach for an invitation.',
-                      style: AbundanceTypography.body)
-                else
-                  ...available.map((council) {
-                    final selected = council.id == selectedId;
-                    return InkWell(
-                      onTap: () => setSheetState(() => selectedId = council.id),
-                      child: Container(
-                        width: double.infinity,
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AbundanceColors.surfaceSunken,
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: selected
-                                ? AbundanceColors.primaryGold
-                                : AbundanceColors.border,
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(council.name,
-                                    style: AbundanceTypography.title),
-                                Icon(
-                                  selected
-                                      ? Icons.radio_button_checked
-                                      : Icons.radio_button_off,
-                                  color: selected
-                                      ? AbundanceColors.primaryGold
-                                      : AbundanceColors.muted,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Coach ${council.coachName} · ${council.memberCount} members · ${council.averageScore}% Life Power',
-                              style: AbundanceTypography.body,
-                            ),
-                            if (council.description?.isNotEmpty == true)
-                              Text(council.description!,
-                                  style: AbundanceTypography.body),
-                            if (council.isCurrent)
-                              const Text('CURRENT COUNCIL',
-                                  style: AbundanceTypography.eyebrow),
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
-                const SizedBox(height: 18),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(sheetContext),
-                      child: const Text('Cancel'),
-                    ),
-                    const SizedBox(width: 10),
-                    FilledButton(
-                      onPressed: selectedId == null
-                          ? null
-                          : () async {
-                              try {
-                                await AbundanceCouncilService()
-                                    .join(selectedId!);
-                                final current = await AbundanceCouncilService()
-                                    .fetchCurrent();
-                                if (mounted && current != null) {
-                                  setState(() {
-                                    _councilName = current.name;
-                                    _councilCoach = current.coachName;
-                                  });
-                                }
-                                if (sheetContext.mounted) {
-                                  Navigator.pop(sheetContext);
-                                }
-                              } catch (_) {
-                                if (sheetContext.mounted) {
-                                  ScaffoldMessenger.of(sheetContext)
-                                      .showSnackBar(
-                                    const SnackBar(
-                                        content: Text(
-                                            'Unable to join this council.')),
-                                  );
-                                }
-                              }
-                            },
-                      child: const Text('Join council'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -1668,13 +1502,9 @@ class _RoleChip extends StatelessWidget {
       );
 }
 
-class _CouncilCard extends StatelessWidget {
-  const _CouncilCard(
-      {required this.onChange, this.council, this.councilName, this.coachName});
+class _CoachCard extends StatelessWidget {
+  const _CoachCard({this.coachName});
 
-  final VoidCallback onChange;
-  final AbundanceProfileCouncil? council;
-  final String? councilName;
   final String? coachName;
 
   @override
@@ -1692,25 +1522,12 @@ class _CouncilCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Your council', style: AbundanceTypography.title),
-              OutlinedButton(
-                onPressed: onChange,
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(0, 48),
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  foregroundColor: AbundanceColors.primaryGold,
-                  side: const BorderSide(color: AbundanceColors.border),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-                child: Text(councilName == null ? 'Join' : 'Change'),
-              ),
+              const Text('Your coach', style: AbundanceTypography.title),
             ],
           ),
           const SizedBox(height: 6),
           const Text(
-            'The council you climb with, and the coach who leads it.',
+            'The coach assigned to guide your Abundance journey.',
             style: AbundanceTypography.body,
           ),
           const SizedBox(height: 14),
@@ -1721,29 +1538,12 @@ class _CouncilCard extends StatelessWidget {
               color: AbundanceColors.surfaceSunken,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: councilName == null
+            child: coachName == null || coachName!.trim().isEmpty
                 ? const Text(
-                    'No council assigned. Choose a council to climb with.',
+                    'No coach assigned yet. Your admin will assign one to you.',
                     style: AbundanceTypography.body,
                   )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(councilName!, style: AbundanceTypography.title),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Coached by ${coachName?.isNotEmpty == true ? coachName : 'your coach'} · ${council?.memberCount ?? 0} members',
-                        style: AbundanceTypography.body,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${council?.averageScore ?? 0}% average Life Power',
-                        style: AbundanceTypography.body.copyWith(
-                          color: AbundanceColors.accentCyan,
-                        ),
-                      ),
-                    ],
-                  ),
+                : Text(coachName!, style: AbundanceTypography.title),
           ),
         ],
       ),

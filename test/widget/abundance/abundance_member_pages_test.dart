@@ -12,6 +12,8 @@ import 'package:selfcare_projects/src/features/abundance/domain/domain.dart'
     as a12;
 import 'package:selfcare_projects/src/features/abundance/services/abundance_achievements_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_missions_service.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_council_service.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_profile_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/todo_list.dart';
 
@@ -372,6 +374,28 @@ void main() {
     expect(find.text('COACH'), findsNothing);
   });
 
+  testWidgets('profile shows the assigned coach without council controls',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceCharacterScreen(
+        uid: 'member-1',
+        profileService: _ProfileServiceWithCoach(),
+        councilService: _CouncilServiceWithCoach(),
+        onOpenAccountSettings: _noop,
+      ),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.drag(find.byType(ListView), const Offset(0, -700));
+    await tester.pump();
+
+    expect(find.text('Your coach'), findsOneWidget);
+    expect(find.text('Coach One'), findsOneWidget);
+    expect(find.text('YOUR COUNCIL'), findsNothing);
+    expect(find.text('Join'), findsNothing);
+    expect(find.text('Change'), findsNothing);
+  });
+
   testWidgets('failed character persistence rolls selection back',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
@@ -479,4 +503,52 @@ void main() {
 
     expect(scrollController.offset, greaterThan(0));
   });
+}
+
+class _ProfileServiceWithCoach extends AbundanceProfileService {
+  _ProfileServiceWithCoach() : super();
+
+  @override
+  Future<AbundanceProfileSnapshot> fetchSnapshot() async {
+    return AbundanceProfileSnapshot(
+      profile: AbundanceProfile(
+        id: 'member-1',
+        email: 'member@example.com',
+        firstName: 'Member',
+        lastName: 'One',
+        headline: null,
+        bio: null,
+        timezone: 'Asia/Manila',
+        avatarUrl: null,
+        character: 'warrior',
+        joinedAt: null,
+        progression: null,
+        stats: const {},
+      ),
+      achievements: const [],
+      council: const AbundanceProfileCouncil(
+        id: 'council-1',
+        name: 'Dawn Council',
+        description: null,
+        coachName: 'Coach One',
+        memberCount: 2,
+        averageScore: 34,
+      ),
+    );
+  }
+}
+
+class _CouncilServiceWithCoach extends AbundanceCouncilService {
+  _CouncilServiceWithCoach() : super();
+
+  @override
+  Future<AbundanceCouncil?> fetchCurrent() async => const AbundanceCouncil(
+        id: 'council-1',
+        name: 'Dawn Council',
+        description: null,
+        coachName: 'Coach One',
+        memberCount: 2,
+        averageScore: 34,
+        isCurrent: true,
+      );
 }

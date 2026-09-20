@@ -32,7 +32,7 @@ void main() {
         'achievements-wall',
         'profile-character',
         'profile-stats',
-        'profile-council',
+        'profile-coach',
         'profile-settings',
       ],
     );
@@ -49,7 +49,7 @@ void main() {
     expect(
         steps.map((step) => step.title),
         containsAllInOrder(<String>[
-          'Review your council',
+          'Review your students',
           'Follow student progress',
           'See what you earned',
           'See your player card',
