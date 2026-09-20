@@ -18,6 +18,7 @@ Add a user-owned `mobile_mission_defaults` table. Each row represents one active
 - `name`, `description`
 - `category`, `scheduled_time`, `icon`
 - `sort_order`
+- `is_active` (inactive rows preserve intentional removals and prevent legacy backfill from restoring a mission)
 - timestamps
 
 The active rows are the forward-looking mission set. Daily `mobile_missions` rows remain immutable snapshots of that set for a date, except for that day's completion and notes/review state.
@@ -66,4 +67,3 @@ Regression tests will cover:
 4. Completing today does not complete tomorrow.
 5. Flutter requests the selected date and sends completion to that date.
 6. The mission screen loads the selected calendar day before opening its checklist.
-

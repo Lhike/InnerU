@@ -31,7 +31,7 @@
 ### Task 1: Add the server-owned active mission set and requested-date materialization
 
 **Files:**
-- Create: `../abundance-inneru-tracker-mobile/backend/database/migrations/2026_09_21_000001_create_mobile_mission_defaults_table.php`
+- Create: `../abundance-inneru-tracker-mobile/backend/database/migrations/2026_09_21_000001_create_mobile_mission_defaults_table.php` (includes an `is_active` tombstone for removals)
 - Create: `../abundance-inneru-tracker-mobile/backend/app/Models/MobileMissionDefault.php`
 - Modify: `../abundance-inneru-tracker-mobile/backend/app/Models/User.php`
 - Modify: `../abundance-inneru-tracker-mobile/backend/app/Models/MobileMission.php`
@@ -228,4 +228,3 @@ xcrun simctl launch EAFD3141-5991-4FAA-AA5E-37FF25E5BF88 com.valenin.inneru
 Expected: the build exits 0, the app installs, and the simulator launches the updated bundle.
 
 - [ ] **Step 4: Review the complete diff and commit/push only the intended files.** Confirm both repositories are clean after their commits, then push the Flutter branch and the A12 backend branch through the configured release path. Do not delete any user data or rewrite historical mission rows.
-
