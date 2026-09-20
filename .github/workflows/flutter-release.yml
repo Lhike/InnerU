@@ -63,12 +63,32 @@ jobs:
       - name: Build release app bundle
         run: |
           set -euo pipefail
-          flutter build appbundle --release
+          for attempt in 1 2 3 4 5; do
+            if flutter build appbundle --release; then
+              exit 0
+            fi
+            if [ "${attempt}" -lt 5 ]; then
+              delay=$((attempt * 30))
+              echo "Gradle dependency download failed; retrying in ${delay}s (attempt ${attempt}/5)."
+              sleep "${delay}"
+            fi
+          done
+          exit 1
 
       - name: Build release APK
         run: |
           set -euo pipefail
-          flutter build apk --release
+          for attempt in 1 2 3 4 5; do
+            if flutter build apk --release; then
+              exit 0
+            fi
+            if [ "${attempt}" -lt 5 ]; then
+              delay=$((attempt * 30))
+              echo "Gradle dependency download failed; retrying in ${delay}s (attempt ${attempt}/5)."
+              sleep "${delay}"
+            fi
+          done
+          exit 1
 
       - name: Upload app bundle artifact
         uses: actions/upload-artifact@v4
