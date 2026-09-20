@@ -55,6 +55,41 @@ class _FakeMissionsGateway implements AbundanceMissionsGateway {
   }
 }
 
+class _DateAwareMissionsGateway implements AbundanceMissionsGateway {
+  final loadedDates = <DateTime>[];
+
+  Task _mission(DateTime day, String title) => Task(
+        id: title,
+        title: title,
+        goalType: GoalType.everyday,
+        startDate: DateUtils.dateOnly(day),
+        dueDate: DateUtils.dateOnly(day),
+      );
+
+  @override
+  Future<List<Task>> load({DateTime? date}) async {
+    final day = DateUtils.dateOnly(date ?? DateTime(2026, 9, 21));
+    loadedDates.add(day);
+    return [
+      _mission(
+        day,
+        DateUtils.isSameDay(day, DateTime(2026, 9, 22))
+            ? 'Tomorrow meditation'
+            : 'Today meditation',
+      ),
+    ];
+  }
+
+  @override
+  Future<void> create(Task task) async {}
+
+  @override
+  Future<void> update(Task task, {DateTime? day}) async {}
+
+  @override
+  Future<void> delete(String id) async {}
+}
+
 class _FakeGoalsService extends GoalsService {
   _FakeGoalsService(this.goals) : super(null);
 
@@ -86,6 +121,26 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('We could not update that mission.'), findsOneWidget);
     semantics.dispose();
+  });
+
+  testWidgets(
+      'selecting tomorrow loads tomorrow missions before opening the checklist',
+      (tester) async {
+    final gateway = _DateAwareMissionsGateway();
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceMissionsScreen(
+        gateway: gateway,
+        initialDate: DateTime(2026, 9, 21),
+        today: DateTime(2026, 9, 22),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('22').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tomorrow meditation'), findsOneWidget);
+    expect(gateway.loadedDates.last, DateTime(2026, 9, 22));
   });
 
   testWidgets('mission calendar fits the iPhone viewport without overflow',

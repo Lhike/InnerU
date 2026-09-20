@@ -51,7 +51,7 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _load(date: _selected);
     _clockNow = DateTime.now();
     _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _clockNow = DateTime.now());
@@ -73,13 +73,13 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
     return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${remainder.toString().padLeft(2, '0')}';
   }
 
-  Future<void> _load() async {
+  Future<void> _load({DateTime? date}) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final tasks = await _gateway.load();
+      final tasks = await _gateway.load(date: date ?? _selected);
       if (mounted) setState(() => _tasks = tasks);
     } catch (_) {
       if (mounted) setState(() => _error = 'We could not load your missions.');
@@ -148,7 +148,7 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
       }
     });
     try {
-      await _gateway.update(task);
+      await _gateway.update(task, day: _selected);
     } catch (_) {
       if (!mounted) return;
       final index = _tasks.indexOf(task);
@@ -824,7 +824,7 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
         await _gateway.create(task);
         if (mounted) setState(() => _tasks = [..._tasks, task]);
       } else {
-        await _gateway.update(task);
+        await _gateway.update(task, day: _selected);
         if (!mounted) return;
         final index = _tasks.indexOf(existing);
         if (index >= 0) setState(() => _tasks[index] = task);
@@ -884,9 +884,12 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
                 child: CircularProgressIndicator(
                     color: AbundanceColors.primaryGold))
             : _error != null
-                ? AbundanceStatusView.error(message: _error!, onRetry: _load)
+                ? AbundanceStatusView.error(
+                    message: _error!,
+                    onRetry: () => _load(date: _selected),
+                  )
                 : RefreshIndicator(
-                    onRefresh: _load,
+                    onRefresh: () => _load(date: _selected),
                     color: AbundanceColors.primaryGold,
                     child: ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
@@ -1005,9 +1008,13 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
                 final percent = total == 0 ? 0.0 : completed / total;
                 return InkWell(
                   onTap: inMonth
-                      ? () {
-                          setState(() => _selected = day);
-                          _openDayModal();
+                      ? () async {
+                          final selectedDay = DateUtils.dateOnly(day);
+                          setState(() => _selected = selectedDay);
+                          await _load(date: selectedDay);
+                          if (mounted && _error == null) {
+                            await _openDayModal();
+                          }
                         }
                       : null,
                   child: Container(
