@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:selfcare_projects/src/features/abundance/coach/coach_catalog.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/coach/abundance_coach_management_screens.dart';
-import 'package:selfcare_projects/src/features/abundance/screens/coach/coach_quests_roster_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/coach/abundance_coach_quest_report_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
@@ -102,8 +102,11 @@ class _AbundanceCoachDirectoryScreenState
                           child: _ReportButton(
                             label: 'All students report',
                             onTap: () => _open(
-                              AbundanceCoachCoreTasksScreen(
-                                service: widget.service,
+                              AbundanceCoachQuestReportScreen(
+                                isCoach: true,
+                                scope: AbundanceCoachReportScope.allStudents,
+                                rosterLoader:
+                                    widget.service.fetchA12CoachRoster,
                               ),
                             ),
                           ),
@@ -113,9 +116,12 @@ class _AbundanceCoachDirectoryScreenState
                           child: _ReportButton(
                             label: 'View quests report',
                             onTap: () => _open(
-                              CoachQuestsRosterScreen(
-                                service: widget.service,
-                                coachUid: widget.coachUid,
+                              AbundanceCoachQuestReportScreen(
+                                isCoach: true,
+                                scope:
+                                    AbundanceCoachReportScope.assignedStudents,
+                                rosterLoader:
+                                    widget.service.fetchA12CoachRoster,
                               ),
                             ),
                           ),
