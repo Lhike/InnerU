@@ -24,6 +24,8 @@ use Symfony\Component\HttpFoundation\Response;
 class AuthController extends Controller
 {
     private const INVALID_COMPANY_CODE_MESSAGE = 'Company code is invalid. Please enter a valid company code.';
+    public const ABUNDANCE_COMPANY_CODE = 'ABU15DN';
+    public const ABUNDANCE_COACH_SIGNUP_MESSAGE = 'Coach accounts for Abundance are created by an administrator. Create a User account, then request the administrator to make you a Coach.';
 
     public function __construct(
         private readonly UserScoreService $userScoreService,
@@ -45,6 +47,7 @@ class AuthController extends Controller
 
         $role = strtolower($validated['role']);
         $company = $this->resolveActiveCompany($validated);
+        $this->rejectAbundanceCoachSignup($role, $company);
         $companyCode = $company?->code;
         $companyName = $company?->name;
 
@@ -233,6 +236,12 @@ class AuthController extends Controller
         $pending = PendingRegistration::where('email', $email)->first();
         $createAccount = (bool) ($validated['create_account'] ?? false);
         $signupCompany = $createAccount ? $this->resolveActiveCompany($validated) : null;
+        if ($createAccount) {
+            $this->rejectAbundanceCoachSignup(
+                (string) ($validated['role'] ?? 'user'),
+                $signupCompany,
+            );
+        }
 
         if ($user === null) {
             if ($pending !== null) {
@@ -387,6 +396,12 @@ class AuthController extends Controller
         $name = $this->appleDisplayName($validated);
         $createAccount = (bool) ($validated['create_account'] ?? false);
         $signupCompany = $createAccount ? $this->resolveActiveCompany($validated) : null;
+        if ($createAccount) {
+            $this->rejectAbundanceCoachSignup(
+                (string) ($validated['role'] ?? 'user'),
+                $signupCompany,
+            );
+        }
         $supportsAppleUserIdOnUsers = Schema::hasColumn('users', 'apple_user_id');
         $supportsAppleUserIdOnPendingRegistrations = Schema::hasColumn(
             'pending_registrations',
@@ -942,6 +957,19 @@ class AuthController extends Controller
             ->where('is_active', true)
             ->whereRaw('LOWER(TRIM(code)) = ?', [$normalizedCode])
             ->first();
+    }
+
+    private function rejectAbundanceCoachSignup(string $role, ?Company $company): void
+    {
+        if (strtolower(trim($role)) !== 'coach' ||
+            $company === null ||
+            strcasecmp(trim((string) $company->code), self::ABUNDANCE_COMPANY_CODE) !== 0) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'role' => self::ABUNDANCE_COACH_SIGNUP_MESSAGE,
+        ]);
     }
 
     /**

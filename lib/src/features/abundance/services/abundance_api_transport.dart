@@ -293,10 +293,20 @@ class A12ApiTransport implements AbundanceApiTransport {
 }
 
 class A12Session {
-  const A12Session({required this.accessToken, this.refreshToken});
+  const A12Session({
+    required this.accessToken,
+    this.refreshToken,
+    this.roles,
+  });
 
   final String accessToken;
   final String? refreshToken;
+  final List<String>? roles;
+
+  bool get isCoach => roles?.any(
+            (role) => role.trim().toUpperCase() == 'COACH',
+          ) ==
+      true;
 }
 
 class A12SessionService {
@@ -311,7 +321,10 @@ class A12SessionService {
   Future<A12Session> ensureSession() async {
     final access = await _storage.read(key: '$_keyPrefix.access');
     if (access != null && access.isNotEmpty) {
-      return A12Session(accessToken: access);
+      return A12Session(
+        accessToken: access,
+        roles: _decodeRoles(await _storage.read(key: '$_keyPrefix.roles')),
+      );
     }
     final innerToken = AuthService.instance.currentSession?.token;
     if (innerToken == null || innerToken.isEmpty) {
@@ -336,11 +349,18 @@ class A12SessionService {
     final session = A12Session(
       accessToken: response['accessToken']?.toString() ?? '',
       refreshToken: response['refreshToken']?.toString(),
+      roles: _readRoles(response['roles']),
     );
     if (session.accessToken.isEmpty) {
       throw ApiException(502, 'The A12 session response was invalid.');
     }
     await _storage.write(key: '$_keyPrefix.access', value: session.accessToken);
+    if (session.roles != null) {
+      await _storage.write(
+        key: '$_keyPrefix.roles',
+        value: jsonEncode(session.roles),
+      );
+    }
     if (session.refreshToken != null && session.refreshToken!.isNotEmpty) {
       await _storage.write(
           key: '$_keyPrefix.refresh', value: session.refreshToken);
@@ -348,8 +368,74 @@ class A12SessionService {
     return session;
   }
 
+  /// Reads the current A12 role assignment. Roles are owned by A12 and may
+  /// change in the Admin console while an InnerU session remains valid, so a
+  /// cached access token alone is not sufficient to decide Coach navigation.
+  /// A failed refresh falls back to the last role set returned by A12.
+  Future<bool?> resolveIsCoach() async {
+    A12Session session;
+    try {
+      session = await ensureSession();
+    } catch (_) {
+      return null;
+    }
+
+    try {
+      final response = await http
+          .get(
+            Uri.parse('${ApiConfig.a12BaseUrl}/me'),
+            headers: <String, String>{
+              'Accept': 'application/json',
+              'Authorization': 'Bearer ${session.accessToken}',
+            },
+          )
+          .timeout(const Duration(seconds: 8));
+      if (response.statusCode == 401) {
+        await clear();
+        final refreshed = await ensureSession();
+        return refreshed.roles == null ? null : refreshed.isCoach;
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return session.roles == null ? null : session.isCoach;
+      }
+      final decoded = response.body.trim().isEmpty
+          ? const <String, dynamic>{}
+          : jsonDecode(response.body);
+      final roles = decoded is Map<String, dynamic>
+          ? _readRoles((decoded['user'] as Map?)?['roles'])
+          : null;
+      if (roles == null) {
+        return session.roles == null ? null : session.isCoach;
+      }
+      await _storage.write(key: '$_keyPrefix.roles', value: jsonEncode(roles));
+      return roles.any((role) => role.trim().toUpperCase() == 'COACH');
+    } catch (_) {
+      return session.roles == null ? null : session.isCoach;
+    }
+  }
+
+  static List<String>? _decodeRoles(String? encoded) {
+    if (encoded == null || encoded.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(encoded);
+      return _readRoles(decoded);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static List<String>? _readRoles(dynamic value) {
+    if (value is! List) return null;
+    return value
+        .map((role) => role.toString().trim().toUpperCase())
+        .where((role) => role.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+  }
+
   Future<void> clear() async {
     await _storage.delete(key: '$_keyPrefix.access');
     await _storage.delete(key: '$_keyPrefix.refresh');
+    await _storage.delete(key: '$_keyPrefix.roles');
   }
 }

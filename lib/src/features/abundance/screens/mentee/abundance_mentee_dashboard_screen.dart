@@ -26,6 +26,8 @@ import 'package:selfcare_projects/src/features/abundance/screens/member/abundanc
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_guild_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_achievements_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_notifications_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_coaching_note_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_notifications_service.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_tutorial_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/dashboard/emotion_tracker.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/todo_list.dart'
@@ -35,7 +37,6 @@ import 'package:selfcare_projects/src/features/abundance/services/abundance_achi
 import 'package:selfcare_projects/src/features/authentication/screen/UsersData/user_service.dart';
 import 'package:selfcare_projects/src/services/coach_api_service.dart';
 import 'package:selfcare_projects/src/services/daily_tracker_api_service.dart';
-import 'package:selfcare_projects/src/services/todo_task_api_service.dart';
 import 'package:selfcare_projects/src/services/emotion_service.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
 import 'package:selfcare_projects/src/services/company_membership_service.dart';
@@ -70,6 +71,7 @@ class AbundanceMenteeDashboardScreen extends StatefulWidget {
     this.onOpenAwards,
     this.tutorialController,
     this.onReplayTutorial,
+    this.notificationsGateway,
   });
 
   final CompanyThemeData? initialCompanyTheme;
@@ -79,6 +81,7 @@ class AbundanceMenteeDashboardScreen extends StatefulWidget {
   final VoidCallback? onOpenAwards;
   final AbundanceTutorialController? tutorialController;
   final VoidCallback? onReplayTutorial;
+  final AbundanceNotificationsGateway? notificationsGateway;
 
   @override
   State<AbundanceMenteeDashboardScreen> createState() =>
@@ -90,6 +93,8 @@ class _AbundanceMenteeDashboardScreenState
   late final GoalsService _service;
   late final AbundanceMissionsGateway _missionsGateway =
       widget.missionsGateway ?? InnerUAbundanceMissionsGateway();
+  late final AbundanceNotificationsGateway _notificationsGateway =
+      widget.notificationsGateway ?? A12AbundanceNotificationsGateway();
   late Future<_DashboardData> _dashboardFuture;
   final Set<String> _missionUpdates = <String>{};
 
@@ -143,8 +148,11 @@ class _AbundanceMenteeDashboardScreenState
     final emotionDocs = await EmotionService().fetchHistory();
     List<todo.Task> tasks = const <todo.Task>[];
     try {
-      tasks = (await TodoTaskApiService.instance.fetchTasks())
-          .map(todo.Task.fromJson)
+      // Missions are owned by A12 for the Abundance experience. Use the
+      // injected gateway here as well as on the Mission tab so a mission
+      // created there appears on Home immediately after the shell refreshes.
+      tasks = await _missionsGateway.load();
+      tasks = tasks
           .where((task) => task.goalType == todo.GoalType.everyday)
           .toList(growable: false);
     } catch (_) {
@@ -446,9 +454,25 @@ class _AbundanceMenteeDashboardScreenState
   Future<void> _openNotifications() async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => const AbundanceNotificationsScreen(),
+        builder: (_) => AbundanceNotificationsScreen(
+          gateway: _notificationsGateway,
+          onNotificationTap: _openNotification,
+        ),
       ),
     );
+  }
+
+  void _openNotification(AbundanceNotification notification) {
+    final isCoachingUpdate =
+        notification.title.toLowerCase().contains('coaching') ||
+            notification.data?['coachingNoteId'] != null ||
+            notification.data?['actionItemId'] != null;
+    if (!isCoachingUpdate) return;
+    unawaited(Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AbundanceCoachingNoteScreen(notification: notification),
+      ),
+    ));
   }
 
   Future<void> _openTutorial() async {
@@ -766,26 +790,9 @@ class _AbundanceMenteeDashboardScreenState
                 ],
               ),
               actions: [
-                Semantics(
-                  button: true,
-                  label: 'Notifications',
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(24),
-                    onTap: () => unawaited(_openNotifications()),
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AbundanceColors.border),
-                      ),
-                      child: const Icon(
-                        Icons.notifications_none,
-                        color: AbundanceColors.muted,
-                        size: 22,
-                      ),
-                    ),
-                  ),
+                AbundanceNotificationBell(
+                  gateway: _notificationsGateway,
+                  onTap: _openNotifications,
                 ),
                 const SizedBox(width: 10),
                 AbundanceHeaderProfileButton(

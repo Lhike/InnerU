@@ -203,6 +203,28 @@ void main() {
       expect(formState.validate(), isTrue);
     });
 
+    testWidgets('Abundance coach signup is blocked with an admin message',
+        (tester) async {
+      await pumpSignup(
+        tester,
+        role: 'coach',
+        initialCompanyCode: 'ABU15DN',
+      );
+      await acceptTerms(tester);
+
+      await tester.enterText(field('Username'), 'abundancecoach');
+      await tester.enterText(field('Email'), 'abundance-coach@example.com');
+      await tester.enterText(field('Phone Number'), '09171234567');
+      await tester.enterText(field('Password'), 'Str0ngPass1');
+      await tester.enterText(field('Re-type Password'), 'Str0ngPass1');
+
+      await tapRegister(tester);
+
+      expect(find.text('Coach accounts are managed by Abundance admins'),
+          findsOneWidget);
+      expect(find.text('Create a User account instead'), findsOneWidget);
+    });
+
     testWidgets('rejects mismatched passwords', (tester) async {
       await pumpSignup(tester, continueWithoutCompany: true);
       await acceptTerms(tester);

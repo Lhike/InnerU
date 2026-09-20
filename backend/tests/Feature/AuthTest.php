@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\Api\AuthController;
 use App\Models\Company;
 use App\Models\PendingRegistration;
 use App\Models\User;
@@ -246,6 +247,58 @@ class AuthTest extends TestCase
 
         $this->assertDatabaseMissing('pending_registrations', [
             'email' => 'unknown.company.member.inneru@gmail.com',
+        ]);
+    }
+
+    public function test_abundance_does_not_allow_coach_self_signup(): void
+    {
+        Notification::fake();
+        Company::create([
+            'id' => (string) \Illuminate\Support\Str::uuid(),
+            'name' => 'Abundance',
+            'code' => 'ABU15DN',
+        ]);
+
+        $response = $this->postJson('/api/auth/register', [
+            'name' => 'Abundance Coach Applicant',
+            'email' => 'abundance.coach.applicant@gmail.com',
+            'password' => 'Password123',
+            'role' => 'coach',
+            'company_code' => ' abu15dn ',
+        ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonPath(
+                'errors.role.0',
+                AuthController::ABUNDANCE_COACH_SIGNUP_MESSAGE,
+            );
+        $this->assertDatabaseMissing('pending_registrations', [
+            'email' => 'abundance.coach.applicant@gmail.com',
+        ]);
+    }
+
+    public function test_abundance_user_signup_remains_available(): void
+    {
+        Notification::fake();
+        Company::create([
+            'id' => (string) \Illuminate\Support\Str::uuid(),
+            'name' => 'Abundance',
+            'code' => 'ABU15DN',
+        ]);
+
+        $this->postJson('/api/auth/register', [
+            'name' => 'Abundance User',
+            'email' => 'abundance.user@gmail.com',
+            'password' => 'Password123',
+            'role' => 'user',
+            'company_code' => 'ABU15DN',
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('pending_registrations', [
+            'email' => 'abundance.user@gmail.com',
+            'role' => 'user',
+            'company_code' => 'ABU15DN',
+            'is_coach' => false,
         ]);
     }
 

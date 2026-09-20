@@ -654,10 +654,8 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
                 autofocus: true,
                 maxLength: 120,
                 style: AbundanceTypography.body,
-                decoration: const InputDecoration(
-                  labelText: 'Mission name',
-                  labelStyle: TextStyle(color: AbundanceColors.muted),
-                ),
+                cursorColor: AbundanceColors.accentCyan,
+                decoration: _darkLabeledInputDecoration('Mission name'),
               ),
               TextField(
                 controller: descriptionController,
@@ -665,10 +663,9 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
                 minLines: 2,
                 maxLines: 4,
                 style: AbundanceTypography.body,
-                decoration: const InputDecoration(
-                  labelText: 'Description (optional)',
-                  labelStyle: TextStyle(color: AbundanceColors.muted),
-                ),
+                cursorColor: AbundanceColors.accentCyan,
+                decoration:
+                    _darkLabeledInputDecoration('Description (optional)'),
               ),
               DropdownButtonFormField<TaskTag>(
                 initialValue: tag,
@@ -998,7 +995,7 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
               physics: const NeverScrollableScrollPhysics(),
               itemCount: days.length,
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 7, mainAxisExtent: 70),
+                  crossAxisCount: 7, mainAxisExtent: 72),
               itemBuilder: (context, index) {
                 final day = days[index];
                 final inMonth = day.month == _month.month;
@@ -1015,7 +1012,7 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
                       : null,
                   child: Container(
                     margin: EdgeInsets.zero,
-                    padding: const EdgeInsets.fromLTRB(10, 10, 8, 6),
+                    padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
                     decoration: BoxDecoration(
                       color: selected
                           ? AbundanceColors.primaryGold.withValues(alpha: .14)
@@ -1030,6 +1027,8 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('${day.day}',
+                            maxLines: 1,
+                            softWrap: false,
                             style: TextStyle(
                                 color: inMonth
                                     ? (selected
@@ -1038,12 +1037,12 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
                                     : AbundanceColors.border,
                                 fontWeight: FontWeight.w800,
                                 fontSize: 16)),
-                        const SizedBox(height: 7),
+                        const SizedBox(height: 4),
                         if (inMonth)
                           SizedBox(
                             width: double.infinity,
                             child: LinearProgressIndicator(
-                              minHeight: 6,
+                              minHeight: 5,
                               value: percent,
                               backgroundColor: AbundanceColors.surfaceSunken,
                               valueColor: AlwaysStoppedAnimation<Color>(
@@ -1057,8 +1056,10 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
                           ),
                         if (inMonth && total > 0)
                           Text('$completed/$total',
+                              maxLines: 1,
+                              softWrap: false,
                               style: const TextStyle(
-                                  color: AbundanceColors.muted, fontSize: 11)),
+                                  color: AbundanceColors.muted, fontSize: 10)),
                       ],
                     ),
                   ),
@@ -1152,6 +1153,24 @@ InputDecoration _darkInputDecoration(String hint) => InputDecoration(
       ),
       focusedBorder: const OutlineInputBorder(
         borderSide: BorderSide(color: AbundanceColors.primaryGold),
+      ),
+    );
+
+InputDecoration _darkLabeledInputDecoration(String label) => InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: AbundanceColors.muted),
+      floatingLabelStyle: const TextStyle(color: AbundanceColors.accentCyan),
+      counterStyle: const TextStyle(color: AbundanceColors.muted),
+      filled: true,
+      fillColor: AbundanceColors.surfaceSunken,
+      border: const OutlineInputBorder(
+        borderSide: BorderSide(color: AbundanceColors.border),
+      ),
+      enabledBorder: const OutlineInputBorder(
+        borderSide: BorderSide(color: AbundanceColors.border),
+      ),
+      focusedBorder: const OutlineInputBorder(
+        borderSide: BorderSide(color: AbundanceColors.accentCyan),
       ),
     );
 

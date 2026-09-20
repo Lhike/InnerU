@@ -79,6 +79,24 @@ void main() {
       expect(find.text('Register'), findsOneWidget);
     });
 
+    testWidgets('Abundance coach signup offers user account instead',
+        (tester) async {
+      await pumpRoleSelection(tester);
+
+      await tester.tap(find.text('Coach'));
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Company code'),
+        'ABU15DN',
+      );
+      await tester.tap(find.text('Continue with email'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Coach accounts are managed by Abundance admins'),
+          findsOneWidget);
+      expect(find.text('Create a User account instead'), findsOneWidget);
+      expect(find.byType(SignupScreen), findsNothing);
+    });
+
     testWidgets('an unknown company code shows an error and blocks signup',
         (tester) async {
       String? checkedCode;

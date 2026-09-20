@@ -95,7 +95,8 @@ class AbundanceAdminApiService {
 
   String? get _token => AuthService.instance.currentSession?.token;
   bool get _usesA12 =>
-      _sessionProvider()?.companyCode?.trim().toUpperCase() == 'ABU15DN';
+      _sessionProvider()?.companyCode?.trim().toUpperCase() == 'ABU15DN' ||
+      _sessionProvider()?.role.trim().toLowerCase() == 'admin';
 
   bool get isA12AbundanceManagement => _usesA12;
 

@@ -86,6 +86,24 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('mission calendar fits the iPhone viewport without overflow',
+      (tester) async {
+    tester.view.physicalSize = const Size(1170, 2532);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceMissionsScreen(
+        gateway: _FakeMissionsGateway(),
+        initialDate: DateTime(2026, 9, 20),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('missions exclude long-term goals and disable future completion',
       (tester) async {
     final gateway = _FakeMissionsGateway(seed: <Task>[

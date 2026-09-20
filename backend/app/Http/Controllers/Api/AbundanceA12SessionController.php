@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -16,7 +17,9 @@ class AbundanceA12SessionController extends Controller
     {
         $user = $request->user();
         $code = strtoupper(trim((string) ($user->active_company_code ?? $user->company_code ?? '')));
-        if ($code !== 'ABU15DN') {
+        $isAdmin = (bool) ($user->is_admin ?? false)
+            || strtolower(trim((string) ($user->role ?? ''))) === 'admin';
+        if ($code !== 'ABU15DN' && ! $isAdmin) {
             return response()->json(['message' => 'Abundance access is not enabled for this account.'], Response::HTTP_FORBIDDEN);
         }
         $url = rtrim((string) config('services.abundance_a12.url'), '/');
@@ -47,6 +50,10 @@ class AbundanceA12SessionController extends Controller
             ->withHeaders(['X-InnerU-Timestamp' => $timestamp, 'X-InnerU-Nonce' => $nonce, 'X-InnerU-Signature' => $signature])
             ->post($url.'/auth/inneru-exchange', $payload);
         if (! $response->successful()) {
+            Log::warning('A12 session exchange rejected', [
+                'inneru_user_id' => (string) $user->id,
+                'upstream_status' => $response->status(),
+            ]);
             return response()->json(['message' => 'Abundance data service is unavailable.'], Response::HTTP_BAD_GATEWAY);
         }
         $data = $response->json();

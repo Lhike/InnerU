@@ -44,8 +44,10 @@ class _Transport implements AbundanceApiTransport {
       <String, dynamic>{};
 
   @override
-  Future<Map<String, dynamic>> deleteJson(String path, {String? token}) async =>
-      <String, dynamic>{};
+  Future<Map<String, dynamic>> deleteJson(String path, {String? token}) async {
+    requests.add('DELETE $path');
+    return <String, dynamic>{};
+  }
 }
 
 void main() {
@@ -64,5 +66,14 @@ void main() {
     expect(transport.requests, contains(startsWith('GET /missions?date=')));
     expect(transport.requests,
         contains('POST /missions/mission-7/completion true'));
+  });
+
+  test('A12 mission gateway deletes a source mission', () async {
+    final transport = _Transport();
+    final gateway = A12AbundanceMissionsGateway(transport: transport);
+
+    await gateway.delete('mission-7');
+
+    expect(transport.requests, contains('DELETE /missions/mission-7'));
   });
 }
