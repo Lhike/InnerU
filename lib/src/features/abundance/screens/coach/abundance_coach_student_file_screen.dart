@@ -36,6 +36,7 @@ class _AbundanceCoachStudentFileScreenState
   String? _selectedMissionDate;
   bool _savingNote = false;
   bool _savingAction = false;
+  bool _historyExpanded = true;
   final _note = TextEditingController(),
       _action = TextEditingController(),
       _due = TextEditingController();
@@ -59,6 +60,7 @@ class _AbundanceCoachStudentFileScreenState
     final fullName = '$first $last'.trim();
     return fullName.isEmpty ? 'Student' : fullName;
   }
+
   String get _level => (widget.student['levelName'] ??
           widget.student['groupName'] ??
           widget.student['council'] ??
@@ -421,9 +423,8 @@ class _AbundanceCoachStudentFileScreenState
     final current = DateTime.tryParse(_due.text.trim());
     final picked = await showDatePicker(
       context: context,
-      initialDate: current != null && !current.isBefore(today)
-          ? current
-          : today,
+      initialDate:
+          current != null && !current.isBefore(today) ? current : today,
       firstDate: today,
       lastDate: DateTime(2100),
       helpText: 'SELECT DUE DATE',
@@ -528,8 +529,6 @@ class _AbundanceCoachStudentFileScreenState
                       FilledButton(
                           onPressed: _savingNote ? null : _saveNote,
                           child: Text(_savingNote ? 'Saving…' : 'Save note')),
-                      ...notes.map((n) => _card((n['body'] ?? '').toString(),
-                          (n['createdAt'] ?? '').toString())),
                       _heading('Action items'),
                       _formLabel('ACTION ITEM'),
                       _field(_action, 'Next step', 1),
@@ -555,8 +554,23 @@ class _AbundanceCoachStudentFileScreenState
                           onPressed: _savingAction ? null : _saveAction,
                           child: Text(
                               _savingAction ? 'Saving…' : 'Add action item')),
-                      ...actions.map((a) => _card(
-                          (a['title'] ?? '').toString(), _actionStatus(a))),
+                      if (notes.isNotEmpty || actions.isNotEmpty) ...[
+                        _historyToggle(),
+                        if (_historyExpanded) ...[
+                          if (notes.isNotEmpty) ...[
+                            _historySubheading('Coaching notes'),
+                            ...notes.map((n) => _card(
+                                (n['body'] ?? '').toString(),
+                                (n['createdAt'] ?? '').toString())),
+                          ],
+                          if (actions.isNotEmpty) ...[
+                            _historySubheading('Action items'),
+                            ...actions.map((a) => _card(
+                                (a['title'] ?? '').toString(),
+                                _actionStatus(a))),
+                          ],
+                        ],
+                      ],
                     ]);
               }),
         ]),
@@ -608,6 +622,23 @@ class _AbundanceCoachStudentFileScreenState
       child: Text(text,
           style: AbundanceTypography.title
               .copyWith(color: AbundanceColors.primaryGold)));
+  Widget _historyToggle() => Padding(
+        padding: const EdgeInsets.only(top: 18, bottom: 4),
+        child: OutlinedButton.icon(
+          onPressed: () => setState(() => _historyExpanded = !_historyExpanded),
+          icon: Icon(_historyExpanded
+              ? Icons.keyboard_arrow_up
+              : Icons.keyboard_arrow_down),
+          label: Text(_historyExpanded ? 'Hide history' : 'Show history'),
+        ),
+      );
+  Widget _historySubheading(String text) => Padding(
+        padding: const EdgeInsets.only(top: 14, bottom: 8),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(text, style: AbundanceTypography.eyebrow),
+        ),
+      );
   Widget _formLabel(String text) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Text(text, style: AbundanceTypography.eyebrow),
@@ -627,21 +658,22 @@ class _AbundanceCoachStudentFileScreenState
     bool readOnly = false,
     VoidCallback? onTap,
     Widget? suffixIcon,
-  }) => Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: TextField(
-          controller: c,
-          maxLines: lines,
-          readOnly: readOnly,
-          onTap: onTap,
-          style: const TextStyle(color: AbundanceColors.foreground),
-          decoration: InputDecoration(
-              hintText: hint,
-              hintStyle: const TextStyle(color: AbundanceColors.muted),
-              suffixIcon: suffixIcon,
-              filled: true,
-              fillColor: AbundanceColors.surfaceRaised,
-              border: const OutlineInputBorder())));
+  }) =>
+      Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: TextField(
+              controller: c,
+              maxLines: lines,
+              readOnly: readOnly,
+              onTap: onTap,
+              style: const TextStyle(color: AbundanceColors.foreground),
+              decoration: InputDecoration(
+                  hintText: hint,
+                  hintStyle: const TextStyle(color: AbundanceColors.muted),
+                  suffixIcon: suffixIcon,
+                  filled: true,
+                  fillColor: AbundanceColors.surfaceRaised,
+                  border: const OutlineInputBorder())));
 }
 
 class _StudentFileBottomNavigationBar extends StatelessWidget {

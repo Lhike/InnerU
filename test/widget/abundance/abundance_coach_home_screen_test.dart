@@ -4,6 +4,76 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/coach/abundance_coach_home_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/coach/abundance_coach_management_screens.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/coach/abundance_coach_student_file_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_api_transport.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_coach_service.dart';
+import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
+
+class _HistoryTransport implements AbundanceApiTransport {
+  @override
+  Future<Map<String, dynamic>> deleteJson(String path, {String? token}) async =>
+      const {};
+
+  @override
+  Future<Map<String, dynamic>> getJson(String path, {String? token}) async {
+    if (path == '/coach/roster') {
+      return const {
+        'students': [
+          {
+            'id': 'a12-student-1',
+            'firstName': 'Aria',
+            'lastName': 'Stone',
+            'email': 'aria@example.test',
+          }
+        ],
+      };
+    }
+    if (path == '/coach/students/a12-student-1') {
+      return const {
+        'student': {
+          'id': 'a12-student-1',
+          'firstName': 'Aria',
+          'lastName': 'Stone',
+          'email': 'aria@example.test',
+          'council': 'Dawn Council',
+        },
+        'goals': [],
+        'missions': [],
+        'missionCalendar': [],
+      };
+    }
+    if (path == '/coach/students/a12-student-1/notes') {
+      return const {
+        'notes': [
+          {
+            'id': 'note-1',
+            'body': 'Nice one',
+            'createdAt': '2026-09-20T10:00:00Z'
+          }
+        ],
+      };
+    }
+    return const {
+      'items': [
+        {
+          'id': 'action-1',
+          'title': 'Review your mission',
+          'dueDate': '2026-09-29',
+          'status': 'OPEN',
+        }
+      ],
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> patchJson(String path, Map<String, dynamic> body,
+          {String? token}) async =>
+      const {};
+
+  @override
+  Future<Map<String, dynamic>> postJson(String path, Map<String, dynamic> body,
+          {String? token}) async =>
+      const {};
+}
 
 void main() {
   testWidgets('coach home exposes distinct functional tool destinations',
@@ -136,7 +206,8 @@ void main() {
     ));
     await tester.pumpAndSettle();
     for (var index = 0; index < 4; index += 1) {
-      await tester.fling(find.byType(ListView).first, const Offset(0, -500), 1000);
+      await tester.fling(
+          find.byType(ListView).first, const Offset(0, -500), 1000);
       await tester.pumpAndSettle();
     }
 
@@ -148,5 +219,49 @@ void main() {
     await tester.tap(find.byType(TextField).last);
     await tester.pumpAndSettle();
     expect(find.byType(CalendarDatePicker), findsOneWidget);
+  });
+
+  testWidgets('student file can hide and reveal coaching history',
+      (tester) async {
+    final transport = _HistoryTransport();
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceCoachStudentFileScreen(
+        student: const {'id': 'a12-student-1', 'name': 'Aria Stone'},
+        goalsService: GoalsService(null, transport),
+        coachService: AbundanceCoachService(transport: transport),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Nice one'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Nice one'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('Hide history'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Hide history'));
+    await tester.pumpAndSettle();
+    expect(find.text('Nice one'), findsNothing);
+    expect(find.text('Review your mission'), findsNothing);
+
+    await tester.tap(find.text('Show history'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Nice one'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Nice one'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Review your mission'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Review your mission'), findsOneWidget);
   });
 }
