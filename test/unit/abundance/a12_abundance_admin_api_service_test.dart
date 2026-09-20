@@ -80,6 +80,16 @@ AppSession _abundanceAdminSession() => const AppSession(
       companyCode: 'ABU15DN',
     );
 
+AppSession _globalAdminSession() => const AppSession(
+      id: 2,
+      token: 'inneru-admin-session',
+      name: 'Global Admin',
+      email: 'global-admin@example.test',
+      role: 'admin',
+      isCoach: false,
+      companyCode: 'OTHER01',
+    );
+
 void main() {
   test('Abundance admins read and assign coach relationships through A12',
       () async {
@@ -104,5 +114,14 @@ void main() {
     await service.makeCoach(snapshot.students.single);
     expect(transport.requests.last, 'PATCH /admin/users/student-1/roles');
     expect(transport.bodies.last['roles'], containsAll(['MENTEE', 'COACH']));
+  });
+
+  test('global admins use A12 for Abundance management', () {
+    final service = AbundanceAdminApiService(
+      a12Transport: _AdminTransport(),
+      sessionProvider: _globalAdminSession,
+    );
+
+    expect(service.isA12AbundanceManagement, isTrue);
   });
 }

@@ -16,7 +16,9 @@ class AbundanceA12SessionController extends Controller
     {
         $user = $request->user();
         $code = strtoupper(trim((string) ($user->active_company_code ?? $user->company_code ?? '')));
-        if ($code !== 'ABU15DN') {
+        $isAdmin = (bool) ($user->is_admin ?? false)
+            || strtolower(trim((string) ($user->role ?? ''))) === 'admin';
+        if ($code !== 'ABU15DN' && ! $isAdmin) {
             return response()->json(['message' => 'Abundance access is not enabled for this account.'], Response::HTTP_FORBIDDEN);
         }
         $url = rtrim((string) config('services.abundance_a12.url'), '/');
