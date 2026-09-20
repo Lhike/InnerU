@@ -108,7 +108,10 @@ class A12AbundanceMissionsGateway implements AbundanceMissionsGateway {
 
   @override
   Future<void> delete(String id) async {
-    throw UnsupportedError('A12 missions are managed by the Abundance API.');
+    await _transport.deleteJson(
+      '/missions/${Uri.encodeComponent(id)}',
+      token: _token,
+    );
   }
 
   Task _taskFromA12(Map<String, dynamic> item, String day) {

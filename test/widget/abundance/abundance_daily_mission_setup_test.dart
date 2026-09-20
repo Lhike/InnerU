@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/member/abundance_missions_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_missions_service.dart';
+import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/todo_list.dart';
 
 class _SetupGateway implements AbundanceMissionsGateway {
@@ -75,6 +76,14 @@ void main() {
 
     await tester.tap(find.text('Add a daily mission'));
     await tester.pumpAndSettle();
+    final editorFields = tester.widgetList<TextField>(find.byType(TextField));
+    expect(editorFields, hasLength(2));
+    for (final field in editorFields) {
+      final decoration = field.decoration!;
+      expect(decoration.filled, isTrue);
+      expect(decoration.fillColor, AbundanceColors.surfaceSunken);
+      expect(field.style?.color, AbundanceColors.foreground);
+    }
     await tester.enterText(find.byKey(const ValueKey('mission-title-field')),
         'Stretch for 5 minutes');
     await tester.tap(find.text('Create mission'));

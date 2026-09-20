@@ -654,10 +654,8 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
                 autofocus: true,
                 maxLength: 120,
                 style: AbundanceTypography.body,
-                decoration: const InputDecoration(
-                  labelText: 'Mission name',
-                  labelStyle: TextStyle(color: AbundanceColors.muted),
-                ),
+                cursorColor: AbundanceColors.accentCyan,
+                decoration: _darkLabeledInputDecoration('Mission name'),
               ),
               TextField(
                 controller: descriptionController,
@@ -665,10 +663,9 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
                 minLines: 2,
                 maxLines: 4,
                 style: AbundanceTypography.body,
-                decoration: const InputDecoration(
-                  labelText: 'Description (optional)',
-                  labelStyle: TextStyle(color: AbundanceColors.muted),
-                ),
+                cursorColor: AbundanceColors.accentCyan,
+                decoration:
+                    _darkLabeledInputDecoration('Description (optional)'),
               ),
               DropdownButtonFormField<TaskTag>(
                 initialValue: tag,
@@ -1152,6 +1149,24 @@ InputDecoration _darkInputDecoration(String hint) => InputDecoration(
       ),
       focusedBorder: const OutlineInputBorder(
         borderSide: BorderSide(color: AbundanceColors.primaryGold),
+      ),
+    );
+
+InputDecoration _darkLabeledInputDecoration(String label) => InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: AbundanceColors.muted),
+      floatingLabelStyle: const TextStyle(color: AbundanceColors.accentCyan),
+      counterStyle: const TextStyle(color: AbundanceColors.muted),
+      filled: true,
+      fillColor: AbundanceColors.surfaceSunken,
+      border: const OutlineInputBorder(
+        borderSide: BorderSide(color: AbundanceColors.border),
+      ),
+      enabledBorder: const OutlineInputBorder(
+        borderSide: BorderSide(color: AbundanceColors.border),
+      ),
+      focusedBorder: const OutlineInputBorder(
+        borderSide: BorderSide(color: AbundanceColors.accentCyan),
       ),
     );
 

@@ -35,7 +35,6 @@ import 'package:selfcare_projects/src/features/abundance/services/abundance_achi
 import 'package:selfcare_projects/src/features/authentication/screen/UsersData/user_service.dart';
 import 'package:selfcare_projects/src/services/coach_api_service.dart';
 import 'package:selfcare_projects/src/services/daily_tracker_api_service.dart';
-import 'package:selfcare_projects/src/services/todo_task_api_service.dart';
 import 'package:selfcare_projects/src/services/emotion_service.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
 import 'package:selfcare_projects/src/services/company_membership_service.dart';
@@ -143,8 +142,11 @@ class _AbundanceMenteeDashboardScreenState
     final emotionDocs = await EmotionService().fetchHistory();
     List<todo.Task> tasks = const <todo.Task>[];
     try {
-      tasks = (await TodoTaskApiService.instance.fetchTasks())
-          .map(todo.Task.fromJson)
+      // Missions are owned by A12 for the Abundance experience. Use the
+      // injected gateway here as well as on the Mission tab so a mission
+      // created there appears on Home immediately after the shell refreshes.
+      tasks = await _missionsGateway.load();
+      tasks = tasks
           .where((task) => task.goalType == todo.GoalType.everyday)
           .toList(growable: false);
     } catch (_) {
