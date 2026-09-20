@@ -52,6 +52,28 @@ class _LinkedNoteService extends AbundanceCoachService {
       const <Map<String, dynamic>>[];
 }
 
+class _FallbackNoteService extends AbundanceCoachService {
+  _FallbackNoteService() : super(transport: _NoopTransport());
+
+  @override
+  Future<Map<String, dynamic>> fetchMyCoachingNote(String noteId) async {
+    throw StateError('dedicated note endpoint unavailable');
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchMyCoachingNotes() async => [
+        <String, dynamic>{
+          'id': 'note-2',
+          'body': 'Fallback note is still available.',
+          'createdAt': '2026-09-20T15:45:57.000Z',
+        },
+      ];
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchMyCoachingActionItems() async =>
+      const <Map<String, dynamic>>[];
+}
+
 void main() {
   testWidgets('opens the exact coaching note linked by the notification',
       (tester) async {
@@ -75,5 +97,28 @@ void main() {
     expect(find.text('Good job — keep going.'), findsOneWidget);
     expect(find.text('This coaching update is no longer available.'),
         findsNothing);
+  });
+
+  testWidgets(
+      'falls back to the student-scoped note list when detail is unavailable',
+      (tester) async {
+    final notification = AbundanceNotification(
+      id: 'notification-2',
+      title: 'New coaching note',
+      body: 'Your coach sent you a coaching note.',
+      createdAt: DateTime(2026, 9, 20),
+      isRead: true,
+      data: const <String, dynamic>{'coachingNoteId': 'note-2'},
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceCoachingNoteScreen(
+        notification: notification,
+        coachService: _FallbackNoteService(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Fallback note is still available.'), findsOneWidget);
   });
 }

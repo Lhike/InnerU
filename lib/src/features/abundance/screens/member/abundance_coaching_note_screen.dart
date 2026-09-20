@@ -20,7 +20,19 @@ class AbundanceCoachingNoteScreen extends StatelessWidget {
 
     final noteId = notification.data?['coachingNoteId']?.toString();
     if (noteId != null && noteId.isNotEmpty) {
-      final note = await service.fetchMyCoachingNote(noteId);
+      Map<String, dynamic> note;
+      try {
+        note = await service.fetchMyCoachingNote(noteId);
+      } catch (_) {
+        // Older A12 deployments may not expose the detail route yet. The
+        // student-scoped collection is still authorized by A12, so it is a
+        // safe compatibility fallback for an existing linked note.
+        final notes = await service.fetchMyCoachingNotes();
+        note = notes
+                .where((item) => item['id']?.toString() == noteId)
+                .firstOrNull ??
+            const <String, dynamic>{};
+      }
       return {
         'notes': note.isEmpty ? const <Map<String, dynamic>>[] : [note],
         'actions': const <Map<String, dynamic>>[],
