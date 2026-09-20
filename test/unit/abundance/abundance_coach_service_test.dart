@@ -65,4 +65,13 @@ void main() {
     await service.fetchMyCoachingActionItems();
     expect(transport.path, '/coaching-action-items');
   });
+
+  test('student note details use the notification-linked A12 record', () async {
+    final transport = _RecordingTransport();
+    final service = AbundanceCoachService(transport: transport);
+
+    await service.fetchMyCoachingNote('note-1');
+
+    expect(transport.path, '/coaching-notes/note-1');
+  });
 }

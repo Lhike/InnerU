@@ -17,6 +17,24 @@ class AbundanceCoachingNoteScreen extends StatelessWidget {
 
   Future<Map<String, List<Map<String, dynamic>>>> _load() async {
     final service = coachService ?? AbundanceCoachService();
+
+    final noteId = notification.data?['coachingNoteId']?.toString();
+    if (noteId != null && noteId.isNotEmpty) {
+      final note = await service.fetchMyCoachingNote(noteId);
+      return {
+        'notes': note.isEmpty ? const <Map<String, dynamic>>[] : [note],
+        'actions': const <Map<String, dynamic>>[],
+      };
+    }
+
+    final actionId = notification.data?['actionItemId']?.toString();
+    if (actionId != null && actionId.isNotEmpty) {
+      return {
+        'notes': const <Map<String, dynamic>>[],
+        'actions': await service.fetchMyCoachingActionItems(),
+      };
+    }
+
     final results = await Future.wait([
       service.fetchMyCoachingNotes(),
       service.fetchMyCoachingActionItems(),
@@ -43,6 +61,12 @@ class AbundanceCoachingNoteScreen extends StatelessWidget {
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const AbundanceStatusView.loading();
+            }
+            if (snapshot.hasError) {
+              return const AbundanceStatusView.empty(
+                message: 'This coaching update could not be loaded.',
+                icon: Icons.error_outline,
+              );
             }
             final noteId = notification.data?['coachingNoteId']?.toString();
             final actionId = notification.data?['actionItemId']?.toString();
