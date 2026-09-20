@@ -19,7 +19,7 @@ The source `Coaches` screen uses the sorted records from `src/data/a12_coaches.j
 
 ## Target design
 
-1. Add a bundled `a12_coaches.json` and the source coach artwork under the Abundance asset namespace. Add a typed loader that preserves the source sort order: level 1, level 2, then the remaining records by source sort key/name.
+1. Add a bundled `a12_coaches.json` and the 25 coach images referenced by that source catalog under the Abundance asset namespace. Add a typed loader that preserves the source sort order: level 1, level 2, then the remaining records by source sort key/name.
 2. Update `AbundanceCoachDirectoryScreen` to render the source list and source-style detail modal. Keep the report buttons visible only from the coach-only Abundance destination.
 3. Add pure Dart report calculations for validated dates, clipped Monday-to-Sunday ranges, category ordering, target formatting, weekly progress from goal history, and average score.
 4. Add `AbundanceCoachQuestReportScreen` with all-students/assigned-students scopes, council and student filters, calendar date pickers, summary cards, and a horizontally scrollable table.

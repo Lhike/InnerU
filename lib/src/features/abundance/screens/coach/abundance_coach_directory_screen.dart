@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import 'package:selfcare_projects/src/features/abundance/coach/coach_catalog.dart';
-import 'package:selfcare_projects/src/features/abundance/screens/coach/abundance_coach_management_screens.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/coach/abundance_coach_quest_report_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.dart';

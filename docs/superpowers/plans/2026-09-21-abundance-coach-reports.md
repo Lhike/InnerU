@@ -33,7 +33,7 @@
 
 **Files:**
 - Create: `assets/data/a12_coaches.json`
-- Create: `assets/images/abundance/coaches/*.jpg` (47 source images)
+- Create: `assets/images/abundance/coaches/*.jpg` (25 images referenced by the source catalog)
 - Modify: `pubspec.yaml:127-138`
 - Create: `lib/src/features/abundance/coach/coach_catalog.dart`
 - Modify: `lib/src/features/abundance/screens/coach/abundance_coach_directory_screen.dart`
@@ -46,7 +46,7 @@
 
 - [ ] **Step 1: Copy the source catalog and artwork**
 
-Copy `abundance-inneru-tracker-mobile/src/data/a12_coaches.json` unchanged to `assets/data/a12_coaches.json` and copy all 47 JPG files from `abundance-inneru-tracker-mobile/assets/web/public/coaches` into `assets/images/abundance/coaches`.
+Copy `abundance-inneru-tracker-mobile/src/data/a12_coaches.json` unchanged to `assets/data/a12_coaches.json` and copy the 25 JPG files named by its `picture` fields from `abundance-inneru-tracker-mobile/assets/web/public/coaches` into `assets/images/abundance/coaches`.
 
 - [ ] **Step 2: Add the asset declarations**
 
@@ -59,7 +59,7 @@ Add the JSON and coach directory to the existing Flutter asset declarations with
 
 - [ ] **Step 3: Write failing catalog tests**
 
-Assert the loaded catalog contains 47 records, starts with the source level-1/level-2 ordering, maps `picture` to `assets/images/abundance/coaches/<picture>`, and retains a declaration/background. Assert a missing asset path can be rendered with a fallback avatar.
+Assert the loaded catalog contains 25 records, starts with the source level-1/level-2 ordering, maps `picture` to `assets/images/abundance/coaches/<picture>`, and retains a declaration/background. Assert a missing asset path can be rendered with a fallback avatar.
 
 - [ ] **Step 4: Run the catalog tests and verify RED**
 
