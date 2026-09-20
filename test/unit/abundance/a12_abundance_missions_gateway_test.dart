@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_api_transport.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_missions_service.dart';
-import 'package:selfcare_projects/src/features/authentication/screen/todo_list.dart';
 
 class _Transport implements AbundanceApiTransport {
   final requests = <String>[];
