@@ -265,6 +265,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
                   Navigator.of(context).popUntil((route) => route.isFirst);
                   _onTabTapped(index);
                 },
+                onOpenMore: _showMore,
               ),
             ),
           ),

@@ -16,12 +16,14 @@ class AbundanceCoachStudentFileScreen extends StatefulWidget {
       this.loader,
       this.goalsService,
       this.coachService,
-      this.onTabSelected});
+      this.onTabSelected,
+      this.onOpenMore});
   final Map<String, dynamic> student;
   final Future<List<Map<String, dynamic>>> Function(String studentId)? loader;
   final GoalsService? goalsService;
   final AbundanceCoachService? coachService;
   final ValueChanged<int>? onTabSelected;
+  final VoidCallback? onOpenMore;
   @override
   State<AbundanceCoachStudentFileScreen> createState() =>
       _AbundanceCoachStudentFileScreenState();
@@ -230,7 +232,7 @@ class _AbundanceCoachStudentFileScreenState
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 7, childAspectRatio: 1.15),
+                    crossAxisCount: 7, childAspectRatio: 1.0),
                 itemBuilder: (context, index) {
                   final day = days[index];
                   final key = _dateKey(day);
@@ -269,6 +271,8 @@ class _AbundanceCoachStudentFileScreenState
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text('${day.day}',
+                                  maxLines: 1,
+                                  softWrap: false,
                                   style: AbundanceTypography.body.copyWith(
                                       color: day.month == _calendarMonth.month
                                           ? AbundanceColors.foreground
@@ -287,6 +291,8 @@ class _AbundanceCoachStudentFileScreenState
                                   ),
                                 ),
                                 Text('$completedCount/${items.length}',
+                                    maxLines: 1,
+                                    softWrap: false,
                                     style: const TextStyle(
                                         color: AbundanceColors.muted,
                                         fontSize: 8)),
@@ -427,7 +433,11 @@ class _AbundanceCoachStudentFileScreenState
         bottomNavigationBar: _StudentFileBottomNavigationBar(
           onTap: (index) {
             Navigator.of(context).pop();
-            widget.onTabSelected?.call(index);
+            if (index == 6) {
+              widget.onOpenMore?.call();
+            } else {
+              widget.onTabSelected?.call(index);
+            }
           },
         ),
         body: Stack(children: [
@@ -581,7 +591,7 @@ class _StudentFileBottomNavigationBar extends StatelessWidget {
         selectedItemColor: AbundanceColors.primaryGold,
         unselectedItemColor: AbundanceColors.muted,
         showUnselectedLabels: true,
-        currentIndex: 4,
+        currentIndex: 6,
         onTap: onTap,
         items: const [
           BottomNavigationBarItem(
@@ -596,6 +606,8 @@ class _StudentFileBottomNavigationBar extends StatelessWidget {
               icon: Icon(Icons.groups_outlined), label: 'Guild'),
           BottomNavigationBarItem(
               icon: Icon(Icons.account_circle_outlined), label: 'Profile'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.more_horiz), label: 'Coaching'),
         ],
       );
 }

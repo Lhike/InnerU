@@ -119,5 +119,10 @@ void main() {
 
     expect(find.text('Aria Stone'), findsOneWidget);
     expect(find.text('Build a daily practice'), findsOneWidget);
+    final navigation = tester.widget<BottomNavigationBar>(
+      find.byType(BottomNavigationBar),
+    );
+    expect(navigation.currentIndex, 6);
+    expect(find.text('Coaching'), findsOneWidget);
   });
 }
