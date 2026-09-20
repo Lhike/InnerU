@@ -100,6 +100,8 @@ class _AbundanceCoachDirectoryScreenState
                         Expanded(
                           child: _ReportButton(
                             label: 'All students report',
+                            hint: 'Across all councils',
+                            icon: '▦',
                             onTap: () => _open(
                               AbundanceCoachQuestReportScreen(
                                 isCoach: true,
@@ -114,6 +116,8 @@ class _AbundanceCoachDirectoryScreenState
                         Expanded(
                           child: _ReportButton(
                             label: 'View quests report',
+                            hint: 'Council rating sheet',
+                            icon: '↗',
                             onTap: () => _open(
                               AbundanceCoachQuestReportScreen(
                                 isCoach: true,
@@ -159,7 +163,12 @@ class _AbundanceCoachDirectoryScreenState
         contentPadding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
         title: Column(
           children: [
-            _CoachImage(assetPath: coach.assetPath, size: 180),
+            _CoachImage(
+              assetPath: coach.assetPath,
+              width: 180,
+              height: 220,
+              fit: BoxFit.contain,
+            ),
             const SizedBox(height: 12),
             Text(
               coach.name,
@@ -211,19 +220,71 @@ class _AbundanceCoachDirectoryScreenState
 }
 
 class _ReportButton extends StatelessWidget {
-  const _ReportButton({required this.label, required this.onTap});
+  const _ReportButton({
+    required this.label,
+    required this.hint,
+    required this.icon,
+    required this.onTap,
+  });
 
   final String label;
+  final String hint;
+  final String icon;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => OutlinedButton(
-        onPressed: onTap,
-        style: OutlinedButton.styleFrom(
-          minimumSize: const Size.fromHeight(64),
-          side: const BorderSide(color: AbundanceColors.border),
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        label: label,
+        child: OutlinedButton(
+          onPressed: onTap,
+          style: ButtonStyle(
+            minimumSize: const WidgetStatePropertyAll(Size.fromHeight(66)),
+            padding: const WidgetStatePropertyAll(
+              EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+            ),
+            backgroundColor: const WidgetStatePropertyAll(
+              AbundanceColors.surfaceRaised,
+            ),
+            foregroundColor: const WidgetStatePropertyAll(
+              AbundanceColors.primaryGold,
+            ),
+            side: const WidgetStatePropertyAll(
+              BorderSide(color: AbundanceColors.border),
+            ),
+            shape: WidgetStatePropertyAll(
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(icon),
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 3),
+              Text(
+                hint,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AbundanceColors.muted,
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
         ),
-        child: Text(label, textAlign: TextAlign.center),
       );
 }
 
@@ -240,7 +301,11 @@ class _CoachCard extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
           child: ListTile(
-            leading: _CoachImage(assetPath: coach.assetPath, size: 52),
+            leading: _CoachImage(
+              assetPath: coach.assetPath,
+              width: 52,
+              height: 56,
+            ),
             title: Text(coach.name, style: AbundanceTypography.title),
             subtitle: Text(
               coach.declaration.isEmpty ? 'A12 Coach' : coach.declaration,
@@ -258,24 +323,31 @@ class _CoachCard extends StatelessWidget {
 }
 
 class _CoachImage extends StatelessWidget {
-  const _CoachImage({required this.assetPath, required this.size});
+  const _CoachImage({
+    required this.assetPath,
+    required this.width,
+    required this.height,
+    this.fit = BoxFit.cover,
+  });
 
   final String assetPath;
-  final double size;
+  final double width;
+  final double height;
+  final BoxFit fit;
 
   @override
   Widget build(BuildContext context) => ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: Image.asset(
           assetPath,
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
+          width: width,
+          height: height,
+          fit: fit,
           errorBuilder: (context, error, stackTrace) => Image.asset(
             AbundanceCoachCatalog.fallbackAsset,
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
+            width: width,
+            height: height,
+            fit: fit,
           ),
         ),
       );
