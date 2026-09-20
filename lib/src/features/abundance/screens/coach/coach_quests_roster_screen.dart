@@ -7,9 +7,9 @@ import 'package:selfcare_projects/src/features/abundance/screens/mentee/goal_det
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 
-const _questFilterBackground = Color(0xFFFDFDFD);
-const _questFilterForeground = Color(0xFF329B98);
-const _questFilterLabel = Color(0xFF7E879B);
+const _questFilterBackground = AbundanceColors.surfaceRaised;
+const _questFilterForeground = AbundanceColors.foreground;
+const _questFilterBorder = AbundanceColors.primaryGold;
 
 /// Read-only: every mentee this coach is assigned, with their quests,
 /// mirroring `A12-Tracker`'s `coach/goals` page — one card per mentee,
@@ -272,16 +272,13 @@ class _RosterHeader extends StatelessWidget {
                 initialValue: category,
                 dropdownColor: _questFilterBackground,
                 icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                iconEnabledColor: _questFilterForeground,
+                iconEnabledColor: _questFilterBorder,
                 style: const TextStyle(
                   color: _questFilterForeground,
                   fontSize: 15,
                   fontWeight: FontWeight.w500,
                 ),
-                decoration: _questFilterDecoration(
-                  labelText: 'Category',
-                  floatingLabelBehavior: FloatingLabelBehavior.always,
-                ),
+                decoration: _questFilterDecoration(),
                 items: [
                   const DropdownMenuItem<GoalCategory?>(
                     value: null,
@@ -327,31 +324,22 @@ class _RosterHeader extends StatelessWidget {
   }
 
   InputDecoration _questFilterDecoration({
-    String? labelText,
     String? hintText,
     TextStyle? hintStyle,
-    FloatingLabelBehavior? floatingLabelBehavior,
   }) {
     final border = OutlineInputBorder(
       borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: _questFilterBackground),
+      borderSide: const BorderSide(color: _questFilterBorder),
     );
     final focusedBorder = OutlineInputBorder(
       borderRadius: BorderRadius.circular(14),
-      borderSide: const BorderSide(color: _questFilterForeground, width: 1.5),
+      borderSide: const BorderSide(color: _questFilterBorder, width: 1.6),
     );
 
     return InputDecoration(
       isDense: true,
       filled: true,
       fillColor: _questFilterBackground,
-      labelText: labelText,
-      labelStyle: const TextStyle(
-        color: _questFilterLabel,
-        fontSize: 12,
-        fontWeight: FontWeight.w500,
-      ),
-      floatingLabelBehavior: floatingLabelBehavior,
       hintText: hintText,
       hintStyle: hintStyle,
       contentPadding: const EdgeInsets.symmetric(
