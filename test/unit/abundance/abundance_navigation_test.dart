@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/abundance_navigation.dart';
 
@@ -32,6 +33,17 @@ void main() {
     expect(items.any((item) => item.key == 'coach_students'), isTrue);
     expect(items.any((item) => item.key == 'coach_core_tasks'), isTrue);
     expect(items.any((item) => item.key == 'home'), isTrue);
+  });
+
+  test('coach tool icons match the source coaching menu', () {
+    final items = abundanceNavigationFor(isCoach: true);
+    IconData iconFor(String key) =>
+        items.firstWhere((item) => item.key == key).icon;
+
+    expect(iconFor('coach_students'), Icons.groups_outlined);
+    expect(iconFor('coach_core_tasks'), Icons.checklist_outlined);
+    expect(iconFor('coach_quests'), Icons.track_changes);
+    expect(iconFor('coach_directory'), Icons.auto_awesome_outlined);
   });
 
   test('ordinary members never receive coach destinations', () {
