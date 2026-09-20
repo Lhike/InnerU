@@ -5,6 +5,7 @@ import 'package:selfcare_projects/src/features/abundance/screens/member/abundanc
 import 'package:selfcare_projects/src/features/abundance/services/abundance_api_transport.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_coach_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_notifications_service.dart';
+import 'package:selfcare_projects/src/services/api_client.dart';
 
 class _NoopTransport implements AbundanceApiTransport {
   @override
@@ -74,6 +75,24 @@ class _FallbackNoteService extends AbundanceCoachService {
       const <Map<String, dynamic>>[];
 }
 
+class _BrokenNoteService extends AbundanceCoachService {
+  _BrokenNoteService() : super(transport: _NoopTransport());
+
+  @override
+  Future<Map<String, dynamic>> fetchMyCoachingNote(String noteId) async {
+    throw ApiException(503, 'A12 bridge is unavailable.');
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchMyCoachingNotes() async {
+    throw ApiException(503, 'A12 bridge is unavailable.');
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchMyCoachingActionItems() async =>
+      const <Map<String, dynamic>>[];
+}
+
 void main() {
   testWidgets('opens the exact coaching note linked by the notification',
       (tester) async {
@@ -120,5 +139,26 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Fallback note is still available.'), findsOneWidget);
+  });
+
+  testWidgets('shows the A12 error when both note reads fail', (tester) async {
+    final notification = AbundanceNotification(
+      id: 'notification-3',
+      title: 'New coaching note',
+      body: 'Your coach sent you a coaching note.',
+      createdAt: DateTime(2026, 9, 20),
+      isRead: true,
+      data: const <String, dynamic>{'coachingNoteId': 'note-3'},
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceCoachingNoteScreen(
+        notification: notification,
+        coachService: _BrokenNoteService(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('A12 bridge is unavailable.'), findsOneWidget);
   });
 }

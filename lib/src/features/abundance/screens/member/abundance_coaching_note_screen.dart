@@ -5,6 +5,7 @@ import 'package:selfcare_projects/src/features/abundance/theme/abundance_typogra
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_status_view.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_coach_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_notifications_service.dart';
+import 'package:selfcare_projects/src/services/api_client.dart';
 
 class AbundanceCoachingNoteScreen extends StatelessWidget {
   const AbundanceCoachingNoteScreen({
@@ -75,8 +76,14 @@ class AbundanceCoachingNoteScreen extends StatelessWidget {
               return const AbundanceStatusView.loading();
             }
             if (snapshot.hasError) {
-              return const AbundanceStatusView.empty(
-                message: 'This coaching update could not be loaded.',
+              final error = snapshot.error;
+              final message = error is ApiException
+                  ? error.message
+                  : error is ApiTimeoutException
+                      ? error.message
+                      : 'This coaching update could not be loaded.';
+              return AbundanceStatusView.empty(
+                message: message,
                 icon: Icons.error_outline,
               );
             }
