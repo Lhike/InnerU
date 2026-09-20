@@ -1,4 +1,5 @@
 import 'package:selfcare_projects/src/services/notification_api_service.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_api_transport.dart';
 
 class AbundanceNotification {
   const AbundanceNotification({
@@ -21,7 +22,7 @@ class AbundanceNotification {
         (json['createdAt'] ?? json['created_at'] ?? '').toString(),
       ),
       isRead: readValue == true || readValue == 1 || readAt != null,
-      data: json['data'] is Map ? Map<String, dynamic>.from(json['data'] as Map) : null,
+      data: _notificationData(json),
     );
   }
 
@@ -40,6 +41,12 @@ class AbundanceNotification {
         isRead: isRead ?? this.isRead,
         data: data,
       );
+}
+
+Map<String, dynamic>? _notificationData(Map<String, dynamic> json) {
+  final raw = json['metadata'] ?? json['data'];
+  if (raw is Map) return Map<String, dynamic>.from(raw);
+  return null;
 }
 
 abstract interface class AbundanceNotificationsGateway {
@@ -73,4 +80,46 @@ class InnerUAbundanceNotificationsGateway
 
   @override
   Future<void> markRead(String id) => _api.markRead(id);
+}
+
+/// A12-owned notification feed for the ABU15DN Abundance experience.
+///
+/// Notifications, their read state, and coaching-note metadata stay in the
+/// shared A12 service so a student sees exactly the same updates in every
+/// authorized Abundance client.
+class A12AbundanceNotificationsGateway
+    implements AbundanceNotificationsGateway {
+  A12AbundanceNotificationsGateway({AbundanceApiTransport? transport})
+      : _transport = transport ?? A12ApiTransport();
+
+  final AbundanceApiTransport _transport;
+  List<AbundanceNotification> _lastLoaded = const [];
+
+  @override
+  Future<List<AbundanceNotification>> load() async {
+    final response = await _transport.getJson('/notifications');
+    final raw = response['items'];
+    _lastLoaded = raw is List
+        ? raw
+            .whereType<Map>()
+            .map((item) => AbundanceNotification.fromJson(
+                  Map<String, dynamic>.from(item),
+                ))
+            .toList(growable: false)
+        : const [];
+    return _lastLoaded;
+  }
+
+  @override
+  Future<void> markRead(String id) =>
+      _transport.patchJson('/notifications/$id/read', const {});
+
+  @override
+  Future<void> markAllRead() async {
+    final unreadIds = _lastLoaded
+        .where((notification) =>
+            !notification.isRead && notification.id.isNotEmpty)
+        .map((notification) => notification.id);
+    await Future.wait(unreadIds.map(markRead));
+  }
 }

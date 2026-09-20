@@ -8,7 +8,8 @@ import 'package:selfcare_projects/src/features/abundance/widgets/abundance_card.
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_status_view.dart';
 
 class AbundanceNotificationsScreen extends StatefulWidget {
-  const AbundanceNotificationsScreen({super.key, this.gateway, this.onNotificationTap});
+  const AbundanceNotificationsScreen(
+      {super.key, this.gateway, this.onNotificationTap});
 
   final AbundanceNotificationsGateway? gateway;
   final ValueChanged<AbundanceNotification>? onNotificationTap;
@@ -21,7 +22,7 @@ class AbundanceNotificationsScreen extends StatefulWidget {
 class _AbundanceNotificationsScreenState
     extends State<AbundanceNotificationsScreen> {
   late final AbundanceNotificationsGateway _gateway =
-      widget.gateway ?? InnerUAbundanceNotificationsGateway();
+      widget.gateway ?? A12AbundanceNotificationsGateway();
   List<AbundanceNotification> _items = const [];
   bool _loading = true;
   String? _error;

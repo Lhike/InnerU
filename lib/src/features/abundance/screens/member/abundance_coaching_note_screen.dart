@@ -3,17 +3,23 @@ import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_typography.dart';
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_status_view.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_coach_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_notifications_service.dart';
-import 'package:selfcare_projects/src/services/coach_api_service.dart';
 
 class AbundanceCoachingNoteScreen extends StatelessWidget {
-  const AbundanceCoachingNoteScreen({super.key, required this.notification});
+  const AbundanceCoachingNoteScreen({
+    super.key,
+    required this.notification,
+    this.coachService,
+  });
   final AbundanceNotification notification;
+  final AbundanceCoachService? coachService;
 
   Future<Map<String, List<Map<String, dynamic>>>> _load() async {
+    final service = coachService ?? AbundanceCoachService();
     final results = await Future.wait([
-      CoachApiService.instance.fetchAbundanceStudentNotes(),
-      CoachApiService.instance.fetchAbundanceStudentActionItems(),
+      service.fetchMyCoachingNotes(),
+      service.fetchMyCoachingActionItems(),
     ]);
     return {
       'notes': results[0],

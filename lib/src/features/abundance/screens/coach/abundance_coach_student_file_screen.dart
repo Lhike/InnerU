@@ -6,8 +6,8 @@ import 'package:selfcare_projects/src/features/abundance/widgets/abundance_card.
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_status_view.dart';
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_header_profile_button.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_api_transport.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_coach_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
-import 'package:selfcare_projects/src/services/coach_api_service.dart';
 
 class AbundanceCoachStudentFileScreen extends StatefulWidget {
   const AbundanceCoachStudentFileScreen(
@@ -15,10 +15,12 @@ class AbundanceCoachStudentFileScreen extends StatefulWidget {
       required this.student,
       this.loader,
       this.goalsService,
+      this.coachService,
       this.onTabSelected});
   final Map<String, dynamic> student;
   final Future<List<Map<String, dynamic>>> Function(String studentId)? loader;
   final GoalsService? goalsService;
+  final AbundanceCoachService? coachService;
   final ValueChanged<int>? onTabSelected;
   @override
   State<AbundanceCoachStudentFileScreen> createState() =>
@@ -85,7 +87,6 @@ class _AbundanceCoachStudentFileScreenState
         'actions': const <Map<String, dynamic>>[],
       };
     }
-    final api = CoachApiService.instance;
     final a12Student = await _loadA12Student();
     final goals = _mapRecords(a12Student?['goals']);
     List<Map<String, dynamic>> tasks = const [];
@@ -99,22 +100,18 @@ class _AbundanceCoachStudentFileScreenState
         };
       }).toList();
     }
-    List<Map<String, dynamic>> notes = const [];
-    List<Map<String, dynamic>> actions = const [];
-    try {
-      notes = await api.fetchAbundanceNotes(_id);
-      actions = await api.fetchAbundanceActionItems(_id);
-    } catch (_) {
-      // Coaching records are optional to the read-only student file. A
-      // missing/unmigrated coaching-record table must not hide real goals
-      // and check-ins from the coach.
-    }
+    final studentId = (a12Student?['id'] ?? _id).toString();
+    final api = widget.coachService ?? AbundanceCoachService();
+    final records = await Future.wait([
+      api.fetchStudentNotes(studentId),
+      api.fetchStudentActionItems(studentId),
+    ]);
     return {
       'goals': goals,
       'tasks': tasks,
       'missionCalendar': a12Student?['missionCalendar'],
-      'notes': notes,
-      'actions': actions,
+      'notes': records[0],
+      'actions': records[1],
     };
   }
 
@@ -124,42 +121,34 @@ class _AbundanceCoachStudentFileScreenState
     // and reconcile the selected student from A12's already-scoped roster.
     // Keep an injected service for widget tests, but never use the shell's
     // default InnerU transport for these A12-owned records.
-    try {
-      final a12Service =
-          widget.goalsService ?? GoalsService(null, A12ApiTransport());
-      final a12Roster = await a12Service.fetchA12CoachRoster();
-      final rosterStudent = a12Roster.where((item) {
-        final a12Id = (item['id'] ?? '').toString();
-        final a12Email = (item['email'] ?? '').toString().trim().toLowerCase();
-        final canonicalUserId = (item['canonicalUserId'] ?? '').toString();
-        return (_id.isNotEmpty && a12Id == _id) ||
-            (_email.isNotEmpty && a12Email == _email) ||
-            (_id.isNotEmpty && canonicalUserId == 'inneru-$_id');
-      }).firstOrNull;
-      if (rosterStudent == null) return null;
-
-      // The roster summary can be stale or omit nested goal/mission records.
-      // Fetch the selected student's detail record so the UI reads the same
-      // mobile_goals/mobile_missions data the student sees.
-      final a12Id = (rosterStudent['id'] ?? '').toString();
-      if (a12Id.isEmpty) return rosterStudent;
-      try {
-        final detail = await a12Service.fetchA12CoachStudentDetail(a12Id);
-        final student = detail['student'];
-        return <String, dynamic>{
-          ...rosterStudent,
-          ...detail,
-          if (student is Map) ...Map<String, dynamic>.from(student),
-          'id': a12Id,
-        };
-      } catch (_) {
-        return rosterStudent;
-      }
-    } catch (_) {
-      // Keep the InnerU compatibility source when the A12 bridge is
-      // temporarily unavailable.
-      return null;
+    final a12Service =
+        widget.goalsService ?? GoalsService(null, A12ApiTransport());
+    final a12Roster = await a12Service.fetchA12CoachRoster();
+    final rosterStudent = a12Roster.where((item) {
+      final a12Id = (item['id'] ?? '').toString();
+      final a12Email = (item['email'] ?? '').toString().trim().toLowerCase();
+      final canonicalUserId = (item['canonicalUserId'] ?? '').toString();
+      return (_id.isNotEmpty && a12Id == _id) ||
+          (_email.isNotEmpty && a12Email == _email) ||
+          (_id.isNotEmpty && canonicalUserId == 'inneru-$_id');
+    }).firstOrNull;
+    if (rosterStudent == null) {
+      throw StateError('This student is not assigned to the current coach.');
     }
+
+    // The roster summary can be stale or omit nested goal/mission records.
+    // Fetch the selected student's detail record so the UI reads the same
+    // mobile_goals/mobile_missions data the student sees.
+    final a12Id = (rosterStudent['id'] ?? '').toString();
+    if (a12Id.isEmpty) return rosterStudent;
+    final detail = await a12Service.fetchA12CoachStudentDetail(a12Id);
+    final student = detail['student'];
+    return <String, dynamic>{
+      ...rosterStudent,
+      ...detail,
+      if (student is Map) ...Map<String, dynamic>.from(student),
+      'id': a12Id,
+    };
   }
 
   List<Map<String, dynamic>> _mapRecords(Object? raw) => raw is List
@@ -389,8 +378,9 @@ class _AbundanceCoachStudentFileScreenState
     if (body.isEmpty || _savingNote) return;
     setState(() => _savingNote = true);
     try {
-      await CoachApiService.instance
-          .createAbundanceNote(menteeId: _id, body: body);
+      final student = await _loadA12Student();
+      await (widget.coachService ?? AbundanceCoachService())
+          .createStudentNote((student?['id'] ?? _id).toString(), body);
       _note.clear();
       if (mounted) setState(() => _future = _load());
     } catch (_) {
@@ -409,10 +399,13 @@ class _AbundanceCoachStudentFileScreenState
     if (title.isEmpty || _savingAction) return;
     setState(() => _savingAction = true);
     try {
-      await CoachApiService.instance.createAbundanceActionItem(
-          menteeId: _id,
-          title: title,
-          dueDate: _due.text.trim().isEmpty ? null : _due.text.trim());
+      final student = await _loadA12Student();
+      await (widget.coachService ?? AbundanceCoachService())
+          .createStudentActionItem(
+        (student?['id'] ?? _id).toString(),
+        title: title,
+        dueDate: _due.text.trim().isEmpty ? null : _due.text.trim(),
+      );
       _action.clear();
       _due.clear();
       if (mounted) setState(() => _future = _load());

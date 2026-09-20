@@ -58,6 +58,15 @@ class _AbundanceManagementScreenState extends State<AbundanceManagementScreen> {
     _refresh();
   }
 
+  Future<void> _makeCoach(AbundanceAdminStudent student) async {
+    await AbundanceAdminApiService.instance.makeCoach(student);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${student.name} is now an Abundance coach.')),
+    );
+    _refresh();
+  }
+
   Future<void> _manageStudent(AbundanceAdminStudent student) async {
     final title = TextEditingController();
     final quest = TextEditingController();
@@ -185,9 +194,18 @@ class _AbundanceManagementScreenState extends State<AbundanceManagementScreen> {
               const Text('Unassigned students',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
               ...students.where((s) => s.coachId == null).map((s) => ListTile(
-                  leading: const Icon(CupertinoIcons.person),
-                  title: Text(s.name),
-                  subtitle: Text(s.email))),
+                    leading: const Icon(CupertinoIcons.person),
+                    title: Text(s.name),
+                    subtitle: Text(s.email),
+                    trailing: AbundanceAdminApiService
+                            .instance.isA12AbundanceManagement
+                        ? TextButton.icon(
+                            onPressed: () => _makeCoach(s),
+                            icon: const Icon(CupertinoIcons.person_badge_plus),
+                            label: const Text('Make coach'),
+                          )
+                        : null,
+                  )),
             ],
           );
         },
