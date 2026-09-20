@@ -29,6 +29,19 @@ class AbundanceCoachService {
     return _records(response['notes']);
   }
 
+  /// Loads the exact student note referenced by a notification. The A12 API
+  /// authorizes the note against the authenticated student before returning
+  /// it, so callers do not need to guess by taking the first note in a list.
+  Future<Map<String, dynamic>> fetchMyCoachingNote(String noteId) async {
+    final response = await _transport.getJson(
+      '/coaching-notes/${Uri.encodeComponent(noteId)}',
+    );
+    final raw = response['note'] ?? response;
+    return raw is Map
+        ? Map<String, dynamic>.from(raw)
+        : const <String, dynamic>{};
+  }
+
   Future<List<Map<String, dynamic>>> fetchMyCoachingActionItems() async {
     final response = await _transport.getJson('/coaching-action-items');
     return _records(response['items']);
