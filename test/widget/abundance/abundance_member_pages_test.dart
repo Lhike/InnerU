@@ -40,7 +40,7 @@ class _FakeMissionsGateway implements AbundanceMissionsGateway {
   ];
 
   @override
-  Future<List<Task>> load() async => tasks;
+  Future<List<Task>> load({DateTime? date}) async => tasks;
 
   @override
   Future<void> create(Task task) async => tasks.add(task);
@@ -49,7 +49,7 @@ class _FakeMissionsGateway implements AbundanceMissionsGateway {
   Future<void> delete(String id) async => tasks.removeWhere((t) => t.id == id);
 
   @override
-  Future<void> update(Task task) async {
+  Future<void> update(Task task, {DateTime? day}) async {
     if (failCompletion) throw Exception('offline');
     updatedTask = task;
   }

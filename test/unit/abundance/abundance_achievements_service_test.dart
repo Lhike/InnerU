@@ -14,13 +14,13 @@ class _FakeMissionsGateway implements AbundanceMissionsGateway {
   final List<Task> tasks;
 
   @override
-  Future<List<Task>> load() async => tasks;
+  Future<List<Task>> load({DateTime? date}) async => tasks;
 
   @override
   Future<void> create(Task task) async {}
 
   @override
-  Future<void> update(Task task) async {}
+  Future<void> update(Task task, {DateTime? day}) async {}
 
   @override
   Future<void> delete(String id) async {}

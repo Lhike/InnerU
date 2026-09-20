@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_api_transport.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_missions_service.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/todo_list.dart';
 
 class _Transport implements AbundanceApiTransport {
   final requests = <String>[];
@@ -55,15 +56,17 @@ void main() {
     final transport = _Transport();
     final gateway = A12AbundanceMissionsGateway(transport: transport);
 
-    final tasks = await gateway.load();
+    final selectedDay = DateTime(2026, 9, 22);
+    final tasks = await gateway.load(date: selectedDay);
     expect(tasks, hasLength(1));
     expect(tasks.single.title, 'Walk outside');
     expect(tasks.single.goalType.name, 'everyday');
     expect(tasks.single.isCompleted, isTrue);
     expect(tasks.single.completionDates, isNotEmpty);
 
-    await gateway.update(tasks.single);
-    expect(transport.requests, contains(startsWith('GET /missions?date=')));
+    await gateway.update(tasks.single, day: selectedDay);
+    expect(transport.requests,
+        contains('GET /missions?date=2026-09-22&month=2026-09'));
     expect(transport.requests,
         contains('POST /missions/mission-7/completion true'));
   });

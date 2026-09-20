@@ -5,9 +5,9 @@ import 'package:selfcare_projects/src/features/abundance/services/abundance_api_
 import 'package:selfcare_projects/src/services/auth_service.dart';
 
 abstract interface class AbundanceMissionsGateway {
-  Future<List<Task>> load();
+  Future<List<Task>> load({DateTime? date});
   Future<void> create(Task task);
-  Future<void> update(Task task);
+  Future<void> update(Task task, {DateTime? day});
   Future<void> delete(String id);
 }
 
@@ -18,7 +18,7 @@ class InnerUAbundanceMissionsGateway implements AbundanceMissionsGateway {
   final TodoTaskApiService _api;
 
   @override
-  Future<List<Task>> load() async =>
+  Future<List<Task>> load({DateTime? date}) async =>
       (await _api.fetchTasks()).map(Task.fromJson).toList();
 
   @override
@@ -28,7 +28,7 @@ class InnerUAbundanceMissionsGateway implements AbundanceMissionsGateway {
   }
 
   @override
-  Future<void> update(Task task) async {
+  Future<void> update(Task task, {DateTime? day}) async {
     await _api.updateTask(task.id, _payload(task));
   }
 
@@ -64,9 +64,8 @@ class A12AbundanceMissionsGateway implements AbundanceMissionsGateway {
   String get _token => AuthService.instance.currentSession?.token ?? '';
 
   @override
-  Future<List<Task>> load() async {
-    final date = DateTime.now();
-    final day = _day(date);
+  Future<List<Task>> load({DateTime? date}) async {
+    final day = _day(date ?? DateTime.now());
     final response = await _transport.getJson(
       '/missions?date=$day&month=${day.substring(0, 7)}',
       token: _token,
@@ -96,12 +95,13 @@ class A12AbundanceMissionsGateway implements AbundanceMissionsGateway {
   }
 
   @override
-  Future<void> update(Task task) async {
-    final day = _day(DateTime.now());
+  Future<void> update(Task task, {DateTime? day}) async {
+    final selectedDay = _day(day ?? DateTime.now());
     await _transport.postJson(
         '/missions/${Uri.encodeComponent(task.id)}/completion',
         {
-          'completed': task.completionDates.any((date) => _day(date) == day),
+          'completed': task.completionDates
+              .any((date) => _day(date) == selectedDay),
         },
         token: _token);
   }
