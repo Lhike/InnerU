@@ -65,6 +65,7 @@ class AbundanceMenteeDashboardScreen extends StatefulWidget {
     super.key,
     this.initialCompanyTheme,
     this.service,
+    this.missionsGateway,
     this.onOpenMissions,
     this.onOpenAwards,
     this.tutorialController,
@@ -73,6 +74,7 @@ class AbundanceMenteeDashboardScreen extends StatefulWidget {
 
   final CompanyThemeData? initialCompanyTheme;
   final GoalsService? service;
+  final AbundanceMissionsGateway? missionsGateway;
   final VoidCallback? onOpenMissions;
   final VoidCallback? onOpenAwards;
   final AbundanceTutorialController? tutorialController;
@@ -87,7 +89,7 @@ class _AbundanceMenteeDashboardScreenState
     extends State<AbundanceMenteeDashboardScreen> {
   late final GoalsService _service;
   late final AbundanceMissionsGateway _missionsGateway =
-      InnerUAbundanceMissionsGateway();
+      widget.missionsGateway ?? InnerUAbundanceMissionsGateway();
   late Future<_DashboardData> _dashboardFuture;
   final Set<String> _missionUpdates = <String>{};
 

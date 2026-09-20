@@ -19,6 +19,7 @@ import 'package:selfcare_projects/src/features/abundance/screens/mentee/abundanc
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/goals_hub_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_achievements_service.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_missions_service.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/abundance_company.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.dart';
@@ -124,6 +125,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         key: UniqueKey(),
         initialCompanyTheme: widget.companyTheme,
         service: widget.service,
+        missionsGateway: A12AbundanceMissionsGateway(),
         onOpenMissions: () => _onTabTapped(1),
         onOpenAwards: () => _onTabTapped(3),
         tutorialController: _tutorialController,
@@ -136,6 +138,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         return _homeTabBody;
       case 1:
         return AbundanceMissionsScreen(
+          gateway: A12AbundanceMissionsGateway(),
           onMissionChanged: _refreshHomeTab,
           tutorialController: _tutorialController,
         );

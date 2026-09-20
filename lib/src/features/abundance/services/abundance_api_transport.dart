@@ -135,6 +135,11 @@ class A12ApiTransport implements AbundanceApiTransport {
     final normalized = path.startsWith('/') ? path : '/$path';
     if (normalized.startsWith('/api/goals')) {
       final rest = normalized.substring('/api/goals'.length);
+      // A12 scopes goals to the exchanged mobile session. The legacy InnerU
+      // query parameter is not accepted by the A12 goals validator and must
+      // never be used to select another user's data.
+      final withoutUserFilter =
+          rest.replaceFirst(RegExp(r'[?&]userId=[^&]*'), '');
       if (rest.endsWith('/measure')) {
         return (
           path: '/goals${rest.substring(0, rest.length - 8)}/logs',
@@ -156,7 +161,7 @@ class A12ApiTransport implements AbundanceApiTransport {
           history: true
         );
       }
-      return (path: '/goals$rest', plans: false, history: false);
+      return (path: '/goals$withoutUserFilter', plans: false, history: false);
     }
     return (path: normalized, plans: false, history: false);
   }
