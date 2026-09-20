@@ -5,8 +5,17 @@
 class AbundanceCompany {
   const AbundanceCompany._();
 
+  static const code = 'ABU15DN';
+  static const coachSignupRestrictionTitle =
+      'Coach accounts are managed by Abundance admins';
+  static const coachSignupRestrictionMessage =
+      'You cannot create a Coach account with the Abundance company code. '
+      'Create a User account instead, then ask the Abundance administrator '
+      'to make you a Coach.';
+  static const coachSignupRestrictionAction = 'Create a User account instead';
+
   static bool matches(String? code, String? name) {
     final normalizedCode = (code ?? '').trim().toUpperCase();
-    return normalizedCode == 'ABU15DN';
+    return normalizedCode == AbundanceCompany.code;
   }
 }

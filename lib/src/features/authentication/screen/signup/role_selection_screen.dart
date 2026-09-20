@@ -6,6 +6,7 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart' as apple_sign_in;
 import 'package:selfcare_projects/src/features/authentication/screen/auth/auth_role_home.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/login/check_email_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/signup/signup.dart';
+import 'package:selfcare_projects/src/features/abundance/domain/abundance_company.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
 import 'package:selfcare_projects/src/services/company_api_service.dart';
 import 'package:selfcare_projects/src/utils/responsive.dart';
@@ -33,6 +34,37 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
       !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
   String get _companyCode => _companyCodeController.text.trim().toUpperCase();
+
+  Future<bool> _guardAbundanceCoachSignup() async {
+    if (_selectedRole != 'coach' ||
+        !AbundanceCompany.matches(_companyCode, null)) {
+      return true;
+    }
+
+    final continueAsUser = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text(AbundanceCompany.coachSignupRestrictionTitle),
+        content: const Text(AbundanceCompany.coachSignupRestrictionMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text(AbundanceCompany.coachSignupRestrictionAction),
+          ),
+        ],
+      ),
+    );
+
+    if (continueAsUser == true && mounted) {
+      setState(() => _selectedRole = 'user');
+      return true;
+    }
+    return false;
+  }
 
   Future<bool> _validateCompanyChoice() async {
     if (_continueWithoutCompany) return true;
@@ -77,6 +109,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
   }
 
   Future<void> _openEmailSignup() async {
+    if (!await _guardAbundanceCoachSignup() || !mounted) return;
     if (!await _validateCompanyChoice() || !mounted) return;
 
     Navigator.push(
@@ -102,6 +135,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
       );
       return;
     }
+    if (!await _guardAbundanceCoachSignup() || !mounted) return;
     if (!await _validateCompanyChoice() || !mounted) return;
 
     setState(() {
@@ -172,6 +206,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
       );
       return;
     }
+    if (!await _guardAbundanceCoachSignup() || !mounted) return;
     if (!await _validateCompanyChoice() || !mounted) return;
 
     setState(() {

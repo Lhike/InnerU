@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/login/check_email_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/domain/abundance_company.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
 import 'package:selfcare_projects/src/services/company_api_service.dart';
 import 'package:selfcare_projects/src/utils/responsive.dart';
@@ -36,6 +37,7 @@ class _SignupScreenState extends State<SignupScreen> {
   bool _isLoading = false;
   bool _acceptedTerms = false;
   late bool _continueWithoutCompany;
+  late String _effectiveRole;
   String? _companyCodeValidationError;
 
   @override
@@ -44,6 +46,7 @@ class _SignupScreenState extends State<SignupScreen> {
     _companyCodeController = TextEditingController(
       text: widget.initialCompanyCode.trim().toUpperCase(),
     );
+    _effectiveRole = widget.selectedRole.trim().toLowerCase();
     _continueWithoutCompany = widget.continueWithoutCompany;
     if (_continueWithoutCompany) {
       _companyCodeController.clear();
@@ -73,6 +76,38 @@ class _SignupScreenState extends State<SignupScreen> {
         normalized.startsWith('AB12') ||
         normalized.contains('ABUND12') ||
         normalized.contains('ABUNDANCE12');
+  }
+
+  Future<bool> _guardAbundanceCoachSignup() async {
+    if (_effectiveRole != 'coach' ||
+        _continueWithoutCompany ||
+        !AbundanceCompany.matches(_companyCodeController.text, null)) {
+      return true;
+    }
+
+    final continueAsUser = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text(AbundanceCompany.coachSignupRestrictionTitle),
+        content: const Text(AbundanceCompany.coachSignupRestrictionMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text(AbundanceCompany.coachSignupRestrictionAction),
+          ),
+        ],
+      ),
+    );
+
+    if (continueAsUser == true && mounted) {
+      setState(() => _effectiveRole = 'user');
+      return true;
+    }
+    return false;
   }
 
   Future<void> _handleSignup() async {
@@ -123,13 +158,18 @@ class _SignupScreenState extends State<SignupScreen> {
       }
     }
 
+    if (!await _guardAbundanceCoachSignup()) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
     final error = await AuthService().signUpUser(
       username: _usernameController.text.trim(),
       email: _emailController.text.trim(),
       password: _passwordController.text.trim(),
       number: _numberController.text.trim(),
       retypepassword: _retypepassController.text.trim(),
-      role: widget.selectedRole,
+      role: _effectiveRole,
       companyCode:
           _continueWithoutCompany ? '' : _companyCodeController.text.trim(),
       continueWithoutCompany: _continueWithoutCompany,
@@ -254,7 +294,7 @@ class _SignupScreenState extends State<SignupScreen> {
                               child: FittedBox(
                                 fit: BoxFit.scaleDown,
                                 child: Text(
-                                  "Selected role: ${widget.selectedRole == 'coach' ? 'Coach' : 'User'}",
+                                  "Selected role: ${_effectiveRole == 'coach' ? 'Coach' : 'User'}",
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w600,
                                     color: Color(0xFF245A55),
@@ -271,7 +311,7 @@ class _SignupScreenState extends State<SignupScreen> {
                         enabled: !_isLoading && !_continueWithoutCompany,
                         textCapitalization: TextCapitalization.characters,
                         decoration: InputDecoration(
-                          labelText: widget.selectedRole == 'coach'
+                          labelText: _effectiveRole == 'coach'
                               ? "Coach Company Code"
                               : "Company Code",
                         ),
