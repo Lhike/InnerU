@@ -77,6 +77,7 @@ class AbundanceTutorialController extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
+      Object? remoteError;
       try {
         if (completionSaver != null) {
           await completionSaver!(uid);
@@ -84,12 +85,22 @@ class AbundanceTutorialController extends ChangeNotifier {
           await _service.complete();
         }
       } catch (_) {
-        final preferences = await SharedPreferences.getInstance();
-        final saved = await preferences.setBool(
-          'abundance_tutorial_done_$uid',
-          true,
-        );
-        if (!saved) rethrow;
+        // Keep the local completion marker as the offline-safe fallback when
+        // the A12 completion endpoint is unavailable.
+        remoteError = Object();
+      }
+
+      // The shell checks this local marker on every login. Persist it after a
+      // successful remote completion too; previously only the error fallback
+      // wrote it, causing the tutorial to replay after every login.
+      final preferences = await SharedPreferences.getInstance();
+      final saved = await preferences.setBool(
+        'abundance_tutorial_done_$uid',
+        true,
+      );
+      if (!saved) {
+        if (remoteError != null) throw remoteError;
+        throw StateError('Unable to persist tutorial completion.');
       }
       active = false;
     } catch (cause) {

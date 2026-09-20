@@ -5,8 +5,127 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_notifications_service.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
 import 'package:selfcare_projects/src/services/profile_picture_bus.dart';
+
+/// Branded notification control shared by the A12 shell and Home header.
+///
+/// It loads the unread state from the caller-provided A12 gateway and keeps
+/// the badge in sync after the notification screen is dismissed.
+class AbundanceNotificationBell extends StatefulWidget {
+  const AbundanceNotificationBell({
+    super.key,
+    this.gateway,
+    this.onTap,
+  });
+
+  final AbundanceNotificationsGateway? gateway;
+  final Future<void> Function()? onTap;
+
+  @override
+  State<AbundanceNotificationBell> createState() =>
+      _AbundanceNotificationBellState();
+}
+
+class _AbundanceNotificationBellState extends State<AbundanceNotificationBell> {
+  late final AbundanceNotificationsGateway _gateway =
+      widget.gateway ?? A12AbundanceNotificationsGateway();
+  int _unreadCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    try {
+      final items = await _gateway.load();
+      if (!mounted) return;
+      setState(() => _unreadCount =
+          items.where((notification) => !notification.isRead).length);
+    } catch (_) {
+      // A temporarily unavailable feed should not block the rest of the app.
+    }
+  }
+
+  Future<void> _open() async {
+    await widget.onTap?.call();
+    await _refresh();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasUnread = _unreadCount > 0;
+    final countLabel = _unreadCount > 9 ? '9+' : '$_unreadCount';
+    return Semantics(
+      button: true,
+      label:
+          hasUnread ? 'Notifications, $_unreadCount unread' : 'Notifications',
+      child: InkWell(
+        key: const ValueKey('abundance-notification-bell'),
+        onTap: _open,
+        borderRadius: BorderRadius.circular(24),
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AbundanceColors.border),
+                ),
+                child: Icon(
+                  hasUnread
+                      ? Icons.notifications_active_outlined
+                      : Icons.notifications_none,
+                  color: hasUnread
+                      ? AbundanceColors.primaryGold
+                      : AbundanceColors.muted,
+                  size: 21,
+                ),
+              ),
+              if (hasUnread)
+                Positioned(
+                  key: const ValueKey('abundance-notification-badge'),
+                  top: -2,
+                  right: -2,
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 18),
+                    height: 18,
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AbundanceColors.primaryGold,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AbundanceColors.surfaceRaised,
+                        width: 2,
+                      ),
+                    ),
+                    child: Text(
+                      countLabel,
+                      style: const TextStyle(
+                        color: AbundanceColors.background,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// The persistent A12 brand bar shown above member pages in the source app.
 /// It is kept as a reusable widget so nested A12 routes do not fall back to

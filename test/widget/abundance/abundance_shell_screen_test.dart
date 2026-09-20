@@ -10,8 +10,29 @@ import 'package:selfcare_projects/src/features/abundance/screens/member/abundanc
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/abundance_mentee_dashboard_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/goals_hub_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_notifications_service.dart';
 import 'package:selfcare_projects/src/services/company_theme_service.dart';
 import 'package:selfcare_projects/src/services/app_session_service.dart';
+
+class _ShellNotificationsGateway implements AbundanceNotificationsGateway {
+  @override
+  Future<List<AbundanceNotification>> load() async => <AbundanceNotification>[
+        AbundanceNotification(
+          id: 'note-1',
+          title: 'New coaching note',
+          body: 'Your coach sent a note.',
+          createdAt: DateTime(2026, 9, 20),
+          isRead: false,
+          data: const <String, dynamic>{'coachingNoteId': 'note-1'},
+        ),
+      ];
+
+  @override
+  Future<void> markAllRead() async {}
+
+  @override
+  Future<void> markRead(String id) async {}
+}
 
 void main() {
   setUp(() {
@@ -112,6 +133,35 @@ void main() {
     await tester.pumpAndSettle();
     expect(
         find.text('Home'), findsWidgets); // the tab label itself, still visible
+  });
+
+  testWidgets('shell notification bell opens tapped coaching updates',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceShellScreen(
+        isCoach: false,
+        service: GoalsService(FakeFirebaseFirestore()),
+        uid: 'notification-user',
+        companyTheme: CompanyThemeData.standard.copyWith(
+          companyCode: 'ABU15DN',
+          companyName: 'Abundance',
+          isCompanyTheme: true,
+        ),
+        initialIndex: 2,
+        questsAccessResolverOverride: (_) async => true,
+        notificationsGatewayOverride: _ShellNotificationsGateway(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('abundance-notification-badge')),
+        findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('abundance-notification-bell')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New coaching note'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('COACHING NOTE'), findsOneWidget);
   });
 
   testWidgets('coach shell keeps the member Quests tab', (tester) async {
@@ -264,8 +314,7 @@ void main() {
     expect(find.textContaining('Life Power'), findsNothing);
   });
 
-  testWidgets(
-      'profile menu omits More without changing the selected tab',
+  testWidgets('profile menu omits More without changing the selected tab',
       (tester) async {
     final service = GoalsService(FakeFirebaseFirestore());
 

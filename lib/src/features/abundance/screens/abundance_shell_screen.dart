@@ -21,6 +21,7 @@ import 'package:selfcare_projects/src/features/abundance/services/goals_service.
 import 'package:selfcare_projects/src/features/abundance/services/abundance_api_transport.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_achievements_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_missions_service.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_notifications_service.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/abundance_company.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.dart';
@@ -56,6 +57,7 @@ class AbundanceShellScreen extends StatefulWidget {
     this.questsAccessResolverOverride,
     this.achievementsLoaderOverride,
     this.coachRoleResolverOverride,
+    this.notificationsGatewayOverride,
   });
 
   final bool isCoach;
@@ -90,6 +92,10 @@ class AbundanceShellScreen extends StatefulWidget {
   /// [A12SessionService.resolveIsCoach], never an account-specific check.
   final Future<bool?> Function()? coachRoleResolverOverride;
 
+  /// Test seam for the A12-owned notification feed. Production keeps the
+  /// default A12 gateway so notifications never fall back to InnerU storage.
+  final AbundanceNotificationsGateway? notificationsGatewayOverride;
+
   @override
   State<AbundanceShellScreen> createState() => _AbundanceShellScreenState();
 }
@@ -103,6 +109,8 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   String _appearance = 'dark';
   String? _profilePictureOverride;
   late final AbundanceTutorialController _tutorialController;
+  late final AbundanceNotificationsGateway _notificationsGateway =
+      widget.notificationsGatewayOverride ?? A12AbundanceNotificationsGateway();
 
   // Each tab body is constructed at most once, the first time it's
   // selected, then cached here and reused for the rest of the shell's
@@ -133,6 +141,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         initialCompanyTheme: widget.companyTheme,
         service: widget.service,
         missionsGateway: A12AbundanceMissionsGateway(),
+        notificationsGateway: _notificationsGateway,
         onOpenMissions: () => _onTabTapped(1),
         onOpenAwards: () => _onTabTapped(3),
         tutorialController: _tutorialController,
@@ -217,16 +226,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         );
         return;
       case 'notifications':
-        await _push(AbundanceNotificationsScreen(
-          onNotificationTap: (notification) {
-            if (notification.title.toLowerCase().contains('coaching') ||
-                notification.data?['coachingNoteId'] != null ||
-                notification.data?['actionItemId'] != null) {
-              unawaited(_push(
-                  AbundanceCoachingNoteScreen(notification: notification)));
-            }
-          },
-        ));
+        await _openNotifications();
         return;
       case 'activity_logs':
         await Navigator.of(context).pushNamed('/activityLogs');
@@ -249,6 +249,23 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
           coachUid: widget.uid,
         ));
         return;
+    }
+  }
+
+  Future<void> _openNotifications() async {
+    await _push(AbundanceNotificationsScreen(
+      gateway: _notificationsGateway,
+      onNotificationTap: _openNotification,
+    ));
+  }
+
+  void _openNotification(AbundanceNotification notification) {
+    final isCoachingUpdate =
+        notification.title.toLowerCase().contains('coaching') ||
+            notification.data?['coachingNoteId'] != null ||
+            notification.data?['actionItemId'] != null;
+    if (isCoachingUpdate) {
+      unawaited(_push(AbundanceCoachingNoteScreen(notification: notification)));
     }
   }
 
@@ -410,8 +427,8 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   }
 
   Future<void> _refreshCoachRole() async {
-    final resolver = widget.coachRoleResolverOverride ??
-        A12SessionService().resolveIsCoach;
+    final resolver =
+        widget.coachRoleResolverOverride ?? A12SessionService().resolveIsCoach;
     final resolved = await resolver();
     if (!mounted || resolved == null || resolved == _isCoach) return;
     setState(() => _isCoach = resolved);
@@ -586,22 +603,9 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         ],
       ),
       actions: [
-        InkWell(
-          borderRadius: BorderRadius.circular(24),
-          onTap: () => _push(const AbundanceNotificationsScreen()),
-          child: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: AbundanceColors.border),
-            ),
-            child: const Icon(
-              Icons.notifications_none,
-              color: AbundanceColors.muted,
-              size: 21,
-            ),
-          ),
+        AbundanceNotificationBell(
+          gateway: _notificationsGateway,
+          onTap: _openNotifications,
         ),
         const SizedBox(width: 10),
         AbundanceHeaderProfileButton(
