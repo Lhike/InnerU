@@ -55,8 +55,19 @@ class _FakeMissionsGateway implements AbundanceMissionsGateway {
   }
 }
 
-class _DateAwareMissionsGateway implements AbundanceMissionsGateway {
+class _DateAwareMissionsGateway
+    implements AbundanceMissionsGateway, AbundanceMissionCalendarState {
   final loadedDates = <DateTime>[];
+
+  @override
+  Map<DateTime, AbundanceMissionDaySummary> get daySummaries => {
+        DateTime(2026, 9, 22): AbundanceMissionDaySummary(
+          date: DateTime(2026, 9, 22),
+          completed: 0,
+          total: 1,
+          percent: 0,
+        ),
+      };
 
   Task _mission(DateTime day, String title) => Task(
         id: title,
@@ -70,14 +81,8 @@ class _DateAwareMissionsGateway implements AbundanceMissionsGateway {
   Future<List<Task>> load({DateTime? date}) async {
     final day = DateUtils.dateOnly(date ?? DateTime(2026, 9, 21));
     loadedDates.add(day);
-    return [
-      _mission(
-        day,
-        DateUtils.isSameDay(day, DateTime(2026, 9, 22))
-            ? 'Tomorrow meditation'
-            : 'Today meditation',
-      ),
-    ];
+    if (!DateUtils.isSameDay(day, DateTime(2026, 9, 22))) return const [];
+    return [_mission(day, 'Tomorrow meditation')];
   }
 
   @override
@@ -141,6 +146,21 @@ void main() {
 
     expect(find.text('Tomorrow meditation'), findsOneWidget);
     expect(gateway.loadedDates.last, DateTime(2026, 9, 22));
+  });
+
+  testWidgets('calendar shows server mission summaries for future days',
+      (tester) async {
+    final gateway = _DateAwareMissionsGateway();
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceMissionsScreen(
+        gateway: gateway,
+        initialDate: DateTime(2026, 9, 21),
+        today: DateTime(2026, 9, 21),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('0/1'), findsOneWidget);
   });
 
   testWidgets('mission calendar fits the iPhone viewport without overflow',

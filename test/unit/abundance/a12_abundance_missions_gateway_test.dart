@@ -22,6 +22,14 @@ class _Transport implements AbundanceApiTransport {
           ],
         },
       ],
+      'days': [
+        {
+          'date': '2026-09-22',
+          'completed': 1,
+          'total': 3,
+          'percent': 33,
+        },
+      ],
     };
   }
 
@@ -62,6 +70,8 @@ void main() {
     expect(tasks.single.goalType.name, 'everyday');
     expect(tasks.single.isCompleted, isTrue);
     expect(tasks.single.completionDates, isNotEmpty);
+    expect(gateway.daySummaries[DateTime(2026, 9, 22)]?.completed, 1);
+    expect(gateway.daySummaries[DateTime(2026, 9, 22)]?.total, 3);
 
     await gateway.update(tasks.single, day: selectedDay);
     expect(transport.requests,

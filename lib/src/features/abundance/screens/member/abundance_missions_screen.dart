@@ -43,6 +43,8 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
       DateUtils.dateOnly(widget.initialDate ?? DateTime.now());
   late DateTime _month = DateTime(_selected.year, _selected.month);
   List<Task> _tasks = const [];
+  Map<DateTime, AbundanceMissionDaySummary> _daySummaries =
+      const <DateTime, AbundanceMissionDaySummary>{};
   bool _loading = true;
   String? _error;
   DateTime _clockNow = DateTime.now();
@@ -80,7 +82,15 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
     });
     try {
       final tasks = await _gateway.load(date: date ?? _selected);
-      if (mounted) setState(() => _tasks = tasks);
+      final summaries = _gateway is AbundanceMissionCalendarState
+          ? (_gateway as AbundanceMissionCalendarState).daySummaries
+          : const <DateTime, AbundanceMissionDaySummary>{};
+      if (mounted) {
+        setState(() {
+          _tasks = tasks;
+          _daySummaries = summaries;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _error = 'We could not load your missions.');
     } finally {
@@ -111,17 +121,25 @@ class _AbundanceMissionsScreenState extends State<AbundanceMissionsScreen> {
     );
   }
 
-  int _missionTotalFor(DateTime day) => _tasks
-      .where((task) =>
-          task.goalType == GoalType.everyday && taskOccursOnDate(task, day))
-      .length;
+  int _missionTotalFor(DateTime day) {
+    final summary = _daySummaries[DateUtils.dateOnly(day)];
+    if (summary != null) return summary.total;
+    return _tasks
+        .where((task) =>
+            task.goalType == GoalType.everyday && taskOccursOnDate(task, day))
+        .length;
+  }
 
-  int _missionCompletedFor(DateTime day) => _tasks
-      .where((task) =>
-          task.goalType == GoalType.everyday &&
-          taskOccursOnDate(task, day) &&
-          taskHasCompletionOnDate(task, day))
-      .length;
+  int _missionCompletedFor(DateTime day) {
+    final summary = _daySummaries[DateUtils.dateOnly(day)];
+    if (summary != null) return summary.completed;
+    return _tasks
+        .where((task) =>
+            task.goalType == GoalType.everyday &&
+            taskOccursOnDate(task, day) &&
+            taskHasCompletionOnDate(task, day))
+        .length;
+  }
 
   void _moveMonth(int amount) {
     setState(() {

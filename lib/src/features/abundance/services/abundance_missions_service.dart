@@ -11,6 +11,24 @@ abstract interface class AbundanceMissionsGateway {
   Future<void> delete(String id);
 }
 
+class AbundanceMissionDaySummary {
+  const AbundanceMissionDaySummary({
+    required this.date,
+    required this.completed,
+    required this.total,
+    required this.percent,
+  });
+
+  final DateTime date;
+  final int completed;
+  final int total;
+  final int percent;
+}
+
+abstract interface class AbundanceMissionCalendarState {
+  Map<DateTime, AbundanceMissionDaySummary> get daySummaries;
+}
+
 class InnerUAbundanceMissionsGateway implements AbundanceMissionsGateway {
   InnerUAbundanceMissionsGateway({TodoTaskApiService? api})
       : _api = api ?? TodoTaskApiService.instance;
@@ -55,11 +73,17 @@ class InnerUAbundanceMissionsGateway implements AbundanceMissionsGateway {
 /// A12-owned mission gateway. The mobile API owns the mission rows and their
 /// completion history; this adapter only translates the server DTO to the
 /// existing Flutter mission model used by the shared calendar widgets.
-class A12AbundanceMissionsGateway implements AbundanceMissionsGateway {
+class A12AbundanceMissionsGateway
+    implements AbundanceMissionsGateway, AbundanceMissionCalendarState {
   A12AbundanceMissionsGateway({AbundanceApiTransport? transport})
       : _transport = transport ?? A12ApiTransport();
 
   final AbundanceApiTransport _transport;
+  Map<DateTime, AbundanceMissionDaySummary> _daySummaries =
+      const <DateTime, AbundanceMissionDaySummary>{};
+
+  @override
+  Map<DateTime, AbundanceMissionDaySummary> get daySummaries => _daySummaries;
 
   String get _token => AuthService.instance.currentSession?.token ?? '';
 
@@ -70,6 +94,20 @@ class A12AbundanceMissionsGateway implements AbundanceMissionsGateway {
       '/missions?date=$day&month=${day.substring(0, 7)}',
       token: _token,
     );
+    final rawDays = response['days'];
+    _daySummaries = rawDays is List
+        ? {
+            for (final raw in rawDays.whereType<Map>())
+              if (DateTime.tryParse(raw['date']?.toString() ?? '')
+                  case final parsed?)
+                DateUtils.dateOnly(parsed): AbundanceMissionDaySummary(
+                  date: DateUtils.dateOnly(parsed),
+                  completed: _integer(raw['completed']),
+                  total: _integer(raw['total']),
+                  percent: _integer(raw['percent']),
+                ),
+          }
+        : const <DateTime, AbundanceMissionDaySummary>{};
     final raw = response['items'];
     if (raw is! List) return const <Task>[];
     return raw
@@ -171,4 +209,9 @@ class A12AbundanceMissionsGateway implements AbundanceMissionsGateway {
 
   String _day(DateTime value) =>
       '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+}
+
+int _integer(dynamic value) {
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? 0;
 }
