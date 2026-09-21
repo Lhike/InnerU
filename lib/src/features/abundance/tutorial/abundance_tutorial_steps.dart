@@ -142,7 +142,7 @@ const _memberSteps = <AbundanceTutorialStep>[
 const _coachSteps = <AbundanceTutorialStep>[
   AbundanceTutorialStep(
     eyebrow: 'Coaching · Your students',
-    title: 'Review your council',
+    title: 'Review your students',
     description:
         'See each student’s Life Power, current quests, and today’s mission progress.',
     target: 'coach-mentees',
@@ -200,11 +200,11 @@ const _sharedSteps = <AbundanceTutorialStep>[
     route: '/profile',
   ),
   AbundanceTutorialStep(
-    eyebrow: 'Profile · Your Guild',
-    title: 'See your group and coach',
+    eyebrow: 'Profile · Your coach',
+    title: 'See your coach',
     description:
-        'This shows your Guild and coach. If you change Guilds, your coach, teammates, and Everyday Missions may also change.',
-    target: 'profile-council',
+        'This shows the coach assigned by your Abundance admin to guide your journey.',
+    target: 'profile-coach',
     route: '/profile',
   ),
   AbundanceTutorialStep(

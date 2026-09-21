@@ -85,10 +85,10 @@ void main() {
 
     expect(find.text('Coach tools'), findsOneWidget);
     expect(find.text('Students'), findsOneWidget);
-    expect(find.text('Councils'), findsOneWidget);
+    expect(find.text('Councils'), findsNothing);
     expect(find.text('Core Tasks'), findsOneWidget);
-    await tester.tap(find.text('Councils'));
-    expect(selected, 'coach_councils');
+    await tester.tap(find.text('Students'));
+    expect(selected, 'coach_students');
   });
 
   testWidgets('coach management routes render the matching InnerU data',

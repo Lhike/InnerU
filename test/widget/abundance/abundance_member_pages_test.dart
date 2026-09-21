@@ -8,10 +8,13 @@ import 'package:selfcare_projects/src/features/abundance/screens/member/abundanc
 import 'package:selfcare_projects/src/features/abundance/tutorial/abundance_tutorial_controller.dart';
 import 'package:selfcare_projects/src/features/abundance/tutorial/abundance_tutorial_steps.dart';
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_tutorial_target.dart';
+import 'package:selfcare_projects/src/features/abundance/widgets/abundance_header_profile_button.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/domain.dart'
     as a12;
 import 'package:selfcare_projects/src/features/abundance/services/abundance_achievements_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_missions_service.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_council_service.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_profile_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/todo_list.dart';
 
@@ -38,7 +41,7 @@ class _FakeMissionsGateway implements AbundanceMissionsGateway {
   ];
 
   @override
-  Future<List<Task>> load() async => tasks;
+  Future<List<Task>> load({DateTime? date}) async => tasks;
 
   @override
   Future<void> create(Task task) async => tasks.add(task);
@@ -47,10 +50,50 @@ class _FakeMissionsGateway implements AbundanceMissionsGateway {
   Future<void> delete(String id) async => tasks.removeWhere((t) => t.id == id);
 
   @override
-  Future<void> update(Task task) async {
+  Future<void> update(Task task, {DateTime? day}) async {
     if (failCompletion) throw Exception('offline');
     updatedTask = task;
   }
+}
+
+class _DateAwareMissionsGateway
+    implements AbundanceMissionsGateway, AbundanceMissionCalendarState {
+  final loadedDates = <DateTime>[];
+
+  @override
+  Map<DateTime, AbundanceMissionDaySummary> get daySummaries => {
+        DateTime(2026, 9, 22): AbundanceMissionDaySummary(
+          date: DateTime(2026, 9, 22),
+          completed: 0,
+          total: 1,
+          percent: 0,
+        ),
+      };
+
+  Task _mission(DateTime day, String title) => Task(
+        id: title,
+        title: title,
+        goalType: GoalType.everyday,
+        startDate: DateUtils.dateOnly(day),
+        dueDate: DateUtils.dateOnly(day),
+      );
+
+  @override
+  Future<List<Task>> load({DateTime? date}) async {
+    final day = DateUtils.dateOnly(date ?? DateTime(2026, 9, 21));
+    loadedDates.add(day);
+    if (!DateUtils.isSameDay(day, DateTime(2026, 9, 22))) return const [];
+    return [_mission(day, 'Tomorrow meditation')];
+  }
+
+  @override
+  Future<void> create(Task task) async {}
+
+  @override
+  Future<void> update(Task task, {DateTime? day}) async {}
+
+  @override
+  Future<void> delete(String id) async {}
 }
 
 class _FakeGoalsService extends GoalsService {
@@ -84,6 +127,41 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('We could not update that mission.'), findsOneWidget);
     semantics.dispose();
+  });
+
+  testWidgets(
+      'selecting tomorrow loads tomorrow missions before opening the checklist',
+      (tester) async {
+    final gateway = _DateAwareMissionsGateway();
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceMissionsScreen(
+        gateway: gateway,
+        initialDate: DateTime(2026, 9, 21),
+        today: DateTime(2026, 9, 22),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('22').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tomorrow meditation'), findsOneWidget);
+    expect(gateway.loadedDates.last, DateTime(2026, 9, 22));
+  });
+
+  testWidgets('calendar shows server mission summaries for future days',
+      (tester) async {
+    final gateway = _DateAwareMissionsGateway();
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceMissionsScreen(
+        gateway: gateway,
+        initialDate: DateTime(2026, 9, 21),
+        today: DateTime(2026, 9, 21),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('0/1'), findsOneWidget);
   });
 
   testWidgets('mission calendar fits the iPhone viewport without overflow',
@@ -337,6 +415,35 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('profile dropdown exposes the Abundance music toggle',
+      (tester) async {
+    bool? musicEnabled;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(
+          actions: [
+            AbundanceHeaderProfileButton(
+              initials: 'A',
+              profilePic: '',
+              musicEnabled: true,
+              onMusicChanged: (value) => musicEnabled = value,
+              onSelected: (_) {},
+            ),
+          ],
+        ),
+      ),
+    ));
+
+    await tester
+        .tap(find.byKey(const ValueKey('abundance-header-profile-menu')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Music'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('abundance-music-toggle')));
+
+    expect(musicEnabled, isFalse);
+  });
+
   testWidgets('Character selection persists through the provided repository',
       (tester) async {
     var selected = 'warrior';
@@ -370,6 +477,28 @@ void main() {
 
     expect(find.text('STUDENT'), findsOneWidget);
     expect(find.text('COACH'), findsNothing);
+  });
+
+  testWidgets('profile shows the assigned coach without council controls',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceCharacterScreen(
+        uid: 'member-1',
+        profileService: _ProfileServiceWithCoach(),
+        councilService: _CouncilServiceWithCoach(),
+        onOpenAccountSettings: _noop,
+      ),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.drag(find.byType(ListView), const Offset(0, -700));
+    await tester.pump();
+
+    expect(find.text('Your coach'), findsOneWidget);
+    expect(find.text('Coach One'), findsOneWidget);
+    expect(find.text('YOUR COUNCIL'), findsNothing);
+    expect(find.text('Join'), findsNothing);
+    expect(find.text('Change'), findsNothing);
   });
 
   testWidgets('failed character persistence rolls selection back',
@@ -479,4 +608,44 @@ void main() {
 
     expect(scrollController.offset, greaterThan(0));
   });
+}
+
+class _ProfileServiceWithCoach extends AbundanceProfileService {
+  _ProfileServiceWithCoach() : super();
+
+  @override
+  Future<AbundanceProfileSnapshot> fetchSnapshot() async {
+    return AbundanceProfileSnapshot(
+      profile: AbundanceProfile(
+        id: 'member-1',
+        email: 'member@example.com',
+        firstName: 'Member',
+        lastName: 'One',
+        headline: null,
+        bio: null,
+        timezone: 'Asia/Manila',
+        avatarUrl: null,
+        character: 'warrior',
+        joinedAt: null,
+        progression: null,
+        stats: const {},
+      ),
+      achievements: const [],
+      council: const AbundanceProfileCouncil(
+        id: 'council-1',
+        name: 'Dawn Council',
+        description: null,
+        coachName: 'Coach One',
+        memberCount: 2,
+        averageScore: 34,
+      ),
+    );
+  }
+}
+
+class _CouncilServiceWithCoach extends AbundanceCouncilService {
+  _CouncilServiceWithCoach() : super();
+
+  @override
+  Future<String?> fetchAssignedCoachName() async => 'Coach One';
 }

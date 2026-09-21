@@ -54,6 +54,12 @@ class _RecordingProfileTransport implements AbundanceApiTransport {
         'memberCount': 2,
         'averageScore': 34,
       },
+      'coach': {
+        'id': 'coach-1',
+        'firstName': 'Coach',
+        'lastName': 'One',
+        'name': 'Coach One',
+      },
     };
   }
 
@@ -82,6 +88,17 @@ class _RecordingProfileTransport implements AbundanceApiTransport {
   }
 }
 
+class _WrappedCoachNameProfileTransport extends _RecordingProfileTransport {
+  @override
+  Future<Map<String, dynamic>> getJson(String path, {String? token}) async =>
+      const {
+        'data': {
+          'profile': {'id': 'user-1'},
+          'coachName': 'Lilian Agnas',
+        },
+      };
+}
+
 void main() {
   test('loads profile, progression, council, and unlocked achievements',
       () async {
@@ -94,6 +111,7 @@ void main() {
     expect(snapshot.profile.progression?.lifePower, 35);
     expect(snapshot.profile.progression?.stats['goalsTotal'], 3);
     expect(snapshot.council?.name, 'Dawn');
+    expect(snapshot.assignedCoachName, 'Coach One');
     expect(snapshot.achievements.single.name, 'Given Freely');
     expect(snapshot.achievements.single.unlockedAt, isNotNull);
     expect(transport.requests, ['GET /profile']);
@@ -133,6 +151,16 @@ void main() {
     expect(snapshot.achievements.single.name, 'Given Freely');
     expect(snapshot.achievements.single.unlockedAt,
         DateTime.parse('2026-09-14T01:00:00Z'));
+  });
+
+  test('reads the assigned coach from wrapped coachName responses', () async {
+    final service = AbundanceProfileService(
+      transport: _WrappedCoachNameProfileTransport(),
+    );
+
+    final snapshot = await service.fetchSnapshot();
+
+    expect(snapshot.assignedCoachName, 'Lilian Agnas');
   });
 }
 

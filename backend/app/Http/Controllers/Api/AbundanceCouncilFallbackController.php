@@ -60,6 +60,7 @@ class AbundanceCouncilFallbackController extends Controller
             $payload = [
                 'company' => 'ABU15DN',
                 'users' => $users,
+                'coach' => $this->assignedCoachPayload($user),
             ];
             if ((bool) $user->is_coach) {
                 $payload['coaches'] = $entries->filter(fn (array $entry): bool => ($entry['isCoach'] ?? false) === true)->values();
@@ -234,6 +235,34 @@ class AbundanceCouncilFallbackController extends Controller
     private function isAbundanceUser(User $user): bool
     {
         return in_array(strtoupper(trim((string) ($user->company_code ?: $user->active_company_code))), ['ABU15DN'], true);
+    }
+
+    /** @return array{id: string, name: string, firstName: string, lastName: string}|null */
+    private function assignedCoachPayload(User $user): ?array
+    {
+        $coachId = CoachMentee::query()
+            ->where('mentee_id', (string) $user->id)
+            ->orderBy('id')
+            ->value('coach_id');
+        if ($coachId === null) {
+            return null;
+        }
+
+        $coach = User::query()->find($coachId);
+        if ($coach === null || ! $this->isAbundanceUser($coach)) {
+            return null;
+        }
+
+        $nameParts = preg_split('/\s+/', trim((string) $coach->name), 2) ?: [];
+        $firstName = trim((string) ($coach->first_name ?: ($nameParts[0] ?? '')));
+        $lastName = trim((string) ($coach->last_name ?: ($nameParts[1] ?? '')));
+
+        return [
+            'id' => (string) $coach->id,
+            'name' => trim($firstName.' '.$lastName),
+            'firstName' => $firstName,
+            'lastName' => $lastName,
+        ];
     }
 
     /** @return array<int, string> */

@@ -21,7 +21,7 @@ class _SetupGateway implements AbundanceMissionsGateway {
   final List<Task> tasks;
 
   @override
-  Future<List<Task>> load() async => tasks;
+  Future<List<Task>> load({DateTime? date}) async => tasks;
 
   @override
   Future<void> create(Task task) async {
@@ -30,7 +30,7 @@ class _SetupGateway implements AbundanceMissionsGateway {
   }
 
   @override
-  Future<void> update(Task task) async {
+  Future<void> update(Task task, {DateTime? day}) async {
     final index = tasks.indexWhere((item) => item.id == task.id);
     if (index >= 0) tasks[index] = task;
   }

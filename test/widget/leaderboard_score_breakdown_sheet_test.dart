@@ -197,6 +197,77 @@ void main() {
     },
   );
 
+  testWidgets('Abundance Allies renders member profile pictures',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    FlutterSecureStorage.setMockInitialValues(<String, String>{});
+    const profileUrl = 'https://cdn.example.com/avatars/cookie-milo.png';
+    const session = AppSession(
+      id: 42,
+      token: 'abundance-profile-picture-token',
+      name: 'cookie milo',
+      email: 'cookie@example.com',
+      role: 'member',
+      isCoach: false,
+    );
+    await AppSessionService.instance.setSession(session);
+    addTearDown(AppSessionService.instance.clear);
+    final previousOnError = FlutterError.onError;
+    FlutterError.onError = (details) {
+      if (details.exception is NetworkImageLoadException) return;
+      if (details.exception is FlutterError &&
+          details.exception.toString().contains('A RenderFlex overflowed')) {
+        return;
+      }
+      previousOnError?.call(details);
+    };
+    addTearDown(() => FlutterError.onError = previousOnError);
+
+    const snapshot = LeaderboardApiSnapshot(
+      companyCode: 'ABU15DN',
+      companyName: 'Abundance 12',
+      leaderboardPeriodStart: null,
+      leaderboardPeriodEnd: null,
+      entries: <LeaderboardApiCompanyEntry>[
+        LeaderboardApiCompanyEntry(
+          userId: '42',
+          name: 'cookie milo',
+          score: 33,
+          goalScore: 33,
+          coreTaskScore: 33,
+          overallScore: 33,
+          rank: 1,
+          profilePic: profileUrl,
+        ),
+      ],
+      groups: <LeaderboardApiGroup>[],
+      menteeEntries: <LeaderboardApiGroupMember>[],
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: Leaderboard(
+        appBarTitle: 'Allies',
+        debugLoader: () async => snapshot,
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final profileImage = find.byWidgetPredicate(
+      (widget) =>
+          widget is CircleAvatar &&
+          widget.backgroundImage is NetworkImage &&
+          (widget.backgroundImage! as NetworkImage).url == profileUrl,
+    );
+    expect(profileImage, findsNWidgets(2));
+
+    await tester.drag(find.byType(ListView).first, const Offset(0, -600));
+    await tester.pump();
+    expect(profileImage, findsAtLeastNWidgets(1));
+  });
+
   testWidgets('tapping score card scrolls to the current user rank', (
     tester,
   ) async {

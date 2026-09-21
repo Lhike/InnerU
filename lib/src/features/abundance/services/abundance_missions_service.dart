@@ -5,10 +5,28 @@ import 'package:selfcare_projects/src/features/abundance/services/abundance_api_
 import 'package:selfcare_projects/src/services/auth_service.dart';
 
 abstract interface class AbundanceMissionsGateway {
-  Future<List<Task>> load();
+  Future<List<Task>> load({DateTime? date});
   Future<void> create(Task task);
-  Future<void> update(Task task);
+  Future<void> update(Task task, {DateTime? day});
   Future<void> delete(String id);
+}
+
+class AbundanceMissionDaySummary {
+  const AbundanceMissionDaySummary({
+    required this.date,
+    required this.completed,
+    required this.total,
+    required this.percent,
+  });
+
+  final DateTime date;
+  final int completed;
+  final int total;
+  final int percent;
+}
+
+abstract interface class AbundanceMissionCalendarState {
+  Map<DateTime, AbundanceMissionDaySummary> get daySummaries;
 }
 
 class InnerUAbundanceMissionsGateway implements AbundanceMissionsGateway {
@@ -18,7 +36,7 @@ class InnerUAbundanceMissionsGateway implements AbundanceMissionsGateway {
   final TodoTaskApiService _api;
 
   @override
-  Future<List<Task>> load() async =>
+  Future<List<Task>> load({DateTime? date}) async =>
       (await _api.fetchTasks()).map(Task.fromJson).toList();
 
   @override
@@ -28,7 +46,7 @@ class InnerUAbundanceMissionsGateway implements AbundanceMissionsGateway {
   }
 
   @override
-  Future<void> update(Task task) async {
+  Future<void> update(Task task, {DateTime? day}) async {
     await _api.updateTask(task.id, _payload(task));
   }
 
@@ -55,22 +73,52 @@ class InnerUAbundanceMissionsGateway implements AbundanceMissionsGateway {
 /// A12-owned mission gateway. The mobile API owns the mission rows and their
 /// completion history; this adapter only translates the server DTO to the
 /// existing Flutter mission model used by the shared calendar widgets.
-class A12AbundanceMissionsGateway implements AbundanceMissionsGateway {
+class A12AbundanceMissionsGateway
+    implements AbundanceMissionsGateway, AbundanceMissionCalendarState {
   A12AbundanceMissionsGateway({AbundanceApiTransport? transport})
       : _transport = transport ?? A12ApiTransport();
 
   final AbundanceApiTransport _transport;
+  Map<DateTime, AbundanceMissionDaySummary> _daySummaries =
+      const <DateTime, AbundanceMissionDaySummary>{};
+  String? _summaryMonth;
+
+  @override
+  Map<DateTime, AbundanceMissionDaySummary> get daySummaries => _daySummaries;
 
   String get _token => AuthService.instance.currentSession?.token ?? '';
 
   @override
-  Future<List<Task>> load() async {
-    final date = DateTime.now();
-    final day = _day(date);
+  Future<List<Task>> load({DateTime? date}) async {
+    final day = _day(date ?? DateTime.now());
+    final month = day.substring(0, 7);
+    if (_summaryMonth != month) {
+      _summaryMonth = month;
+      _daySummaries = const <DateTime, AbundanceMissionDaySummary>{};
+    }
     final response = await _transport.getJson(
-      '/missions?date=$day&month=${day.substring(0, 7)}',
+      '/missions?date=$day&month=$month',
       token: _token,
     );
+    final rawDays = response['days'];
+    if (rawDays is List) {
+      final summaries = <DateTime, AbundanceMissionDaySummary>{
+        ..._daySummaries,
+      };
+      for (final raw in rawDays.whereType<Map>()) {
+        if (DateTime.tryParse(raw['date']?.toString() ?? '')
+            case final parsed?) {
+          final normalized = DateUtils.dateOnly(parsed);
+          summaries[normalized] = AbundanceMissionDaySummary(
+            date: normalized,
+            completed: _integer(raw['completed']),
+            total: _integer(raw['total']),
+            percent: _integer(raw['percent']),
+          );
+        }
+      }
+      _daySummaries = summaries;
+    }
     final raw = response['items'];
     if (raw is! List) return const <Task>[];
     return raw
@@ -96,12 +144,13 @@ class A12AbundanceMissionsGateway implements AbundanceMissionsGateway {
   }
 
   @override
-  Future<void> update(Task task) async {
-    final day = _day(DateTime.now());
+  Future<void> update(Task task, {DateTime? day}) async {
+    final selectedDay = _day(day ?? DateTime.now());
     await _transport.postJson(
         '/missions/${Uri.encodeComponent(task.id)}/completion',
         {
-          'completed': task.completionDates.any((date) => _day(date) == day),
+          'completed':
+              task.completionDates.any((date) => _day(date) == selectedDay),
         },
         token: _token);
   }
@@ -171,4 +220,9 @@ class A12AbundanceMissionsGateway implements AbundanceMissionsGateway {
 
   String _day(DateTime value) =>
       '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+}
+
+int _integer(dynamic value) {
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? 0;
 }

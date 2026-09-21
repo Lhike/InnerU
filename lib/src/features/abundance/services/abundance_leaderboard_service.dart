@@ -42,6 +42,8 @@ class AbundanceLeaderboardService {
             final name = [firstName, lastName]
                 .where((part) => part.isNotEmpty)
                 .join(' ');
+            final memberProfilePic = member['profilePic']?.toString().trim();
+            final legacyProfilePic = member['avatarUrl']?.toString().trim();
             final overall = _number(
               member['overallScore'],
               fallback: _number(member['score']),
@@ -64,7 +66,11 @@ class AbundanceLeaderboardService {
                       liveProfilePic != null &&
                       liveProfilePic.isNotEmpty
                   ? liveProfilePic
-                  : member['avatarUrl']?.toString(),
+                  : (memberProfilePic?.isNotEmpty == true
+                      ? memberProfilePic
+                      : legacyProfilePic?.isNotEmpty == true
+                          ? legacyProfilePic
+                          : null),
               teamName: member['teamName']?.toString(),
               firstCompletedTrackerAt: member['joinedAt']?.toString(),
               personalScore: _optionalNumber(goalScores['personal']),

@@ -185,7 +185,7 @@ void main() {
     expect(find.text('COACHING'), findsOneWidget);
     expect(find.text('More'), findsNothing);
     expect(find.text('Students'), findsOneWidget);
-    expect(find.text('Councils'), findsOneWidget);
+    expect(find.text('Councils'), findsNothing);
 
     await tester.pumpWidget(
       MaterialApp(

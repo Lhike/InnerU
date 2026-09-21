@@ -139,6 +139,8 @@ class AbundanceHeaderBar extends StatelessWidget
     this.onSelected,
     this.appearance = 'dark',
     this.onAppearanceChanged,
+    this.musicEnabled = true,
+    this.onMusicChanged,
   });
 
   final VoidCallback? onNotifications;
@@ -146,6 +148,8 @@ class AbundanceHeaderBar extends StatelessWidget
   final ValueChanged<String>? onSelected;
   final String appearance;
   final ValueChanged<String>? onAppearanceChanged;
+  final bool musicEnabled;
+  final ValueChanged<bool>? onMusicChanged;
 
   @override
   Size get preferredSize => const Size.fromHeight(72);
@@ -220,6 +224,8 @@ class AbundanceHeaderBar extends StatelessWidget
             email: session?.email ?? '',
             appearance: appearance,
             onAppearanceChanged: onAppearanceChanged,
+            musicEnabled: musicEnabled,
+            onMusicChanged: onMusicChanged,
             onSelected: (value) {
               if (onSelected != null) {
                 onSelected!(value);
@@ -251,6 +257,8 @@ class AbundanceHeaderProfileButton extends StatelessWidget {
     this.roleLabel = 'Student',
     this.appearance = 'dark',
     this.onAppearanceChanged,
+    this.musicEnabled = true,
+    this.onMusicChanged,
     required this.onSelected,
   });
 
@@ -261,6 +269,8 @@ class AbundanceHeaderProfileButton extends StatelessWidget {
   final String roleLabel;
   final String appearance;
   final ValueChanged<String>? onAppearanceChanged;
+  final bool musicEnabled;
+  final ValueChanged<bool>? onMusicChanged;
   final ValueChanged<String> onSelected;
 
   @override
@@ -367,6 +377,8 @@ class AbundanceHeaderProfileButton extends StatelessWidget {
                     roleLabel: roleLabel,
                     initialAppearance: appearance,
                     onAppearanceChanged: onAppearanceChanged,
+                    musicEnabled: musicEnabled,
+                    onMusicChanged: onMusicChanged,
                     onSelected: (value) {
                       Navigator.of(dialogContext).pop();
                       // Let the overlay finish its exit transition before
@@ -397,6 +409,8 @@ class _ProfileOverlayContent extends StatefulWidget {
     required this.roleLabel,
     required this.initialAppearance,
     required this.onAppearanceChanged,
+    required this.musicEnabled,
+    required this.onMusicChanged,
     required this.onSelected,
     required this.onClose,
   });
@@ -406,6 +420,8 @@ class _ProfileOverlayContent extends StatefulWidget {
   final String roleLabel;
   final String initialAppearance;
   final ValueChanged<String>? onAppearanceChanged;
+  final bool musicEnabled;
+  final ValueChanged<bool>? onMusicChanged;
   final ValueChanged<String> onSelected;
   final VoidCallback onClose;
 
@@ -416,11 +432,20 @@ class _ProfileOverlayContent extends StatefulWidget {
 class _ProfileOverlayContentState extends State<_ProfileOverlayContent> {
   static const _appearanceKey = 'abundance-appearance';
   late String _appearance = widget.initialAppearance;
+  late bool _musicEnabled = widget.musicEnabled;
 
   @override
   void initState() {
     super.initState();
     _loadAppearance();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ProfileOverlayContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.musicEnabled != widget.musicEnabled) {
+      _musicEnabled = widget.musicEnabled;
+    }
   }
 
   Future<void> _loadAppearance() async {
@@ -438,6 +463,11 @@ class _ProfileOverlayContentState extends State<_ProfileOverlayContent> {
     setState(() => _appearance = option);
     widget.onAppearanceChanged?.call(option);
     unawaited(_persistAppearance(option));
+  }
+
+  void _setMusicEnabled(bool enabled) {
+    setState(() => _musicEnabled = enabled);
+    widget.onMusicChanged?.call(enabled);
   }
 
   Future<void> _persistAppearance(String option) async {
@@ -507,7 +537,28 @@ class _ProfileOverlayContentState extends State<_ProfileOverlayContent> {
             onTap: () => widget.onSelected('notifications'),
           ),
           const _OverlayDivider(),
-          const Text('Appearance', style: _OverlayLabelStyle()),
+          Row(
+            children: [
+              const Expanded(
+                child: Text('Appearance', style: _OverlayLabelStyle()),
+              ),
+              if (widget.onMusicChanged != null) ...[
+                const Text('Music', style: _OverlayLabelStyle()),
+                const SizedBox(width: 4),
+                Switch.adaptive(
+                  key: const ValueKey('abundance-music-toggle'),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  value: _musicEnabled,
+                  activeThumbColor: AbundanceColors.primaryGold,
+                  activeTrackColor:
+                      AbundanceColors.primaryGold.withValues(alpha: .35),
+                  inactiveThumbColor: AbundanceColors.muted,
+                  inactiveTrackColor: AbundanceColors.border,
+                  onChanged: _setMusicEnabled,
+                ),
+              ],
+            ],
+          ),
           const SizedBox(height: 8),
           Row(
             children: [

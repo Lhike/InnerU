@@ -141,6 +141,35 @@ class AbundanceCouncilFallbackTest extends TestCase
             ->assertJsonMissingPath('councils');
     }
 
+    public function test_abundance_fallback_guild_includes_the_assigned_coach(): void
+    {
+        $coach = User::factory()->create([
+            'name' => 'Fallback Coach',
+            'company_code' => 'ABU15DN',
+            'company_name' => 'Abundance 12',
+            'is_coach' => true,
+            'role' => 'coach',
+        ]);
+        $student = User::factory()->create([
+            'company_code' => 'ABU15DN',
+            'company_name' => 'Abundance 12',
+        ]);
+        CoachMentee::create([
+            'coach_id' => (string) $coach->id,
+            'mentee_id' => (string) $student->id,
+            'mentee_name' => $student->name,
+            'mentee_email' => $student->email,
+            'team_name' => 'Abundance',
+        ]);
+
+        Sanctum::actingAs($student);
+
+        $this->getJson('/api/abundance/guild')->assertOk()
+            ->assertJsonPath('coach.id', (string) $coach->id)
+            ->assertJsonPath('coach.name', 'Fallback Coach')
+            ->assertJsonMissingPath('councils');
+    }
+
     public function test_join_and_leave_update_the_coach_group_membership(): void
     {
         $coach = User::factory()->create([

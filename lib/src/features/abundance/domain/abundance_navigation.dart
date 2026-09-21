@@ -73,14 +73,7 @@ const List<AbundanceDestination> _coachDestinations = <AbundanceDestination>[
   AbundanceDestination(
     key: 'coach_students',
     label: 'Students',
-    icon: Icons.school_outlined,
-    kind: AbundanceDestinationKind.overflow,
-    coachOnly: true,
-  ),
-  AbundanceDestination(
-    key: 'coach_councils',
-    label: 'Councils',
-    icon: Icons.diversity_3_outlined,
+    icon: Icons.groups_outlined,
     kind: AbundanceDestinationKind.overflow,
     coachOnly: true,
   ),
@@ -94,7 +87,7 @@ const List<AbundanceDestination> _coachDestinations = <AbundanceDestination>[
   AbundanceDestination(
     key: 'coach_quests',
     label: 'Quest List',
-    icon: Icons.flag_outlined,
+    icon: Icons.track_changes,
     kind: AbundanceDestinationKind.overflow,
     coachOnly: true,
   ),

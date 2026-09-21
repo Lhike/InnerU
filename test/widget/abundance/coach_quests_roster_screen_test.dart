@@ -4,6 +4,7 @@ import 'package:selfcare_projects/src/features/abundance/domain/domain.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/coach/coach_quests_roster_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/goal_detail_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
+import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 
 class _FakeGoalsService extends GoalsService {
   _FakeGoalsService(this._roster) : super(null);
@@ -163,6 +164,41 @@ void main() {
 
     expect(find.text('Maychell Alcorin'), findsNothing);
     expect(find.text('Jamie Rivera'), findsOneWidget);
+  });
+
+  testWidgets('quest filters use the Abundance navy and gold treatment',
+      (tester) async {
+    final service = _FakeGoalsService(const [
+      CoachMenteeGoals(
+          menteeId: '1', menteeName: 'Maychell Alcorin', goals: []),
+    ]);
+
+    await tester.pumpWidget(MaterialApp(
+      home: CoachQuestsRosterScreen(service: service, coachUid: 'coach1'),
+    ));
+    await tester.pumpAndSettle();
+
+    final categoryField = tester.widget<DropdownButtonFormField<GoalCategory?>>(
+      find.byType(DropdownButtonFormField<GoalCategory?>),
+    );
+    expect(categoryField.decoration.labelText, isNull);
+    expect(categoryField.decoration.filled, isTrue);
+    expect(categoryField.decoration.fillColor, AbundanceColors.surfaceRaised);
+    expect(categoryField.decoration.enabledBorder?.borderSide.color,
+        AbundanceColors.primaryGold);
+    expect(find.text('All categories'), findsOneWidget);
+
+    final minimumScoreField = tester.widget<TextField>(find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.decoration?.hintText == 'Minimum score',
+    ));
+    expect(minimumScoreField.decoration?.labelText, isNull);
+    expect(minimumScoreField.decoration?.filled, isTrue);
+    expect(
+        minimumScoreField.decoration?.fillColor, AbundanceColors.surfaceRaised);
+    expect(minimumScoreField.decoration?.enabledBorder?.borderSide.color,
+        AbundanceColors.primaryGold);
+    expect(minimumScoreField.style?.color, AbundanceColors.foreground);
   });
 
   testWidgets(

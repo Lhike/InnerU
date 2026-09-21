@@ -2856,6 +2856,8 @@ class _TopAlly extends StatelessWidget {
     final initial = entry.name.trim().isEmpty
         ? '?'
         : entry.name.trim().substring(0, 1).toUpperCase();
+    final profilePic = entry.profilePic?.trim();
+    final hasProfilePic = profilePic?.isNotEmpty == true;
     return Column(
       children: [
         SizedBox(
@@ -2892,8 +2894,13 @@ class _TopAlly extends StatelessWidget {
               radius: first ? 22 : 20,
               backgroundColor: Colors.black26,
               foregroundColor: ink,
-              child: Text(initial,
-                  style: const TextStyle(fontSize: 18, fontFamily: 'Georgia')),
+              backgroundImage:
+                  hasProfilePic ? NetworkImage(profilePic!) : null,
+              child: hasProfilePic
+                  ? null
+                  : Text(initial,
+                      style: const TextStyle(
+                          fontSize: 18, fontFamily: 'Georgia')),
             ),
           ),
         ),
@@ -3046,6 +3053,8 @@ class _AllyRow extends StatelessWidget {
     );
     final level = entry.level ?? fallbackProgression.level;
     final levelName = entry.levelName ?? fallbackProgression.name;
+    final profilePic = entry.profilePic?.trim();
+    final hasProfilePic = profilePic?.isNotEmpty == true;
     final rankRing = switch (entry.leaderboardRank) {
       1 => const Color(0xFFF2BD3F),
       2 => const Color(0xFFC3CBD8),
@@ -3093,12 +3102,17 @@ class _AllyRow extends StatelessWidget {
                 radius: 21,
                 backgroundColor: Colors.black26,
                 foregroundColor: ink,
-                child: Text(
-                  entry.name.trim().isEmpty
-                      ? '?'
-                      : entry.name.trim().substring(0, 1).toUpperCase(),
-                  style: const TextStyle(fontSize: 18, fontFamily: 'Georgia'),
-                ),
+                backgroundImage:
+                    hasProfilePic ? NetworkImage(profilePic!) : null,
+                child: hasProfilePic
+                    ? null
+                    : Text(
+                        entry.name.trim().isEmpty
+                            ? '?'
+                            : entry.name.trim().substring(0, 1).toUpperCase(),
+                        style: const TextStyle(
+                            fontSize: 18, fontFamily: 'Georgia'),
+                      ),
               ),
               const SizedBox(width: 9),
               Expanded(

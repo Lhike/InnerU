@@ -5,6 +5,7 @@ import 'package:selfcare_projects/src/features/abundance/theme/abundance_typogra
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_status_view.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_coach_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_notifications_service.dart';
+import 'package:selfcare_projects/src/services/api_client.dart';
 
 class AbundanceCoachingNoteScreen extends StatelessWidget {
   const AbundanceCoachingNoteScreen({
@@ -20,7 +21,19 @@ class AbundanceCoachingNoteScreen extends StatelessWidget {
 
     final noteId = notification.data?['coachingNoteId']?.toString();
     if (noteId != null && noteId.isNotEmpty) {
-      final note = await service.fetchMyCoachingNote(noteId);
+      Map<String, dynamic> note;
+      try {
+        note = await service.fetchMyCoachingNote(noteId);
+      } catch (_) {
+        // Older A12 deployments may not expose the detail route yet. The
+        // student-scoped collection is still authorized by A12, so it is a
+        // safe compatibility fallback for an existing linked note.
+        final notes = await service.fetchMyCoachingNotes();
+        note = notes
+                .where((item) => item['id']?.toString() == noteId)
+                .firstOrNull ??
+            const <String, dynamic>{};
+      }
       return {
         'notes': note.isEmpty ? const <Map<String, dynamic>>[] : [note],
         'actions': const <Map<String, dynamic>>[],
@@ -63,8 +76,14 @@ class AbundanceCoachingNoteScreen extends StatelessWidget {
               return const AbundanceStatusView.loading();
             }
             if (snapshot.hasError) {
-              return const AbundanceStatusView.empty(
-                message: 'This coaching update could not be loaded.',
+              final error = snapshot.error;
+              final message = error is ApiException
+                  ? error.message
+                  : error is ApiTimeoutException
+                      ? error.message
+                      : 'This coaching update could not be loaded.';
+              return AbundanceStatusView.empty(
+                message: message,
                 icon: Icons.error_outline,
               );
             }

@@ -72,6 +72,8 @@ class AbundanceMenteeDashboardScreen extends StatefulWidget {
     this.tutorialController,
     this.onReplayTutorial,
     this.notificationsGateway,
+    this.musicEnabled = true,
+    this.onMusicChanged,
   });
 
   final CompanyThemeData? initialCompanyTheme;
@@ -82,6 +84,8 @@ class AbundanceMenteeDashboardScreen extends StatefulWidget {
   final AbundanceTutorialController? tutorialController;
   final VoidCallback? onReplayTutorial;
   final AbundanceNotificationsGateway? notificationsGateway;
+  final bool musicEnabled;
+  final ValueChanged<bool>? onMusicChanged;
 
   @override
   State<AbundanceMenteeDashboardScreen> createState() =>
@@ -800,6 +804,8 @@ class _AbundanceMenteeDashboardScreenState
                   profilePic: data.profilePic,
                   displayName: data.displayName,
                   email: AuthService.instance.currentSession?.email ?? '',
+                  musicEnabled: widget.musicEnabled,
+                  onMusicChanged: widget.onMusicChanged,
                   onSelected: _onHeaderMenuSelected,
                 ),
               ],

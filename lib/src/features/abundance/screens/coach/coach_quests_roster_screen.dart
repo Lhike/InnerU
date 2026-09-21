@@ -7,6 +7,10 @@ import 'package:selfcare_projects/src/features/abundance/screens/mentee/goal_det
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 
+const _questFilterBackground = AbundanceColors.surfaceRaised;
+const _questFilterForeground = AbundanceColors.foreground;
+const _questFilterBorder = AbundanceColors.primaryGold;
+
 /// Read-only: every mentee this coach is assigned, with their quests,
 /// mirroring `A12-Tracker`'s `coach/goals` page — one card per mentee,
 /// grouped, with a "Quest Score" summary and each quest linking out to
@@ -261,21 +265,35 @@ class _RosterHeader extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: DropdownButtonFormField<GoalCategory?>(
                 initialValue: category,
-                dropdownColor: AbundanceColors.surfaceRaised,
-                decoration: const InputDecoration(labelText: 'Category'),
+                dropdownColor: _questFilterBackground,
+                icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                iconEnabledColor: _questFilterBorder,
+                style: const TextStyle(
+                  color: _questFilterForeground,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+                decoration: _questFilterDecoration(),
                 items: [
                   const DropdownMenuItem<GoalCategory?>(
                     value: null,
-                    child: Text('All categories'),
+                    child: Text(
+                      'All categories',
+                      style: TextStyle(color: _questFilterForeground),
+                    ),
                   ),
                   ...GoalCategory.values.map(
                     (value) => DropdownMenuItem<GoalCategory?>(
                       value: value,
-                      child: Text(value.label),
+                      child: Text(
+                        value.label,
+                        style: const TextStyle(color: _questFilterForeground),
+                      ),
                     ),
                   ),
                 ],
@@ -288,16 +306,49 @@ class _RosterHeader extends StatelessWidget {
                 controller: minimumScoreController,
                 keyboardType: TextInputType.number,
                 onChanged: onMinimumScoreChanged,
-                style: const TextStyle(color: AbundanceColors.foreground),
-                decoration: const InputDecoration(
-                  labelText: 'Minimum score',
-                  hintText: '0–100',
+                style: const TextStyle(
+                  color: _questFilterForeground,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+                decoration: _questFilterDecoration(
+                  hintText: 'Minimum score',
+                  hintStyle: const TextStyle(color: _questFilterForeground),
                 ),
               ),
             ),
           ],
         ),
       ],
+    );
+  }
+
+  InputDecoration _questFilterDecoration({
+    String? hintText,
+    TextStyle? hintStyle,
+  }) {
+    final border = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: _questFilterBorder),
+    );
+    final focusedBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: const BorderSide(color: _questFilterBorder, width: 1.6),
+    );
+
+    return InputDecoration(
+      isDense: true,
+      filled: true,
+      fillColor: _questFilterBackground,
+      hintText: hintText,
+      hintStyle: hintStyle,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 13,
+      ),
+      border: border,
+      enabledBorder: border,
+      focusedBorder: focusedBorder,
     );
   }
 }
