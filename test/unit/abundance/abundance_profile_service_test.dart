@@ -54,6 +54,12 @@ class _RecordingProfileTransport implements AbundanceApiTransport {
         'memberCount': 2,
         'averageScore': 34,
       },
+      'coach': {
+        'id': 'coach-1',
+        'firstName': 'Coach',
+        'lastName': 'One',
+        'name': 'Coach One',
+      },
     };
   }
 
@@ -94,6 +100,7 @@ void main() {
     expect(snapshot.profile.progression?.lifePower, 35);
     expect(snapshot.profile.progression?.stats['goalsTotal'], 3);
     expect(snapshot.council?.name, 'Dawn');
+    expect(snapshot.assignedCoachName, 'Coach One');
     expect(snapshot.achievements.single.name, 'Given Freely');
     expect(snapshot.achievements.single.unlockedAt, isNotNull);
     expect(transport.requests, ['GET /profile']);

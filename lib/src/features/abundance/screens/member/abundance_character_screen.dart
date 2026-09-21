@@ -155,6 +155,8 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
           profile: snapshot.profile,
           achievements: achievements,
           council: council,
+          assignedCoachName:
+              snapshot.assignedCoachName ?? _snapshot?.assignedCoachName,
         );
         _profileLoading = false;
         if (snapshot.profile.character != null &&
@@ -163,6 +165,9 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
         }
         if (snapshot.council != null) {
           _coachName = snapshot.council!.coachName;
+        }
+        if (snapshot.assignedCoachName?.trim().isNotEmpty == true) {
+          _coachName = snapshot.assignedCoachName;
         }
       });
     } catch (error) {
@@ -394,7 +399,9 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
                 name: 'profile-coach',
                 controller: widget.tutorialController,
                 child: _CoachCard(
-                  coachName: _coachName ?? _snapshot?.council?.coachName,
+                  coachName: _coachName ??
+                      _snapshot?.assignedCoachName ??
+                      _snapshot?.council?.coachName,
                 ),
               ),
               const SizedBox(height: 18),

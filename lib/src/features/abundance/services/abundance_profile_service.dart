@@ -88,11 +88,13 @@ class AbundanceProfileSnapshot {
     required this.profile,
     required this.achievements,
     required this.council,
+    this.assignedCoachName,
   });
 
   final AbundanceProfile profile;
   final List<AbundanceProfileAchievement> achievements;
   final AbundanceProfileCouncil? council;
+  final String? assignedCoachName;
 }
 
 class AbundanceProfileService {
@@ -125,10 +127,19 @@ class AbundanceProfileService {
           profileMap['currentCouncil'] ??
           profileMap['current_council'],
     );
+    final assignedCoachName = _assignedCoachName(
+      response['coach'] ??
+          response['assignedCoach'] ??
+          response['assigned_coach'] ??
+          profileMap['coach'] ??
+          profileMap['assignedCoach'] ??
+          profileMap['assigned_coach'],
+    );
     return AbundanceProfileSnapshot(
       profile: profile,
       achievements: achievements,
       council: council,
+      assignedCoachName: assignedCoachName,
     );
   }
 
@@ -194,6 +205,17 @@ class AbundanceProfileService {
       progression: progression,
       stats: stats,
     );
+  }
+
+  String? _assignedCoachName(dynamic raw) {
+    if (raw is String) return _nullableString(raw);
+    final json = _map(raw);
+    if (json == null) return null;
+    final direct = _nullableString(json['name']);
+    if (direct != null) return direct;
+    final first = json['firstName'] ?? json['first_name'] ?? '';
+    final last = json['lastName'] ?? json['last_name'] ?? '';
+    return _nullableString('$first $last');
   }
 
   List<AbundanceProfileAchievement> _achievements(dynamic raw) {
