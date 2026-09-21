@@ -58,6 +58,55 @@ class _Transport implements AbundanceApiTransport {
   }
 }
 
+class _ChangingCalendarTransport implements AbundanceApiTransport {
+  final requests = <String>[];
+
+  @override
+  Future<Map<String, dynamic>> getJson(String path, {String? token}) async {
+    requests.add('GET $path');
+    final selectedDay =
+        path.contains('date=2026-09-22') ? '2026-09-22' : '2026-09-21';
+    return {
+      'items': [
+        {
+          'taskId': 'mission-7',
+          'name': 'Meditation',
+          'completed': false,
+        },
+      ],
+      'days': selectedDay == '2026-09-21'
+          ? [
+              {'date': '2026-09-21', 'completed': 0, 'total': 1},
+              {'date': '2026-09-22', 'completed': 0, 'total': 1},
+              {'date': '2026-09-23', 'completed': 0, 'total': 1},
+            ]
+          : [
+              {'date': '2026-09-22', 'completed': 0, 'total': 1},
+            ],
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> postJson(
+    String path,
+    Map<String, dynamic> body, {
+    String? token,
+  }) async =>
+      <String, dynamic>{};
+
+  @override
+  Future<Map<String, dynamic>> patchJson(
+    String path,
+    Map<String, dynamic> body, {
+    String? token,
+  }) async =>
+      <String, dynamic>{};
+
+  @override
+  Future<Map<String, dynamic>> deleteJson(String path, {String? token}) async =>
+      <String, dynamic>{};
+}
+
 void main() {
   test('A12 mission gateway reads and completes source records', () async {
     final transport = _Transport();
@@ -87,5 +136,19 @@ void main() {
     await gateway.delete('mission-7');
 
     expect(transport.requests, contains('DELETE /missions/mission-7'));
+  });
+
+  test('A12 mission gateway keeps future summaries when selecting the next day',
+      () async {
+    final gateway = A12AbundanceMissionsGateway(
+      transport: _ChangingCalendarTransport(),
+    );
+
+    await gateway.load(date: DateTime(2026, 9, 21));
+    expect(gateway.daySummaries[DateTime(2026, 9, 23)]?.total, 1);
+
+    await gateway.load(date: DateTime(2026, 9, 22));
+
+    expect(gateway.daySummaries[DateTime(2026, 9, 23)]?.total, 1);
   });
 }

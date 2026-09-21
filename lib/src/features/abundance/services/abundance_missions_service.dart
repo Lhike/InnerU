@@ -81,6 +81,7 @@ class A12AbundanceMissionsGateway
   final AbundanceApiTransport _transport;
   Map<DateTime, AbundanceMissionDaySummary> _daySummaries =
       const <DateTime, AbundanceMissionDaySummary>{};
+  String? _summaryMonth;
 
   @override
   Map<DateTime, AbundanceMissionDaySummary> get daySummaries => _daySummaries;
@@ -90,24 +91,34 @@ class A12AbundanceMissionsGateway
   @override
   Future<List<Task>> load({DateTime? date}) async {
     final day = _day(date ?? DateTime.now());
+    final month = day.substring(0, 7);
+    if (_summaryMonth != month) {
+      _summaryMonth = month;
+      _daySummaries = const <DateTime, AbundanceMissionDaySummary>{};
+    }
     final response = await _transport.getJson(
-      '/missions?date=$day&month=${day.substring(0, 7)}',
+      '/missions?date=$day&month=$month',
       token: _token,
     );
     final rawDays = response['days'];
-    _daySummaries = rawDays is List
-        ? {
-            for (final raw in rawDays.whereType<Map>())
-              if (DateTime.tryParse(raw['date']?.toString() ?? '')
-                  case final parsed?)
-                DateUtils.dateOnly(parsed): AbundanceMissionDaySummary(
-                  date: DateUtils.dateOnly(parsed),
-                  completed: _integer(raw['completed']),
-                  total: _integer(raw['total']),
-                  percent: _integer(raw['percent']),
-                ),
-          }
-        : const <DateTime, AbundanceMissionDaySummary>{};
+    if (rawDays is List) {
+      final summaries = <DateTime, AbundanceMissionDaySummary>{
+        ..._daySummaries,
+      };
+      for (final raw in rawDays.whereType<Map>()) {
+        if (DateTime.tryParse(raw['date']?.toString() ?? '')
+            case final parsed?) {
+          final normalized = DateUtils.dateOnly(parsed);
+          summaries[normalized] = AbundanceMissionDaySummary(
+            date: normalized,
+            completed: _integer(raw['completed']),
+            total: _integer(raw['total']),
+            percent: _integer(raw['percent']),
+          );
+        }
+      }
+      _daySummaries = summaries;
+    }
     final raw = response['items'];
     if (raw is! List) return const <Task>[];
     return raw
@@ -138,8 +149,8 @@ class A12AbundanceMissionsGateway
     await _transport.postJson(
         '/missions/${Uri.encodeComponent(task.id)}/completion',
         {
-          'completed': task.completionDates
-              .any((date) => _day(date) == selectedDay),
+          'completed':
+              task.completionDates.any((date) => _day(date) == selectedDay),
         },
         token: _token);
   }
