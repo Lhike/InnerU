@@ -8,6 +8,7 @@ import 'package:selfcare_projects/src/features/abundance/screens/member/abundanc
 import 'package:selfcare_projects/src/features/abundance/tutorial/abundance_tutorial_controller.dart';
 import 'package:selfcare_projects/src/features/abundance/tutorial/abundance_tutorial_steps.dart';
 import 'package:selfcare_projects/src/features/abundance/widgets/abundance_tutorial_target.dart';
+import 'package:selfcare_projects/src/features/abundance/widgets/abundance_header_profile_button.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/domain.dart'
     as a12;
 import 'package:selfcare_projects/src/features/abundance/services/abundance_achievements_service.dart';
@@ -412,6 +413,35 @@ void main() {
     await tester.pump();
     expect(find.text('Log out'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('profile dropdown exposes the Abundance music toggle',
+      (tester) async {
+    bool? musicEnabled;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(
+          actions: [
+            AbundanceHeaderProfileButton(
+              initials: 'A',
+              profilePic: '',
+              musicEnabled: true,
+              onMusicChanged: (value) => musicEnabled = value,
+              onSelected: (_) {},
+            ),
+          ],
+        ),
+      ),
+    ));
+
+    await tester
+        .tap(find.byKey(const ValueKey('abundance-header-profile-menu')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Music'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('abundance-music-toggle')));
+
+    expect(musicEnabled, isFalse);
   });
 
   testWidgets('Character selection persists through the provided repository',

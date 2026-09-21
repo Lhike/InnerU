@@ -94,9 +94,21 @@ class AbundanceCouncilService {
   /// server-owned.
   Future<String?> fetchAssignedCoachName() async {
     final response = await _transport.getJson('/guild');
-    final raw = response['coach'] ??
-        response['assignedCoach'] ??
-        response['assigned_coach'];
+    final payload = response['data'] is Map
+        ? Map<String, dynamic>.from(response['data'] as Map)
+        : response;
+    final guild = payload['guild'] is Map
+        ? Map<String, dynamic>.from(payload['guild'] as Map)
+        : const <String, dynamic>{};
+    final raw = payload['coach'] ??
+        payload['assignedCoach'] ??
+        payload['assigned_coach'] ??
+        payload['coachName'] ??
+        payload['assignedCoachName'] ??
+        payload['assigned_coach_name'] ??
+        guild['coach'] ??
+        guild['coachName'] ??
+        guild['assignedCoachName'];
     if (raw is String) {
       final name = raw.trim();
       return name.isEmpty ? null : name;

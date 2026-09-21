@@ -22,6 +22,7 @@ import 'package:selfcare_projects/src/features/abundance/services/abundance_api_
 import 'package:selfcare_projects/src/features/abundance/services/abundance_achievements_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_missions_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_notifications_service.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_music_controller.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/abundance_company.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.dart';
@@ -58,6 +59,7 @@ class AbundanceShellScreen extends StatefulWidget {
     this.achievementsLoaderOverride,
     this.coachRoleResolverOverride,
     this.notificationsGatewayOverride,
+    this.musicControllerOverride,
   });
 
   final bool isCoach;
@@ -95,6 +97,7 @@ class AbundanceShellScreen extends StatefulWidget {
   /// Test seam for the A12-owned notification feed. Production keeps the
   /// default A12 gateway so notifications never fall back to InnerU storage.
   final AbundanceNotificationsGateway? notificationsGatewayOverride;
+  final AbundanceMusicControllerApi? musicControllerOverride;
 
   @override
   State<AbundanceShellScreen> createState() => _AbundanceShellScreenState();
@@ -106,6 +109,8 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   // widget.initialIndex (defaults to Home) in initState below.
   late int _index;
   late bool _isCoach;
+  late final AbundanceMusicControllerApi _musicController;
+  bool _musicEnabled = true;
   String _appearance = 'dark';
   String? _profilePictureOverride;
   late final AbundanceTutorialController _tutorialController;
@@ -146,6 +151,8 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
         onOpenAwards: () => _onTabTapped(3),
         tutorialController: _tutorialController,
         onReplayTutorial: _startTutorial,
+        musicEnabled: _musicEnabled,
+        onMusicChanged: (value) => unawaited(_setMusicEnabled(value)),
       );
 
   Widget _tabBodyFor(int index) {
@@ -192,6 +199,8 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
           onOpenAchievements: () => _onTabTapped(3),
           appearance: _appearance,
           onAppearanceChanged: (value) => unawaited(_setAppearance(value)),
+          musicEnabled: _musicEnabled,
+          onMusicChanged: (value) => unawaited(_setMusicEnabled(value)),
           onSignOut: _confirmSignOut,
           onReplayTutorial: () => unawaited(_openDestination('tutorial')),
           goalsService: widget.service,
@@ -219,6 +228,8 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
             appearance: _appearance,
             isCoach: _isCoach,
             onAppearanceChanged: (value) => unawaited(_setAppearance(value)),
+            musicEnabled: _musicEnabled,
+            onMusicChanged: (value) => unawaited(_setMusicEnabled(value)),
             onSignOut: _confirmSignOut,
             onReplayTutorial: () => unawaited(_openDestination('tutorial')),
             goalsService: widget.service,
@@ -409,6 +420,8 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   void initState() {
     super.initState();
     _isCoach = widget.isCoach;
+    _musicController =
+        widget.musicControllerOverride ?? AbundanceMusicController();
     _tutorialController = AbundanceTutorialController(
       uid: widget.uid,
       displayName: AuthService.instance.currentSession?.name,
@@ -422,6 +435,12 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
     _index = widget.initialIndex.clamp(0, 5);
     _ensureBuilt(_index);
     _loadAppearance();
+    if (AbundanceCompany.matches(
+      widget.companyTheme.companyCode,
+      widget.companyTheme.companyName,
+    )) {
+      unawaited(_initializeMusic());
+    }
     unawaited(_refreshCoachRole());
     WidgetsBinding.instance.addPostFrameCallback((_) => _showFirstRunGuide());
   }
@@ -440,7 +459,26 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       ..removeListener(_onTutorialChanged)
       ..dispose();
     ProfilePictureBus.latestUrl.removeListener(_onProfilePictureBusUpdate);
+    unawaited(_musicController.dispose());
     super.dispose();
+  }
+
+  Future<void> _initializeMusic() async {
+    await _musicController.initialize();
+    if (!mounted) return;
+    setState(() => _musicEnabled = _musicController.isEnabled);
+  }
+
+  Future<void> _setMusicEnabled(bool enabled) async {
+    setState(() {
+      _musicEnabled = enabled;
+      for (final index in const [0, 5]) {
+        if (_visited.contains(index)) _builtTabs[index] = _tabBodyFor(index);
+      }
+    });
+    await _musicController.setEnabled(enabled);
+    if (!mounted) return;
+    setState(() => _musicEnabled = _musicController.isEnabled);
   }
 
   void _onTutorialChanged() {
@@ -618,6 +656,8 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
           roleLabel: _isCoach ? 'Coach' : 'Student',
           appearance: _appearance,
           onAppearanceChanged: (value) => unawaited(_setAppearance(value)),
+          musicEnabled: _musicEnabled,
+          onMusicChanged: (value) => unawaited(_setMusicEnabled(value)),
           onSelected: (value) {
             if (value == 'more') {
               _showMore();

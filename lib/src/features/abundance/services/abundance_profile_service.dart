@@ -105,35 +105,43 @@ class AbundanceProfileService {
 
   Future<AbundanceProfileSnapshot> fetchSnapshot() async {
     final response = await _transport.getJson('/profile');
-    final profileMap = _map(response['profile']) ?? response;
+    final payload = _map(response['data']) ?? response;
+    final profileMap =
+        _map(payload['profile']) ?? _map(payload['user']) ?? payload;
     final profile = _profile(profileMap);
     final achievements = _achievements(
-      response['achievements'] ??
-          response['earnedAchievements'] ??
-          response['unlockedAchievements'] ??
-          response['badges'] ??
+      payload['achievements'] ??
+          payload['earnedAchievements'] ??
+          payload['unlockedAchievements'] ??
+          payload['badges'] ??
           profileMap['achievements'] ??
           profileMap['earnedAchievements'] ??
           profileMap['unlockedAchievements'] ??
           profileMap['badges'],
     );
     final council = _council(
-      response['guild'] ??
-          response['council'] ??
-          response['currentCouncil'] ??
-          response['current_council'] ??
+      payload['guild'] ??
+          payload['council'] ??
+          payload['currentCouncil'] ??
+          payload['current_council'] ??
           profileMap['guild'] ??
           profileMap['council'] ??
           profileMap['currentCouncil'] ??
           profileMap['current_council'],
     );
     final assignedCoachName = _assignedCoachName(
-      response['coach'] ??
-          response['assignedCoach'] ??
-          response['assigned_coach'] ??
+      payload['coach'] ??
+          payload['assignedCoach'] ??
+          payload['assigned_coach'] ??
+          payload['coachName'] ??
+          payload['assignedCoachName'] ??
+          payload['assigned_coach_name'] ??
           profileMap['coach'] ??
           profileMap['assignedCoach'] ??
-          profileMap['assigned_coach'],
+          profileMap['assigned_coach'] ??
+          profileMap['coachName'] ??
+          profileMap['assignedCoachName'] ??
+          profileMap['assigned_coach_name'],
     );
     return AbundanceProfileSnapshot(
       profile: profile,
@@ -213,6 +221,16 @@ class AbundanceProfileService {
     if (json == null) return null;
     final direct = _nullableString(json['name']);
     if (direct != null) return direct;
+    final coachName = _nullableString(
+      json['coachName'] ??
+          json['assignedCoachName'] ??
+          json['assigned_coach_name'],
+    );
+    if (coachName != null) return coachName;
+    final nested = _assignedCoachName(
+      json['coach'] ?? json['assignedCoach'] ?? json['assigned_coach'],
+    );
+    if (nested != null) return nested;
     final first = json['firstName'] ?? json['first_name'] ?? '';
     final last = json['lastName'] ?? json['last_name'] ?? '';
     return _nullableString('$first $last');

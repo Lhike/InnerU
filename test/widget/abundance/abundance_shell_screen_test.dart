@@ -11,6 +11,7 @@ import 'package:selfcare_projects/src/features/abundance/screens/mentee/abundanc
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/goals_hub_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
 import 'package:selfcare_projects/src/features/abundance/services/abundance_notifications_service.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_music_controller.dart';
 import 'package:selfcare_projects/src/services/company_theme_service.dart';
 import 'package:selfcare_projects/src/services/app_session_service.dart';
 
@@ -32,6 +33,30 @@ class _ShellNotificationsGateway implements AbundanceNotificationsGateway {
 
   @override
   Future<void> markRead(String id) async {}
+}
+
+class _ShellMusicController implements AbundanceMusicControllerApi {
+  bool enabled = true;
+  int initializeCount = 0;
+  int disposeCount = 0;
+
+  @override
+  bool get isEnabled => enabled;
+
+  @override
+  Future<void> initialize() async {
+    initializeCount++;
+  }
+
+  @override
+  Future<void> setEnabled(bool value) async {
+    enabled = value;
+  }
+
+  @override
+  Future<void> dispose() async {
+    disposeCount++;
+  }
 }
 
 void main() {
@@ -133,6 +158,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(
         find.text('Home'), findsWidgets); // the tab label itself, still visible
+  });
+
+  testWidgets('starts and disposes Abundance music with the shell',
+      (tester) async {
+    final music = _ShellMusicController();
+    await tester.pumpWidget(MaterialApp(
+      home: AbundanceShellScreen(
+        isCoach: false,
+        service: GoalsService(FakeFirebaseFirestore()),
+        uid: 'music-user',
+        companyTheme: CompanyThemeData.standard.copyWith(
+          companyCode: 'ABU15DN',
+          companyName: 'Abundance',
+          isCompanyTheme: true,
+        ),
+        initialIndex: 2,
+        questsAccessResolverOverride: (_) async => true,
+        musicControllerOverride: music,
+      ),
+    ));
+    await tester.pump();
+
+    expect(music.initializeCount, 1);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump();
+
+    expect(music.disposeCount, 1);
   });
 
   testWidgets('shell notification bell opens tapped coaching updates',

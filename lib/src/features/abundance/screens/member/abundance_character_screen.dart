@@ -32,6 +32,8 @@ class AbundanceCharacterScreen extends StatefulWidget {
     required this.onOpenAccountSettings,
     this.onOpenAchievements,
     this.onAppearanceChanged,
+    this.musicEnabled = true,
+    this.onMusicChanged,
     this.onSignOut,
     this.onReplayTutorial,
     this.appearance = 'dark',
@@ -48,6 +50,8 @@ class AbundanceCharacterScreen extends StatefulWidget {
   final VoidCallback onOpenAccountSettings;
   final VoidCallback? onOpenAchievements;
   final ValueChanged<String>? onAppearanceChanged;
+  final bool musicEnabled;
+  final ValueChanged<bool>? onMusicChanged;
   final VoidCallback? onSignOut;
   final VoidCallback? onReplayTutorial;
   final String appearance;
@@ -318,6 +322,8 @@ class _AbundanceCharacterScreenState extends State<AbundanceCharacterScreen> {
           : AbundanceHeaderBar(
               appearance: widget.appearance,
               onAppearanceChanged: widget.onAppearanceChanged,
+              musicEnabled: widget.musicEnabled,
+              onMusicChanged: widget.onMusicChanged,
               onSelected: (value) {
                 switch (value) {
                   case 'sign_out':

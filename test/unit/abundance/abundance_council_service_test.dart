@@ -3,12 +3,18 @@ import 'package:selfcare_projects/src/features/abundance/services/abundance_api_
 import 'package:selfcare_projects/src/features/abundance/services/abundance_council_service.dart';
 
 class _RecordingCouncilTransport implements AbundanceApiTransport {
+  _RecordingCouncilTransport({this.usesCoachName = false});
+
+  final bool usesCoachName;
   final requests = <String>[];
 
   @override
   Future<Map<String, dynamic>> getJson(String path, {String? token}) async {
     requests.add('GET $path');
     if (path == '/guild') {
+      if (usesCoachName) {
+        return const {'coachName': 'Lilian Agnas'};
+      }
       return {
         'members': const [],
         'coach': {
@@ -83,5 +89,14 @@ void main() {
       'POST /guild/join council-1',
       'POST /guild/leave ',
     ]);
+  });
+
+  test('reads coachName when the guild response does not include a coach map',
+      () async {
+    final service = AbundanceCouncilService(
+      transport: _RecordingCouncilTransport(usesCoachName: true),
+    );
+
+    expect(await service.fetchAssignedCoachName(), 'Lilian Agnas');
   });
 }
