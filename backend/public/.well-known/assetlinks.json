@@ -1,0 +1,15 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.valenin.inneru",
+      "sha256_cert_fingerprints": [
+        "F0:8B:0E:66:EC:7F:23:00:92:19:C6:3E:DB:83:7D:74:0A:E8:4C:A9:BC:39:FB:02:71:D3:FF:02:96:3B:38:C5",
+        "9F:D1:C7:9F:E7:E7:E2:D8:3A:60:C1:AE:21:13:1A:51:08:5A:76:D4:9E:BA:E4:B5:2D:4F:56:77:8A:5C:D7:DE",
+        "F7:B3:E4:79:BD:D2:C4:F9:01:37:A1:5E:65:F7:6D:10:03:D3:89:21:F6:E1:6C:B1:36:D8:28:E8:E5:0F:FF:90",
+        "22:C9:C1:2B:A7:A3:2A:D8:90:59:60:E4:38:A5:02:8D:2F:EC:62:27:3D:E1:46:C2:F7:3D:EB:74:35:0C:02:84"
+      ]
+    }
+  }
+]
