@@ -247,6 +247,22 @@ class LeaderboardApiService {
     );
     return LeaderboardApiSnapshot.fromJson(response);
   }
+
+  Future<StepLeaderboardSnapshot> fetchStepLeaderboard({
+    StepLeaderboardPeriod period = StepLeaderboardPeriod.today,
+    DateTime? date,
+  }) async {
+    final anchor = date ?? DateTime.now();
+    final formattedDate = '${anchor.year.toString().padLeft(4, '0')}-'
+        '${anchor.month.toString().padLeft(2, '0')}-'
+        '${anchor.day.toString().padLeft(2, '0')}';
+    final response = await _api.getJson(
+      '/api/leaderboard/steps?period=${period.name}&date=$formattedDate',
+      token: _token,
+      timeout: const Duration(seconds: 60),
+    );
+    return StepLeaderboardSnapshot.fromJson(response);
+  }
 }
 
 num _parseApiNumber(dynamic value, {num fallback = 0}) {
@@ -276,4 +292,106 @@ DateTime? _parseApiDate(dynamic value) {
   }
 
   return DateTime.tryParse(raw);
+}
+
+enum StepLeaderboardPeriod { today, week, month, all }
+
+class StepLeaderboardEntry {
+  const StepLeaderboardEntry({
+    required this.userId,
+    required this.name,
+    required this.totalSteps,
+    required this.daysTracked,
+    required this.rank,
+    this.profilePic,
+    this.isCoach = false,
+  });
+
+  final String userId;
+  final String name;
+  final int totalSteps;
+  final int daysTracked;
+  final int rank;
+  final String? profilePic;
+  final bool isCoach;
+
+  factory StepLeaderboardEntry.fromJson(Map<String, dynamic> json) {
+    return StepLeaderboardEntry(
+      userId: json['userId']?.toString() ?? '',
+      name: json['name']?.toString() ?? 'User',
+      totalSteps: _parseApiNumber(json['totalSteps']).toInt(),
+      daysTracked: _parseApiNumber(json['daysTracked']).toInt(),
+      rank: _parseApiNumber(json['rank']).toInt(),
+      profilePic: json['profilePic']?.toString(),
+      isCoach: json['isCoach'] == true,
+    );
+  }
+}
+
+/// The viewer's finishing place in one daily race; [rank] is null on days
+/// they logged no steps.
+class StepDayPlacement {
+  const StepDayPlacement({required this.date, required this.steps, this.rank});
+
+  final DateTime date;
+  final int steps;
+  final int? rank;
+
+  factory StepDayPlacement.fromJson(Map<String, dynamic> json) {
+    final rawRank = json['rank'];
+    return StepDayPlacement(
+      date: _parseApiDate(json['date']) ?? DateTime.now(),
+      steps: _parseApiNumber(json['steps']).toInt(),
+      rank: rawRank == null ? null : num.tryParse(rawRank.toString())?.toInt(),
+    );
+  }
+}
+
+class StepLeaderboardSnapshot {
+  const StepLeaderboardSnapshot({
+    required this.period,
+    required this.entries,
+    required this.companyTotalSteps,
+    this.companyName,
+    this.startDate,
+    this.endDate,
+    this.weekPlacements = const <StepDayPlacement>[],
+  });
+
+  final StepLeaderboardPeriod period;
+  final List<StepLeaderboardEntry> entries;
+  final int companyTotalSteps;
+  final String? companyName;
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final List<StepDayPlacement> weekPlacements;
+
+  factory StepLeaderboardSnapshot.fromJson(Map<String, dynamic> json) {
+    final company = json['company'] is Map
+        ? Map<String, dynamic>.from(json['company'] as Map)
+        : const <String, dynamic>{};
+
+    return StepLeaderboardSnapshot(
+      period: StepLeaderboardPeriod.values.firstWhere(
+        (value) => value.name == json['period']?.toString(),
+        orElse: () => StepLeaderboardPeriod.week,
+      ),
+      entries: (json['entries'] as List?)
+              ?.whereType<Map>()
+              .map((entry) => StepLeaderboardEntry.fromJson(
+                  Map<String, dynamic>.from(entry)))
+              .toList() ??
+          const <StepLeaderboardEntry>[],
+      companyTotalSteps: _parseApiNumber(json['companyTotalSteps']).toInt(),
+      companyName: company['name']?.toString(),
+      startDate: _parseApiDate(json['startDate']),
+      endDate: _parseApiDate(json['endDate']),
+      weekPlacements: (json['weekPlacements'] as List?)
+              ?.whereType<Map>()
+              .map((placement) => StepDayPlacement.fromJson(
+                  Map<String, dynamic>.from(placement)))
+              .toList() ??
+          const <StepDayPlacement>[],
+    );
+  }
 }

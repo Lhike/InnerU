@@ -13,6 +13,7 @@ import 'package:selfcare_projects/src/features/authentication/screen/UsersData/u
 import 'package:selfcare_projects/src/features/authentication/screen/meditation/meditation_streak_rewards_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/notes/notes_type.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/step_goal_screen.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/step_leaderboard_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/my_step_submissions_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/step_map_tracker_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/step_submission_screen.dart';
@@ -2003,6 +2004,19 @@ class _StepTrackerState extends State<StepTracker>
                                     },
                                     icon: const Icon(Icons.map_outlined),
                                     label: const Text('Track on Map'),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              const StepLeaderboardScreen(),
+                                        ),
+                                      );
+                                    },
+                                    icon: const Icon(Icons.leaderboard_rounded),
+                                    label: const Text('Steps Leaderboard'),
                                   ),
                                   if (_hasCoach)
                                     OutlinedButton.icon(
