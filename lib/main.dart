@@ -33,6 +33,7 @@ import 'package:selfcare_projects/src/features/authentication/screen/profile/pro
 import 'package:selfcare_projects/src/features/authentication/screen/sleep_tracker/sleep_tracker.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/splash_screen/splash_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/splash_screen/force_update_dialog.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/step_leaderboard_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/steptracker_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/todo_list.dart';
 import 'package:selfcare_projects/src/features/meditation_song/meditation_song.dart';
@@ -208,6 +209,8 @@ class App extends StatelessWidget {
           '/meditation': (context) => Meditation(),
           '/notes': (context) => Notes(),
           '/stepTracker': (context) => StepTracker(),
+          '/stepsLeaderboard': (context) =>
+              _companyThemed(const StepLeaderboardScreen()),
           '/exerciseTracker': (context) => const ExerciseTrackerScreen(),
           // '/noteGallery': (context) => NotesGallery(),
           '/sleepTracker': (context) => _companyThemed(SleepTracker()),

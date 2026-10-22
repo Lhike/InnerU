@@ -6,10 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\CoachGroup;
 use App\Models\CoachMentee;
 use App\Models\Company;
+use App\Models\DailyTracker;
 use App\Models\User;
 use App\Services\UserScoreService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
@@ -33,6 +35,128 @@ class LeaderboardController extends Controller
 
             return $this->fallbackLeaderboardResponse($user);
         }
+    }
+
+    /**
+     * Company-wide step leaderboard: total daily_tracker step_count per
+     * company member for the requested period (today, week, month, all).
+     */
+    public function steps(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if ($user === null) {
+            return response()->json(['message' => 'Unauthorized.'], Response::HTTP_UNAUTHORIZED);
+        }
+
+        $validated = $request->validate([
+            'period' => ['nullable', 'in:today,week,month,all'],
+            'date' => ['nullable', 'date'],
+        ]);
+
+        $period = $validated['period'] ?? 'week';
+        // The client sends its local date so "today" matches the user's day.
+        $anchor = isset($validated['date'])
+            ? Carbon::parse($validated['date'])->startOfDay()
+            : now()->startOfDay();
+
+        [$start, $end] = match ($period) {
+            'today' => [$anchor->copy(), $anchor->copy()],
+            'week' => [$anchor->copy()->startOfWeek(Carbon::MONDAY), $anchor->copy()->endOfWeek(Carbon::SUNDAY)],
+            'month' => [$anchor->copy()->startOfMonth(), $anchor->copy()->endOfMonth()],
+            default => [null, null],
+        };
+
+        $company = $this->resolveCompany($user);
+        $companyUsers = $this->companyUsersForScope($company, $user);
+        $userIds = $companyUsers->map(fn (User $candidate) => (string) $candidate->id)->all();
+
+        $totals = DailyTracker::query()
+            ->whereIn('user_id', $userIds)
+            ->when($start !== null, fn ($query) => $query->whereDate('date', '>=', $start->toDateString()))
+            ->when($end !== null, fn ($query) => $query->whereDate('date', '<=', $end->toDateString()))
+            ->groupBy('user_id')
+            ->selectRaw('user_id, COALESCE(SUM(step_count), 0) AS total_steps, COUNT(*) AS days_tracked')
+            ->get()
+            ->keyBy(fn ($row) => (string) $row->user_id);
+
+        $entries = $companyUsers
+            ->map(function (User $candidate) use ($totals): array {
+                $row = $totals->get((string) $candidate->id);
+
+                return [
+                    'userId' => (string) $candidate->id,
+                    'name' => $candidate->name,
+                    'profilePic' => $candidate->profile_pic,
+                    'isCoach' => (bool) $candidate->is_coach,
+                    'totalSteps' => (int) ($row->total_steps ?? 0),
+                    'daysTracked' => (int) ($row->days_tracked ?? 0),
+                ];
+            })
+            ->sort(function (array $left, array $right): int {
+                return [$right['totalSteps'], (string) $left['name']]
+                    <=> [$left['totalSteps'], (string) $right['name']];
+            })
+            ->values()
+            ->map(function (array $entry, int $index): array {
+                $entry['rank'] = $index + 1;
+
+                return $entry;
+            })
+            ->values();
+
+        return response()->json([
+            'period' => $period,
+            'startDate' => $start?->toDateString(),
+            'endDate' => $end?->toDateString(),
+            'company' => $company === null ? null : [
+                'id' => (string) $company->id,
+                'name' => $company->name,
+                'code' => $company->code,
+            ],
+            'companyTotalSteps' => (int) $entries->sum('totalSteps'),
+            'entries' => $entries,
+            'weekPlacements' => $this->weekPlacements($userIds, (string) $user->id, $anchor),
+        ]);
+    }
+
+    /**
+     * The viewer's finishing place in each daily race (Mon..Sun) of the
+     * anchor's week. rank is null on days the viewer logged no steps.
+     *
+     * @param  array<int, string>  $userIds
+     * @return array<int, array{date: string, steps: int, rank: int|null}>
+     */
+    private function weekPlacements(array $userIds, string $viewerId, Carbon $anchor): array
+    {
+        $start = $anchor->copy()->startOfWeek(Carbon::MONDAY);
+        $end = $anchor->copy()->endOfWeek(Carbon::SUNDAY);
+
+        $stepsByDate = [];
+        DailyTracker::query()
+            ->whereIn('user_id', $userIds)
+            ->whereDate('date', '>=', $start->toDateString())
+            ->whereDate('date', '<=', $end->toDateString())
+            ->get(['user_id', 'date', 'step_count'])
+            ->each(function (DailyTracker $tracker) use (&$stepsByDate): void {
+                $date = Carbon::parse($tracker->date)->toDateString();
+                $userId = (string) $tracker->user_id;
+                $stepsByDate[$date][$userId] = ($stepsByDate[$date][$userId] ?? 0)
+                    + (int) $tracker->step_count;
+            });
+
+        $placements = [];
+        for ($day = $start->copy(); $day->lte($end); $day->addDay()) {
+            $date = $day->toDateString();
+            $daySteps = $stepsByDate[$date] ?? [];
+            $mine = (int) ($daySteps[$viewerId] ?? 0);
+            $rank = null;
+            if ($mine > 0) {
+                $rank = 1 + count(array_filter($daySteps, fn (int $steps): bool => $steps > $mine));
+            }
+            $placements[] = ['date' => $date, 'steps' => $mine, 'rank' => $rank];
+        }
+
+        return $placements;
     }
 
     private function buildLeaderboardResponse(User $user): JsonResponse

@@ -102,6 +102,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::patch('/todo-tasks/{todoTask}', [TodoTaskController::class, 'update']);
     Route::delete('/todo-tasks/{todoTask}', [TodoTaskController::class, 'destroy']);
     Route::get('/leaderboard', [LeaderboardController::class, 'index']);
+    Route::get('/leaderboard/steps', [LeaderboardController::class, 'steps']);
     Route::get('/coaches', [CoachManagementController::class, 'directory']);
     Route::get('/emotions/today', [EmotionController::class, 'today']);
     Route::get('/emotions/history', [EmotionController::class, 'history']);
