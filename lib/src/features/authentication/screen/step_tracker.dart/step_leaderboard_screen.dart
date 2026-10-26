@@ -540,6 +540,9 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
         _buildHero(data, me, streak),
         const SizedBox(height: 8),
         _RaceScene(
+          // Re-centre on the viewer whenever the race changes.
+          key: ValueKey('race-${_period.name}'),
+          entries: entries,
           me: me,
           ahead: ahead,
           gapToAhead: ahead == null || me == null
@@ -847,9 +850,13 @@ enum _SkyMode {
   }
 }
 
-/// Scene with the viewer walking and the next racer to catch.
-class _RaceScene extends StatelessWidget {
+/// A side-scrolling race: every member walks along the track at a spot set
+/// by their steps (the leader nearest the finish). Swipe to see everyone;
+/// it opens centred on the viewer.
+class _RaceScene extends StatefulWidget {
   const _RaceScene({
+    super.key,
+    required this.entries,
     required this.me,
     required this.ahead,
     required this.gapToAhead,
@@ -863,6 +870,7 @@ class _RaceScene extends StatelessWidget {
     required this.onCustomize,
   });
 
+  final List<StepLeaderboardEntry> entries;
   final StepLeaderboardEntry? me;
   final StepLeaderboardEntry? ahead;
   final int? gapToAhead;
@@ -875,100 +883,255 @@ class _RaceScene extends StatelessWidget {
   final String? banner;
   final VoidCallback onCustomize;
 
+  static const double sceneHeight = 330;
+
+  @override
+  State<_RaceScene> createState() => _RaceSceneState();
+}
+
+/// One walker's spot on the track. Lanes give depth: 0 is farthest back
+/// (smaller, higher), 2 is the front.
+class _TrackSpot {
+  _TrackSpot(this.entry, this.x, this.lane);
+
+  final StepLeaderboardEntry? entry;
+  double x;
+  int lane;
+}
+
+class _RaceSceneState extends State<_RaceScene> {
+  final ScrollController _scroll = ScrollController();
+  bool _hasPanned = false;
+  bool _viewerOnScreen = true;
+  double? _viewerX;
+
+  static const _laneScale = [0.62, 0.78, 0.95];
+  static const _laneFeet = [0.79, 0.845, 0.9];
+  static const double _minGap = 64;
+  static const double _baseHeight = 160;
+  static const double _startX = 110;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_onScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _centreOnViewer(false));
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    final viewerX = _viewerX;
+    if (!_scroll.hasClients || viewerX == null) return;
+    final position = _scroll.position;
+    final onScreen = viewerX > position.pixels &&
+        viewerX < position.pixels + position.viewportDimension;
+    final panned = _hasPanned || position.userScrollDirection.name != 'idle';
+    if (onScreen != _viewerOnScreen || panned != _hasPanned) {
+      setState(() {
+        _viewerOnScreen = onScreen;
+        _hasPanned = panned;
+      });
+    }
+  }
+
+  void _centreOnViewer(bool animate) {
+    final viewerX = _viewerX;
+    if (!mounted || !_scroll.hasClients || viewerX == null) return;
+    final position = _scroll.position;
+    final target = (viewerX - position.viewportDimension * 0.4)
+        .clamp(0.0, position.maxScrollExtent);
+    if (animate) {
+      _scroll.animateTo(target,
+          duration: const Duration(milliseconds: 600),
+          curve: Curves.easeInOutCubic);
+    } else {
+      _scroll.jumpTo(target);
+    }
+  }
+
+  static int _stableHash(String value) {
+    var hash = 7;
+    for (final unit in value.codeUnits) {
+      hash = (hash * 31 + unit) & 0x7fffffff;
+    }
+    return hash;
+  }
+
+  /// Other racers get a look generated from their id, so each person
+  /// always looks the same; the leader wears the crown.
+  WalkerLook _lookFor(StepLeaderboardEntry entry) {
+    final look = WalkerLook.random(
+      math.Random(_stableHash(entry.userId)),
+      allowedAccessories: const [
+        WalkerAccessory.none,
+        WalkerAccessory.backpack,
+      ],
+    );
+    return entry.rank == 1 && entry.totalSteps > 0
+        ? look.copyWith(accessory: WalkerAccessory.crown)
+        : look;
+  }
+
+  /// Places everyone in step order, at least [_minGap] apart so close
+  /// racers stay visible (the track stretches as needed), alternating the
+  /// back lanes. The viewer always walks in the front lane.
+  List<_TrackSpot> _layout(double trackLength) {
+    final entries = widget.entries;
+    final me = widget.me;
+    final leader = entries.isEmpty ? 0 : entries.first.totalSteps;
+    double rawX(int steps) =>
+        _startX +
+        (leader <= 0 ? 0 : (steps / leader).clamp(0.0, 1.0)) * trackLength;
+
+    if (entries.isEmpty) {
+      return [_TrackSpot(me, _startX, 2)];
+    }
+
+    final ordered = [...entries]..sort((a, b) => a.totalSteps != b.totalSteps
+        ? a.totalSteps.compareTo(b.totalSteps)
+        : b.rank.compareTo(a.rank));
+    final spots = <_TrackSpot>[];
+    var previousX = double.negativeInfinity;
+    var backLane = 1;
+    for (final entry in ordered) {
+      final x = math.max(rawX(entry.totalSteps), previousX + _minGap);
+      final isViewer = entry.userId == me?.userId;
+      int lane;
+      if (isViewer) {
+        lane = 2;
+      } else {
+        lane = backLane;
+        backLane = backLane == 1 ? 0 : 1;
+      }
+      spots.add(_TrackSpot(entry, x, lane));
+      previousX = x;
+    }
+
+    // Racers well clear of everyone can step up to the front lane.
+    for (var i = 0; i < spots.length; i++) {
+      final spot = spots[i];
+      if (spot.lane == 2) continue;
+      final clearBefore = i == 0 || spot.x - spots[i - 1].x > _minGap * 2;
+      final clearAfter =
+          i == spots.length - 1 || spots[i + 1].x - spot.x > _minGap * 2;
+      if (clearBefore && clearAfter) spot.lane = 2;
+    }
+
+    final viewerIndex = spots.indexWhere((s) => s.entry?.userId == me?.userId);
+    if (viewerIndex < 0) return [_TrackSpot(null, _startX, 2), ...spots];
+    // The viewer goes first; build() relies on that.
+    return [spots.removeAt(viewerIndex), ...spots];
+  }
+
   @override
   Widget build(BuildContext context) {
-    final me = this.me;
-    final ahead = this.ahead;
-    final banner = this.banner;
+    const h = _RaceScene.sceneHeight;
+    final banner = widget.banner;
+
     return SizedBox(
-      height: 330,
+      height: h,
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final w = constraints.maxWidth;
-          const h = 330.0;
-          const walkerHeight = 170.0;
-          final groundY = h * 0.84;
-          final walkerX = w * 0.36;
+          final viewport = constraints.maxWidth;
+          final trackLength =
+              math.max(viewport * 1.6, widget.entries.length * 80.0);
+          final spots = _layout(trackLength);
+          _viewerX = spots.first.x;
+          final furthest = spots.map((s) => s.x).fold<double>(0, math.max);
+          final hideViewer =
+              spots.first.entry == null && widget.entries.isNotEmpty;
+          final ordered = [
+            ...spots.skip(1),
+            if (!hideViewer) spots.first,
+          ]..sort((a, b) => a.lane != b.lane
+              ? a.lane.compareTo(b.lane)
+              : identical(a, spots.first)
+                  ? 1
+                  : identical(b, spots.first)
+                      ? -1
+                      : a.x.compareTo(b.x));
+
+          final finishX = math.max(_startX + trackLength, furthest) + 80;
+          final worldWidth = finishX + 110;
+          final leaderSteps =
+              widget.entries.isEmpty ? 0 : widget.entries.first.totalSteps;
 
           return Stack(
-            clipBehavior: Clip.none,
             children: [
               Positioned.fill(
                 child: AnimatedBuilder(
-                  animation: scenery,
+                  animation: Listenable.merge([widget.scenery, _scroll]),
                   builder: (context, _) => CustomPaint(
-                    painter: _ScenePainter(scroll: scenery.value, sky: sky),
-                  ),
-                ),
-              ),
-              Positioned(
-                left: walkerX - walkerHeight * 0.4,
-                top: groundY - walkerHeight,
-                width: walkerHeight * 0.8,
-                height: walkerHeight,
-                child: GestureDetector(
-                  onTap: onCustomize,
-                  child: AnimatedBuilder(
-                    animation: stride,
-                    builder: (context, _) => WalkerAvatar(
-                      look: look,
-                      phase: stride.value,
-                      // A quick blink about every 4 seconds.
-                      blink: (scenery.value * 16) % 4.0 < 0.12,
+                    painter: _ScenePainter(
+                      scroll: widget.scenery.value,
+                      sky: widget.sky,
+                      pan: _scroll.hasClients ? _scroll.offset : 0,
                     ),
                   ),
                 ),
               ),
-              if (me != null) ...[
-                Positioned(
-                  left: walkerX - 60,
-                  width: 120,
-                  top: groundY - walkerHeight - 44,
-                  child: Center(
-                    child: _StepsTag(
-                      steps: format.format(me.totalSteps),
-                      rank: me.rank,
+              Positioned.fill(
+                child: SingleChildScrollView(
+                  key: const ValueKey('race-track'),
+                  controller: _scroll,
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: SizedBox(
+                    width: worldWidth,
+                    height: h,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        _trackMarker(_startX, 'START'),
+                        if (leaderSteps > 0)
+                          for (final fraction in const [0.25, 0.5, 0.75])
+                            _trackMarker(
+                              _startX + trackLength * fraction,
+                              NumberFormat.compact()
+                                  .format((leaderSteps * fraction).round()),
+                            ),
+                        Positioned(
+                          left: finishX - 9,
+                          top: h * 0.5,
+                          child: const _FinishPost(),
+                        ),
+                        for (final spot in ordered) ..._buildWalker(spot, h),
+                      ],
                     ),
                   ),
                 ),
+              ),
+              if (!_hasPanned && widget.entries.length > 1)
                 Positioned(
-                  left: walkerX - 70,
-                  width: 140,
-                  top: groundY + 8,
-                  child: Center(
-                    child: _Pill(text: '${me.name.split(' ').first} · You'),
+                  left: 0,
+                  right: 0,
+                  top: 58,
+                  child: IgnorePointer(
+                    child: Center(
+                      child: _Pill(text: '⇠  Swipe to see everyone  ⇢'),
+                    ),
                   ),
                 ),
-              ],
-              Positioned(
-                right: 18,
-                top: h * 0.2,
-                child: ahead != null
-                    ? _RivalBubble(
-                        entry: ahead,
-                        label: 'in ${format.format(gapToAhead ?? 0)}',
-                      )
-                    : _LeaderBubble(
-                        label: leadOverNext == null
-                            ? 'Leading!'
-                            : '+${format.format(leadOverNext)} ahead',
-                      ),
-              ),
+              if (!_viewerOnScreen)
+                Positioned(
+                  left: 12,
+                  bottom: h * 0.1 + 6,
+                  child: _OverlayButton(
+                    label: '📍 Me',
+                    onTap: () => _centreOnViewer(true),
+                  ),
+                ),
               Positioned(
                 right: 12,
-                top: groundY - 44,
-                child: Material(
-                  color: Colors.black.withValues(alpha: 0.35),
-                  shape: const StadiumBorder(),
-                  child: InkWell(
-                    customBorder: const StadiumBorder(),
-                    onTap: onCustomize,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      child: Text('🎨 Style', style: _body(13)),
-                    ),
-                  ),
+                bottom: h * 0.1 + 6,
+                child: _OverlayButton(
+                  label: '🎨 Style',
+                  onTap: widget.onCustomize,
                 ),
               ),
               Positioned(
@@ -996,6 +1159,213 @@ class _RaceScene extends StatelessWidget {
       ),
     );
   }
+
+  Widget _trackMarker(double x, String label) {
+    const h = _RaceScene.sceneHeight;
+    return Positioned(
+      left: x - 30,
+      width: 60,
+      top: h * 0.7,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(label, style: _body(10)),
+          ),
+          Container(width: 3, height: 26, color: Colors.white54),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildWalker(_TrackSpot spot, double h) {
+    final entry = spot.entry;
+    final isMe = identical(entry, widget.me);
+    final scale = _laneScale[spot.lane];
+    final height = _baseHeight * scale;
+    final width = height * 0.8;
+    final feetY = h * _laneFeet[spot.lane];
+    final look = isMe || entry == null ? widget.look : _lookFor(entry);
+    // Offset each racer's stride so the crowd doesn't march in step.
+    final phaseOffset =
+        entry == null || isMe ? 0.0 : (_stableHash(entry.userId) % 100) / 100;
+
+    final walker = AnimatedBuilder(
+      animation: widget.stride,
+      builder: (context, _) => WalkerAvatar(
+        look: look,
+        phase: (widget.stride.value + phaseOffset) % 1,
+        blink: isMe && (widget.scenery.value * 16) % 4.0 < 0.12,
+      ),
+    );
+
+    final body = isMe
+        ? GestureDetector(onTap: widget.onCustomize, child: walker)
+        : Tooltip(
+            message: entry == null
+                ? ''
+                : '${_ordinal(entry.rank)} · ${entry.name} · '
+                    '${widget.format.format(entry.totalSteps)} steps',
+            triggerMode: TooltipTriggerMode.tap,
+            child: walker,
+          );
+
+    return [
+      Positioned(
+        left: spot.x - width / 2,
+        top: feetY - height,
+        width: width,
+        height: height,
+        child: body,
+      ),
+      if (entry != null)
+        Positioned(
+          left: spot.x - 80,
+          width: 160,
+          // Anchored by the bottom so taller tags grow upwards.
+          bottom: _RaceScene.sceneHeight - (feetY - height) + 2,
+          child: Center(
+            child: isMe
+                ? _StepsTag(
+                    steps: widget.format.format(entry.totalSteps),
+                    rank: entry.rank,
+                  )
+                : _racerTag(entry, scale),
+          ),
+        ),
+      if (isMe && entry != null)
+        Positioned(
+          left: spot.x - 80,
+          width: 160,
+          top: feetY + 4,
+          child: Column(
+            children: [
+              _Pill(text: '${entry.name.split(' ').first} · You'),
+              if (widget.leadOverNext != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: _Pill(
+                    text: '+${widget.format.format(widget.leadOverNext)} ahead',
+                  ),
+                ),
+            ],
+          ),
+        ),
+    ];
+  }
+
+  Widget _racerTag(StepLeaderboardEntry entry, double scale) {
+    final isAhead = identical(entry, widget.ahead);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (isAhead)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 3),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: _RacePalette.accent,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'in ${widget.format.format(widget.gapToAhead ?? 0)}',
+                style: _body(11),
+              ),
+            ),
+          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _RankMedal(rank: entry.rank, size: 22 * scale + 6),
+            const SizedBox(width: 4),
+            Container(
+              constraints: const BoxConstraints(maxWidth: 90),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                entry.name.split(' ').first,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _body(11 * scale + 2, color: Colors.black),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _OverlayButton extends StatelessWidget {
+  const _OverlayButton({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.4),
+      shape: const StadiumBorder(),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Text(label, style: _body(13)),
+        ),
+      ),
+    );
+  }
+}
+
+/// Checkered finish post at the end of the track.
+class _FinishPost extends StatelessWidget {
+  const _FinishPost();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: _RacePalette.go,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text('FINISH', style: _body(10, color: Colors.black)),
+        ),
+        const SizedBox(height: 2),
+        CustomPaint(size: const Size(18, 110), painter: _CheckerPainter()),
+      ],
+    );
+  }
+}
+
+class _CheckerPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    const cell = 6.0;
+    final paint = Paint();
+    for (var row = 0; row * cell < size.height; row++) {
+      for (var col = 0; col * cell < size.width; col++) {
+        paint.color = (row + col).isEven ? Colors.white : Colors.black;
+        canvas.drawRect(
+            Rect.fromLTWH(col * cell, row * cell, cell, cell), paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CheckerPainter oldDelegate) => false;
 }
 
 class _CelebrationBanner extends StatelessWidget {
@@ -1106,77 +1476,6 @@ class _Pill extends StatelessWidget {
   }
 }
 
-class _RivalBubble extends StatelessWidget {
-  const _RivalBubble({required this.entry, required this.label});
-
-  final StepLeaderboardEntry entry;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 96,
-      child: Column(
-        children: [
-          _Pill(text: label),
-          const SizedBox(height: 6),
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white.withValues(alpha: 0.15),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.5),
-                width: 2,
-              ),
-            ),
-            child: _Avatar(entry: entry, size: 58),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            entry.name.split(' ').first,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: _body(12, color: Colors.white70),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LeaderBubble extends StatelessWidget {
-  const _LeaderBubble({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 110,
-      child: Column(
-        children: [
-          _Pill(text: label),
-          const SizedBox(height: 6),
-          Container(
-            width: 66,
-            height: 66,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _RacePalette.gold.withValues(alpha: 0.25),
-              border: Border.all(color: _RacePalette.gold, width: 2),
-            ),
-            child: const Icon(Icons.emoji_events_rounded,
-                color: _RacePalette.gold, size: 36),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Walker editor: skin, hair, clothes, shoes and accessory, with a live
-/// walking preview. Locked accessories show what earns them.
 class _WalkerCustomizer extends StatefulWidget {
   const _WalkerCustomizer({required this.initial, required this.lockReason});
 
@@ -1761,10 +2060,14 @@ class _SceneColors {
 /// Sky (by time of day), sun or moon, clouds or stars, and two layers of
 /// scrolling hills over the path.
 class _ScenePainter extends CustomPainter {
-  _ScenePainter({required this.scroll, required this.sky});
+  _ScenePainter({required this.scroll, required this.sky, this.pan = 0});
 
   final double scroll;
   final _SkyMode sky;
+
+  /// How far the track has been swiped, in pixels; hills and the path
+  /// shift with it for a parallax effect.
+  final double pan;
 
   static final List<Offset> _stars = () {
     final random = math.Random(7);
@@ -1839,13 +2142,13 @@ class _ScenePainter extends CustomPainter {
         baseline: h * 0.66,
         amplitude: h * 0.06,
         waves: 2,
-        offset: scroll * 0.35,
+        offset: scroll * 0.35 + pan * 0.15 / w,
         color: colors.farHills);
     _hills(canvas, size,
         baseline: h * 0.74,
         amplitude: h * 0.04,
         waves: 3,
-        offset: scroll,
+        offset: scroll + pan * 0.4 / w,
         color: colors.nearHills);
 
     canvas.drawRect(
@@ -1858,7 +2161,7 @@ class _ScenePainter extends CustomPainter {
     );
     final pebble = Paint()..color = colors.pebble;
     for (var i = 0; i < 10; i++) {
-      final x = ((i / 10) - scroll) % 1.0 * w;
+      final x = ((i / 10) - scroll - pan / w) % 1.0 * w;
       canvas.drawOval(
         Rect.fromCenter(
           center: Offset(x, h * (i.isEven ? 0.83 : 0.87)),
@@ -1901,7 +2204,9 @@ class _ScenePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ScenePainter oldDelegate) =>
-      oldDelegate.scroll != scroll || oldDelegate.sky != sky;
+      oldDelegate.scroll != scroll ||
+      oldDelegate.sky != sky ||
+      oldDelegate.pan != pan;
 }
 
 /// Falling confetti for a celebration; [progress] runs 0..1 once.

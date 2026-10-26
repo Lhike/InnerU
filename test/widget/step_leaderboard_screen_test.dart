@@ -239,6 +239,40 @@ void main() {
     expect(saved.top, WalkerTop.hoodie);
   });
 
+  testWidgets('the race scrolls sideways to show every runner as a walker',
+      (tester) async {
+    usePhoneScreen(tester);
+    await tester.pumpWidget(_app(
+      me: '4',
+      loader: (period) async => _snapshot(period),
+    ));
+    await settle(tester);
+
+    // One walker per runner, all on the track.
+    expect(find.byType(WalkerAvatar), findsNWidgets(4));
+    expect(find.text('Ben'), findsOneWidget);
+    expect(find.text('Ana'), findsOneWidget);
+    expect(find.text('⇠  Swipe to see everyone  ⇢'), findsOneWidget);
+    expect(find.text('📍 Me'), findsNothing);
+
+    final track = find.byKey(const ValueKey('race-track'));
+    Future<void> frames() async {
+      for (var i = 0; i < 20; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    await tester.drag(track, const Offset(-900, 0));
+    await frames();
+
+    expect(find.text('⇠  Swipe to see everyone  ⇢'), findsNothing);
+    expect(find.text('📍 Me'), findsOneWidget);
+
+    await tester.tap(find.text('📍 Me'));
+    await frames();
+    expect(find.text('📍 Me'), findsNothing);
+  });
+
   testWidgets('the leader sees how far ahead they are', (tester) async {
     await tester.pumpWidget(_app(
       me: '1',
