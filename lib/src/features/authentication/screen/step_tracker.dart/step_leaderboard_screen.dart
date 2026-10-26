@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/walker_avatar.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
 import 'package:selfcare_projects/src/services/leaderboard_api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,7 +17,8 @@ typedef StepLeaderboardLoader = Future<StepLeaderboardSnapshot> Function(
 /// Company step race: the viewer walks through a scene chasing the
 /// colleague just ahead of them, with a race bar of every member below and
 /// their daily finishing places for the week on top. Overtakes since the
-/// last visit are celebrated, and walker outfits unlock from placements.
+/// last visit are celebrated, and the walker is a customizable character
+/// whose accessories unlock from placements.
 class StepLeaderboardScreen extends StatefulWidget {
   const StepLeaderboardScreen({
     super.key,
@@ -97,59 +99,38 @@ int _walkStreak(List<StepDayPlacement> placements, DateTime now) {
   return streak;
 }
 
-enum _Hat { none, cap, headphones, crown }
+/// Accessories earned in the race; everything else is free to pick.
+class _AccessoryRule {
+  const _AccessoryRule(this.requirement, this.isUnlocked);
 
-class _WalkerSkin {
-  const _WalkerSkin({
-    required this.id,
-    required this.name,
-    required this.color,
-    this.hat = _Hat.none,
-    this.requirement,
-    this.isUnlocked,
-  });
+  final String requirement;
+  final bool Function(List<StepDayPlacement> week, int streak) isUnlocked;
 
-  final String id;
-  final String name;
-  final Color color;
-  final _Hat hat;
-
-  /// Shown on locked skins; null for skins everyone has.
-  final String? requirement;
-  final bool Function(List<StepDayPlacement> week, int streak)? isUnlocked;
-
-  bool unlocked(List<StepDayPlacement> week, int streak) =>
-      isUnlocked?.call(week, streak) ?? true;
-
-  static final all = <_WalkerSkin>[
-    const _WalkerSkin(id: 'pink', name: 'Classic', color: Color(0xFFE040FB)),
-    const _WalkerSkin(id: 'ocean', name: 'Ocean', color: Color(0xFF29B6F6)),
-    const _WalkerSkin(id: 'lime', name: 'Lime', color: Color(0xFF9CCC65)),
-    _WalkerSkin(
-      id: 'sporty',
-      name: 'Sporty',
-      color: const Color(0xFFFF7043),
-      hat: _Hat.cap,
-      requirement: 'Walk 2 days in a row',
-      isUnlocked: (_, streak) => streak >= 2,
+  static final rules = <WalkerAccessory, _AccessoryRule>{
+    WalkerAccessory.cap: _AccessoryRule(
+      'Walk 2 days in a row',
+      (_, streak) => streak >= 2,
     ),
-    _WalkerSkin(
-      id: 'dj',
-      name: 'DJ',
-      color: const Color(0xFF7C4DFF),
-      hat: _Hat.headphones,
-      requirement: 'Finish top 3 in a daily race',
-      isUnlocked: (week, _) => week.any((p) => (p.rank ?? 99) <= 3),
+    WalkerAccessory.headphones: _AccessoryRule(
+      'Finish top 3 in a daily race',
+      (week, _) => week.any((p) => (p.rank ?? 99) <= 3),
     ),
-    _WalkerSkin(
-      id: 'champion',
-      name: 'Champion',
-      color: _RacePalette.gold,
-      hat: _Hat.crown,
-      requirement: 'Win a daily race',
-      isUnlocked: (week, _) => week.any((p) => p.rank == 1),
+    WalkerAccessory.crown: _AccessoryRule(
+      'Win a daily race',
+      (week, _) => week.any((p) => p.rank == 1),
     ),
-  ];
+  };
+
+  /// The requirement still to meet for [accessory], or null if available.
+  static String? lockReason(
+    WalkerAccessory accessory,
+    List<StepDayPlacement> week,
+    int streak,
+  ) {
+    final rule = rules[accessory];
+    if (rule == null || rule.isUnlocked(week, streak)) return null;
+    return rule.requirement;
+  }
 }
 
 const _milestones = [
@@ -187,7 +168,8 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
     StepLeaderboardPeriod.month: 'This Month',
     StepLeaderboardPeriod.all: 'All Time',
   };
-  static const _skinKey = 'step_race_skin';
+  static const _lookKey = 'step_race_look';
+  static const _legacySkinKey = 'step_race_skin';
 
   final NumberFormat _stepsFormat = NumberFormat.decimalPattern();
   StepLeaderboardPeriod _period = StepLeaderboardPeriod.today;
@@ -195,7 +177,7 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
   Timer? _ticker;
   Timer? _bannerTimer;
   DateTime _now = DateTime.now();
-  String _skinId = _WalkerSkin.all.first.id;
+  WalkerLook _look = const WalkerLook();
   String? _banner;
 
   /// One stride of the walking cycle.
@@ -229,7 +211,7 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _now = _clock());
     });
-    _restoreSkin();
+    _restoreLook();
   }
 
   @override
@@ -242,23 +224,26 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
     super.dispose();
   }
 
-  Future<void> _restoreSkin() async {
+  Future<void> _restoreLook() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final saved = prefs.getString(_skinKey);
-      if (saved != null && mounted) setState(() => _skinId = saved);
+      final saved = prefs.getString(_lookKey);
+      final look = saved != null
+          ? WalkerLook.fromJson(saved)
+          : WalkerLook.fromLegacySkin(prefs.getString(_legacySkinKey));
+      if (mounted) setState(() => _look = look);
     } catch (_) {
-      // Keep the default skin.
+      // Keep the default look.
     }
   }
 
-  Future<void> _saveSkin(String id) async {
-    setState(() => _skinId = id);
+  Future<void> _saveLook(WalkerLook look) async {
+    setState(() => _look = look);
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_skinKey, id);
+      await prefs.setString(_lookKey, look.toJson());
     } catch (_) {
-      // The choice still applies for this session.
+      // The look still applies for this session.
     }
   }
 
@@ -382,13 +367,12 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
         : 'Finishes in $hh:$mm:$ss';
   }
 
-  _WalkerSkin _skin(List<StepDayPlacement> week, int streak) {
-    final chosen = _WalkerSkin.all.firstWhere(
-      (skin) => skin.id == _skinId,
-      orElse: () => _WalkerSkin.all.first,
-    );
-    // A skin that is no longer earned this week falls back to the default.
-    return chosen.unlocked(week, streak) ? chosen : _WalkerSkin.all.first;
+  /// The saved look, minus an accessory that is no longer earned this week.
+  WalkerLook _effectiveLook(List<StepDayPlacement> week, int streak) {
+    final locked = _AccessoryRule.lockReason(_look.accessory, week, streak);
+    return locked == null
+        ? _look
+        : _look.copyWith(accessory: WalkerAccessory.none);
   }
 
   @override
@@ -545,7 +529,7 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
     final me = myIndex >= 0 ? entries[myIndex] : null;
     final ahead = myIndex > 0 ? entries[myIndex - 1] : null;
     final streak = _walkStreak(data.weekPlacements, _now);
-    final skin = _skin(data.weekPlacements, streak);
+    final look = _effectiveLook(data.weekPlacements, streak);
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -568,9 +552,9 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
           stride: _stride,
           scenery: _scenery,
           sky: _SkyMode.at(_now),
-          skin: skin,
+          look: look,
           banner: _banner,
-          onCustomize: () => _openWardrobe(data.weekPlacements, streak),
+          onCustomize: () => _openCustomizer(data.weekPlacements, streak),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -663,21 +647,23 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
     );
   }
 
-  Future<void> _openWardrobe(List<StepDayPlacement> week, int streak) async {
+  Future<void> _openCustomizer(List<StepDayPlacement> week, int streak) async {
     HapticFeedback.selectionClick();
-    final chosen = await showModalBottomSheet<String>(
+    final look = await showModalBottomSheet<WalkerLook>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: _RacePalette.card,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => _Wardrobe(
-        week: week,
-        streak: streak,
-        selectedId: _skin(week, streak).id,
+      builder: (context) => _WalkerCustomizer(
+        initial: _effectiveLook(week, streak),
+        lockReason: (accessory) =>
+            _AccessoryRule.lockReason(accessory, week, streak),
       ),
     );
-    if (chosen != null) await _saveSkin(chosen);
+    if (look != null) await _saveLook(look);
   }
 }
 
@@ -872,7 +858,7 @@ class _RaceScene extends StatelessWidget {
     required this.stride,
     required this.scenery,
     required this.sky,
-    required this.skin,
+    required this.look,
     required this.banner,
     required this.onCustomize,
   });
@@ -885,7 +871,7 @@ class _RaceScene extends StatelessWidget {
   final Animation<double> stride;
   final Animation<double> scenery;
   final _SkyMode sky;
-  final _WalkerSkin skin;
+  final WalkerLook look;
   final String? banner;
   final VoidCallback onCustomize;
 
@@ -924,12 +910,11 @@ class _RaceScene extends StatelessWidget {
                   onTap: onCustomize,
                   child: AnimatedBuilder(
                     animation: stride,
-                    builder: (context, _) => CustomPaint(
-                      painter: _WalkerPainter(
-                        phase: stride.value,
-                        color: skin.color,
-                        hat: skin.hat,
-                      ),
+                    builder: (context, _) => WalkerAvatar(
+                      look: look,
+                      phase: stride.value,
+                      // A quick blink about every 4 seconds.
+                      blink: (scenery.value * 16) % 4.0 < 0.12,
                     ),
                   ),
                 ),
@@ -1190,97 +1175,244 @@ class _LeaderBubble extends StatelessWidget {
   }
 }
 
-/// Outfit picker; locked outfits show what earns them.
-class _Wardrobe extends StatelessWidget {
-  const _Wardrobe({
-    required this.week,
-    required this.streak,
-    required this.selectedId,
-  });
+/// Walker editor: skin, hair, clothes, shoes and accessory, with a live
+/// walking preview. Locked accessories show what earns them.
+class _WalkerCustomizer extends StatefulWidget {
+  const _WalkerCustomizer({required this.initial, required this.lockReason});
 
-  final List<StepDayPlacement> week;
-  final int streak;
-  final String selectedId;
+  final WalkerLook initial;
+  final String? Function(WalkerAccessory accessory) lockReason;
+
+  @override
+  State<_WalkerCustomizer> createState() => _WalkerCustomizerState();
+}
+
+class _WalkerCustomizerState extends State<_WalkerCustomizer>
+    with SingleTickerProviderStateMixin {
+  late WalkerLook _look = widget.initial;
+  final _random = math.Random();
+
+  late final AnimationController _stride = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _stride.dispose();
+    super.dispose();
+  }
+
+  void _update(WalkerLook look) {
+    HapticFeedback.selectionClick();
+    setState(() => _look = look);
+  }
+
+  void _randomize() {
+    _update(WalkerLook.random(
+      _random,
+      allowedAccessories: WalkerAccessory.values
+          .where((accessory) => widget.lockReason(accessory) == null),
+    ));
+  }
+
+  Widget _section(String title, Widget child) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: _body(13, color: _RacePalette.muted)),
+          const SizedBox(height: 8),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _swatches(
+      List<Color> colors, Color selected, void Function(Color) onPick) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: colors.map((color) {
+        final isSelected = color.toARGB32() == selected.toARGB32();
+        return Semantics(
+          button: true,
+          selected: isSelected,
+          child: GestureDetector(
+            onTap: () => onPick(color),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected ? _RacePalette.accent : Colors.white24,
+                  width: isSelected ? 3 : 1.5,
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _options<T>(
+    List<T> values,
+    T selected,
+    String Function(T) label,
+    void Function(T) onPick, {
+    String? Function(T)? lockReason,
+  }) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: values.map((value) {
+        final locked = lockReason?.call(value);
+        final isSelected = value == selected;
+        return Tooltip(
+          message: locked ?? '',
+          triggerMode: locked == null
+              ? TooltipTriggerMode.manual
+              : TooltipTriggerMode.tap,
+          child: ChoiceChip(
+            label: Text(locked == null ? label(value) : '🔒 ${label(value)}'),
+            selected: isSelected,
+            selectedColor: _RacePalette.accent,
+            backgroundColor: _RacePalette.background,
+            labelStyle: _body(13,
+                color: locked != null
+                    ? _RacePalette.muted
+                    : isSelected
+                        ? Colors.white
+                        : Colors.white70),
+            onSelected: locked == null ? (_) => onPick(value) : null,
+          ),
+        );
+      }).toList(),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Choose your walker', style: _display(22)),
-            const SizedBox(height: 4),
-            Text(
-              'Win races and keep streaks to unlock more.',
-              style: _body(13, color: _RacePalette.muted),
+    final lockedAccessory = WalkerAccessory.values
+        .map((a) => (a, widget.lockReason(a)))
+        .where((entry) => entry.$2 != null)
+        .toList();
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.9,
+      maxChildSize: 0.95,
+      builder: (context, controller) => ListView(
+        controller: controller,
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('Make your walker', style: _display(22)),
+              ),
+              IconButton(
+                tooltip: 'Surprise me',
+                onPressed: _randomize,
+                icon: const Icon(Icons.casino_rounded, color: Colors.white),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            height: 200,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF1B2A6B), Color(0xFF2B4CA8)],
+              ),
+              borderRadius: BorderRadius.circular(20),
             ),
-            const SizedBox(height: 16),
-            GridView.count(
-              crossAxisCount: 3,
-              shrinkWrap: true,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 0.72,
-              physics: const NeverScrollableScrollPhysics(),
-              children: _WalkerSkin.all.map((skin) {
-                final unlocked = skin.unlocked(week, streak);
-                final selected = skin.id == selectedId;
-                return InkWell(
-                  borderRadius: BorderRadius.circular(16),
-                  onTap:
-                      unlocked ? () => Navigator.pop(context, skin.id) : null,
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: _RacePalette.background,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: selected
-                            ? _RacePalette.accent
-                            : _RacePalette.cardBorder,
-                        width: selected ? 2.5 : 1,
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Expanded(
-                          child: Opacity(
-                            opacity: unlocked ? 1 : 0.3,
-                            child: CustomPaint(
-                              size: Size.infinite,
-                              painter: _WalkerPainter(
-                                phase: 0.15,
-                                color: skin.color,
-                                hat: skin.hat,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(skin.name, style: _body(13)),
-                        Text(
-                          unlocked
-                              ? (selected ? 'Wearing' : 'Tap to wear')
-                              : '🔒 ${skin.requirement}',
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          style: _body(10,
-                              color: unlocked
-                                  ? _RacePalette.muted
-                                  : _RacePalette.accent,
-                              weight: FontWeight.w500),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: AnimatedBuilder(
+              animation: _stride,
+              builder: (context, _) => WalkerAvatar(
+                key: const ValueKey('walker-preview'),
+                look: _look,
+                phase: _stride.value,
+              ),
             ),
+          ),
+          _section(
+            'Skin tone',
+            _swatches(WalkerLook.skinTones, _look.skinTone,
+                (c) => _update(_look.copyWith(skinTone: c))),
+          ),
+          _section(
+            'Hair',
+            _options(WalkerHairStyle.values, _look.hairStyle, (s) => s.label,
+                (s) => _update(_look.copyWith(hairStyle: s))),
+          ),
+          _section(
+            'Hair colour',
+            _swatches(WalkerLook.hairColors, _look.hairColor,
+                (c) => _update(_look.copyWith(hairColor: c))),
+          ),
+          _section(
+            'Top',
+            _options(WalkerTop.values, _look.top, (t) => t.label,
+                (t) => _update(_look.copyWith(top: t))),
+          ),
+          _section(
+            'Top colour',
+            _swatches(WalkerLook.clothingColors, _look.topColor,
+                (c) => _update(_look.copyWith(topColor: c))),
+          ),
+          _section(
+            'Bottoms',
+            _options(WalkerBottom.values, _look.bottom, (b) => b.label,
+                (b) => _update(_look.copyWith(bottom: b))),
+          ),
+          _section(
+            'Bottoms colour',
+            _swatches(WalkerLook.clothingColors, _look.bottomColor,
+                (c) => _update(_look.copyWith(bottomColor: c))),
+          ),
+          _section(
+            'Shoes',
+            _swatches(WalkerLook.clothingColors, _look.shoeColor,
+                (c) => _update(_look.copyWith(shoeColor: c))),
+          ),
+          _section(
+            'Accessory',
+            _options(
+              WalkerAccessory.values,
+              _look.accessory,
+              (a) => a.label,
+              (a) => _update(_look.copyWith(accessory: a)),
+              lockReason: widget.lockReason,
+            ),
+          ),
+          if (lockedAccessory.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ...lockedAccessory.map((entry) => Text(
+                  '🔒 ${entry.$1.label}: ${entry.$2}',
+                  style: _body(12,
+                      color: _RacePalette.accent, weight: FontWeight.w500),
+                )),
           ],
-        ),
+          const SizedBox(height: 20),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, _look),
+            style: FilledButton.styleFrom(
+              backgroundColor: _RacePalette.accent,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+            child: Text('Save my walker', style: _body(16)),
+          ),
+        ],
       ),
     );
   }
@@ -1770,176 +1902,6 @@ class _ScenePainter extends CustomPainter {
   @override
   bool shouldRepaint(_ScenePainter oldDelegate) =>
       oldDelegate.scroll != scroll || oldDelegate.sky != sky;
-}
-
-/// A side-on walker with a backpack, drawn from limb angles so the stride
-/// can be animated by [phase] (0..1 per step cycle).
-class _WalkerPainter extends CustomPainter {
-  _WalkerPainter({required this.phase, required this.color, required this.hat});
-
-  final double phase;
-  final Color color;
-  final _Hat hat;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Fit the figure (about 0.8:1) inside whatever box it is given.
-    final h = math.min(size.height, size.width / 0.8);
-    canvas.save();
-    canvas.translate((size.width - h * 0.8) / 2, size.height - h);
-
-    final p = phase * 2 * math.pi;
-    final bob = math.cos(p * 2) * h * 0.012;
-    final hip = Offset(h * 0.4, h * 0.52 + bob);
-    const lean = 0.12;
-
-    final thigh = h * 0.21;
-    final shin = h * 0.22;
-    final torso = h * 0.27;
-    final upperArm = h * 0.14;
-    final forearm = h * 0.13;
-    final headRadius = h * 0.07;
-
-    Offset along(Offset from, double angle, double length) =>
-        from + Offset(math.sin(angle) * length, math.cos(angle) * length);
-
-    final far = Color.lerp(color, Colors.black, 0.35)!;
-    Paint limb(Color c, double width) => Paint()
-      ..color = c
-      ..strokeWidth = width
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    void leg(double offset, Color c) {
-      final swing = math.sin(p + offset) * 0.55;
-      final bend = 0.1 + 0.75 * math.max(0.0, math.cos(p + offset));
-      final knee = along(hip, swing, thigh);
-      final foot = along(knee, swing - bend, shin);
-      final paint = limb(c, h * 0.075);
-      canvas.drawLine(hip, knee, paint);
-      canvas.drawLine(knee, foot, paint);
-      canvas.drawLine(
-        foot,
-        foot + Offset(h * 0.06, 0),
-        limb(const Color(0xFF1B1B1B), h * 0.05),
-      );
-    }
-
-    final shoulder =
-        hip + Offset(math.sin(lean) * torso, -math.cos(lean) * torso);
-
-    void arm(double offset, Color c) {
-      final swing = -math.sin(p + offset) * 0.6;
-      final elbow = along(shoulder, swing, upperArm);
-      final hand = along(elbow, swing + 0.6, forearm);
-      final paint = limb(c, h * 0.055);
-      canvas.drawLine(shoulder, elbow, paint);
-      canvas.drawLine(elbow, hand, paint);
-    }
-
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(h * 0.42, h * 0.985),
-        width: h * 0.32,
-        height: h * 0.03,
-      ),
-      Paint()..color = Colors.black.withValues(alpha: 0.35),
-    );
-
-    leg(math.pi, far);
-    arm(math.pi, far);
-
-    final packCenter =
-        Offset.lerp(hip, shoulder, 0.55)! + Offset(-h * 0.085, 0);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(center: packCenter, width: h * 0.13, height: h * 0.2),
-        Radius.circular(h * 0.035),
-      ),
-      Paint()..color = const Color(0xFF6D6A5C),
-    );
-
-    canvas.drawLine(hip, shoulder, limb(color, h * 0.1));
-    final head = shoulder + Offset(h * 0.03, -headRadius * 1.25);
-    canvas.drawCircle(head, headRadius, Paint()..color = color);
-    _drawHat(canvas, head, headRadius);
-
-    leg(0, color);
-    arm(0, color);
-    canvas.restore();
-  }
-
-  void _drawHat(Canvas canvas, Offset head, double r) {
-    switch (hat) {
-      case _Hat.none:
-        return;
-      case _Hat.cap:
-        final cap = Paint()..color = const Color(0xFF263238);
-        canvas.drawArc(
-          Rect.fromCircle(
-              center: head.translate(0, -r * 0.1), radius: r * 1.05),
-          math.pi,
-          math.pi,
-          true,
-          cap,
-        );
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromLTWH(head.dx, head.dy - r * 0.2, r * 1.6, r * 0.3),
-            Radius.circular(r * 0.15),
-          ),
-          cap,
-        );
-      case _Hat.headphones:
-        final band = Paint()
-          ..color = const Color(0xFF212121)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = r * 0.3
-          ..strokeCap = StrokeCap.round;
-        canvas.drawArc(
-          Rect.fromCircle(center: head, radius: r * 1.2),
-          math.pi * 1.05,
-          math.pi * 0.9,
-          false,
-          band,
-        );
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromCenter(
-                center: head.translate(-r * 0.15, r * 0.1),
-                width: r * 0.7,
-                height: r * 0.95),
-            Radius.circular(r * 0.3),
-          ),
-          Paint()..color = const Color(0xFF00E5FF),
-        );
-      case _Hat.crown:
-        final top = head.dy - r * 0.8;
-        final crown = Path()
-          ..moveTo(head.dx - r * 0.8, top)
-          ..lineTo(head.dx - r * 0.8, top - r * 0.9)
-          ..lineTo(head.dx - r * 0.4, top - r * 0.45)
-          ..lineTo(head.dx, top - r * 1.1)
-          ..lineTo(head.dx + r * 0.4, top - r * 0.45)
-          ..lineTo(head.dx + r * 0.8, top - r * 0.9)
-          ..lineTo(head.dx + r * 0.8, top)
-          ..close();
-        canvas.drawPath(crown, Paint()..color = const Color(0xFFFFD54F));
-        canvas.drawPath(
-          crown,
-          Paint()
-            ..color = const Color(0xFFB8860B)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = r * 0.12,
-        );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_WalkerPainter oldDelegate) =>
-      oldDelegate.phase != phase ||
-      oldDelegate.color != color ||
-      oldDelegate.hat != hat;
 }
 
 /// Falling confetti for a celebration; [progress] runs 0..1 once.

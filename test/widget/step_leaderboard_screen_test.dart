@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/step_leaderboard_screen.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/walker_avatar.dart';
 import 'package:selfcare_projects/src/services/leaderboard_api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -166,7 +167,8 @@ void main() {
     expect(prefs.getInt('step_race_rank_today_2026-10-21'), 3);
   });
 
-  testWidgets('locked outfits show what earns them', (tester) async {
+  testWidgets('the walker can be customized and locked items say why',
+      (tester) async {
     usePhoneScreen(tester);
     await tester.pumpWidget(_app(
       me: '4',
@@ -178,15 +180,63 @@ void main() {
     await tester.tap(find.text('🎨 Style'));
     await settle(tester);
 
-    expect(find.text('Choose your walker'), findsOneWidget);
-    expect(find.text('🔒 Win a daily race'), findsOneWidget);
-    expect(find.text('🔒 Walk 2 days in a row'), findsOneWidget);
-    expect(find.text('Wearing'), findsOneWidget);
+    expect(find.text('Make your walker'), findsOneWidget);
+    expect(find.byKey(const ValueKey('walker-preview')), findsOneWidget);
 
-    await tester.tap(find.text('Ocean'));
+    Future<void> reveal(Finder finder) => tester.scrollUntilVisible(
+          finder,
+          150,
+          scrollable: find.byType(Scrollable).last,
+        );
+    Future<void> tapText(String text) async {
+      await reveal(find.text(text));
+      await tester.tap(find.text(text), warnIfMissed: false);
+      await tester.pump();
+    }
+
+    await tapText('Ponytail');
+    await tapText('Hoodie');
+    await tapText('Shorts');
+    // Locked accessories can't be chosen, and say what earns them.
+    await tapText('🔒 Crown');
+    await reveal(find.text('🔒 Crown: Win a daily race'));
+    expect(find.text('🔒 Cap: Walk 2 days in a row'), findsOneWidget);
+
+    await tapText('Save my walker');
     await settle(tester);
+
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('step_race_skin'), 'ocean');
+    final saved = WalkerLook.fromJson(prefs.getString('step_race_look'));
+    expect(saved.hairStyle, WalkerHairStyle.ponytail);
+    expect(saved.top, WalkerTop.hoodie);
+    expect(saved.bottom, WalkerBottom.shorts);
+    expect(saved.accessory, isNot(WalkerAccessory.crown));
+  });
+
+  testWidgets('an old outfit choice carries over to the new walker',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({'step_race_skin': 'dj'});
+    usePhoneScreen(tester);
+    await tester.pumpWidget(_app(
+      me: '1',
+      loader: (period) async => _snapshot(period),
+    ));
+    await settle(tester);
+
+    await tester.tap(find.text('🎨 Style'));
+    await settle(tester);
+    await tester.scrollUntilVisible(
+      find.text('Save my walker'),
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('Save my walker'));
+    await settle(tester);
+
+    final prefs = await SharedPreferences.getInstance();
+    final saved = WalkerLook.fromJson(prefs.getString('step_race_look'));
+    expect(saved.accessory, WalkerAccessory.headphones);
+    expect(saved.top, WalkerTop.hoodie);
   });
 
   testWidgets('the leader sees how far ahead they are', (tester) async {
