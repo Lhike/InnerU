@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/calorie_tracker/calorie_tracker_math.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/step_goal_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/UsersData/user_service.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/step_tracker_utils.dart';
@@ -37,7 +38,6 @@ class _TrackingScreenState extends State<TrackingScreen>
   static const Color _calorieTrackColor = Color(0xFFF0E1CC);
   static const Color _shadowColor = Color(0x12000000);
   static const double _strideMetersPerStep = 0.67;
-  static const double _kcalPerStep = 0.04;
   static const int _defaultStepGoal = 5000;
   static const int _defaultCalorieGoal = 2000;
 
@@ -250,8 +250,13 @@ class _TrackingScreenState extends State<TrackingScreen>
     final resolvedStepGoal = _readInt(trackerData['stepGoal']) ?? fallbackStepGoal;
     final stepGoal = resolvedStepGoal > 0 ? resolvedStepGoal : fallbackStepGoal;
 
-    final resolvedCalorieGoal =
-        _readInt(calorieData['dailyGoal']) ?? _defaultCalorieGoal;
+    final calorieProfile = calorieResponse['profile'];
+    final profile = CalorieProfile.fromApi(
+      calorieProfile is Map ? calorieProfile.cast<String, dynamic>() : null,
+    );
+    final resolvedCalorieGoal = _readInt(calorieData['dailyGoal']) ??
+        _readInt(calorieResponse['defaultGoal']) ??
+        _defaultCalorieGoal;
     final calorieGoal =
         resolvedCalorieGoal > 0 ? resolvedCalorieGoal : _defaultCalorieGoal;
     final caloriesLogged = _readInt(calorieData['totalCalories']) ?? 0;
@@ -261,7 +266,11 @@ class _TrackingScreenState extends State<TrackingScreen>
       steps: steps,
       stepGoal: stepGoal,
       distanceKm: _distanceFromSteps(steps),
-      estimatedBurnKcal: _estimatedBurnFromSteps(steps),
+      estimatedBurnKcal: CalorieActivityMath.stepCalories(
+        steps,
+        weightKg: profile?.weightKg,
+        heightCm: profile?.heightCm,
+      ),
       calorieGoal: calorieGoal,
       caloriesLogged: caloriesLogged,
     );
@@ -330,10 +339,6 @@ class _TrackingScreenState extends State<TrackingScreen>
 
   double _distanceFromSteps(int steps) {
     return steps * _strideMetersPerStep / 1000;
-  }
-
-  int _estimatedBurnFromSteps(int steps) {
-    return (steps * _kcalPerStep).round();
   }
 
   double _stepProgressFor(_DayStepSummary summary) {
@@ -503,8 +508,8 @@ class _TrackingScreenState extends State<TrackingScreen>
     );
 
     if (updatedGoal == null) return;
-    if (updatedGoal < 500 || updatedGoal > 10000) {
-      _showSnackBar('Choose a calorie goal between 500 and 10,000 kcal.');
+    if (updatedGoal < 800 || updatedGoal > 10000) {
+      _showSnackBar('Choose a calorie goal between 800 and 10,000 kcal.');
       return;
     }
 
@@ -513,10 +518,19 @@ class _TrackingScreenState extends State<TrackingScreen>
     });
 
     try {
-      await CalorieTrackerApiService.instance.updateDay(
-        date: _dateKeyFor(selectedSummary.date),
-        dailyGoal: updatedGoal,
-      );
+      final dateKey = _dateKeyFor(selectedSummary.date);
+      if (DateUtils.isSameDay(selectedSummary.date, DateTime.now())) {
+        // Today's goal becomes the default for the days that follow.
+        await CalorieTrackerApiService.instance.saveProfile(
+          profile: {'daily_goal': updatedGoal},
+          date: dateKey,
+        );
+      } else {
+        await CalorieTrackerApiService.instance.updateDay(
+          date: dateKey,
+          dailyGoal: updatedGoal,
+        );
+      }
 
       if (!mounted) return;
       _reloadSoon();

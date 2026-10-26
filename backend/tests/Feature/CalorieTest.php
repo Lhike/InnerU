@@ -86,4 +86,137 @@ class CalorieTest extends TestCase
         $lookup->assertOk()
             ->assertJsonPath('memory.displayName', 'Chicken Rice');
     }
+
+    private function makeUser(string $email): User
+    {
+        return User::factory()->create([
+            'name' => 'Calorie User',
+            'email' => $email,
+        ]);
+    }
+
+    private function logEntry(string $date, int $calories, string $meal = 'Adobo'): \Illuminate\Testing\TestResponse
+    {
+        return $this->postJson('/api/calorie/entries', [
+            'date' => $date,
+            'meal' => $meal,
+            'meal_type' => 'Lunch',
+            'calories' => $calories,
+            'protein' => 20,
+            'carbs' => 10,
+            'fat' => 15,
+        ]);
+    }
+
+    public function test_a_new_day_keeps_the_goal_from_the_previous_day(): void
+    {
+        Sanctum::actingAs($this->makeUser('carry@example.com'));
+
+        $this->postJson('/api/calorie/day', ['date' => '2026-10-20', 'daily_goal' => 1700])
+            ->assertOk();
+
+        $this->getJson('/api/calorie?date=2026-10-21')
+            ->assertOk()
+            ->assertJsonPath('day', null)
+            ->assertJsonPath('defaultGoal', 1700);
+
+        $this->logEntry('2026-10-21', 300)
+            ->assertCreated()
+            ->assertJsonPath('day.dailyGoal', 1700);
+    }
+
+    public function test_the_saved_profile_goal_wins_and_can_be_applied_to_today(): void
+    {
+        Sanctum::actingAs($this->makeUser('profile@example.com'));
+
+        $this->postJson('/api/calorie/day', ['date' => '2026-10-20', 'daily_goal' => 2500]);
+
+        $this->postJson('/api/calorie/profile', [
+            'sex' => 'female',
+            'age' => 30,
+            'height_cm' => 160,
+            'weight_kg' => 60.5,
+            'activity_level' => 'sedentary',
+            'goal_type' => 'lose',
+            'count_steps' => true,
+            'daily_goal' => 1400,
+            'date' => '2026-10-21',
+        ])
+            ->assertOk()
+            ->assertJsonPath('profile.weightKg', 60.5)
+            ->assertJsonPath('profile.goalType', 'lose')
+            ->assertJsonPath('day.dailyGoal', 1400);
+
+        $this->getJson('/api/calorie?date=2026-10-22')
+            ->assertJsonPath('defaultGoal', 1400)
+            ->assertJsonPath('profile.countSteps', true);
+
+        $this->postJson('/api/calorie/profile', ['weight_kg' => 5])->assertStatus(422);
+        $this->postJson('/api/calorie/profile', ['goal_type' => 'bulk'])->assertStatus(422);
+    }
+
+    public function test_entries_can_be_edited_and_deleted_and_totals_follow(): void
+    {
+        Sanctum::actingAs($this->makeUser('edit@example.com'));
+
+        $first = $this->logEntry('2026-10-21', 500)->json('entry.id');
+        $this->logEntry('2026-10-21', 200, 'Rice');
+
+        $this->patchJson("/api/calorie/entries/{$first}", [
+            'calories' => 350,
+            'quantity' => 0.5,
+            'measurement_unit' => 'serving',
+        ])
+            ->assertOk()
+            ->assertJsonPath('entry.calories', 350)
+            ->assertJsonPath('day.totalCalories', 550);
+
+        $this->deleteJson("/api/calorie/entries/{$first}")
+            ->assertOk()
+            ->assertJsonPath('day.totalCalories', 200)
+            ->assertJsonPath('day.mealCount', 1)
+            ->assertJsonCount(1, 'entries');
+    }
+
+    public function test_users_cannot_touch_someone_elses_entries(): void
+    {
+        Sanctum::actingAs($this->makeUser('owner@example.com'));
+        $entryId = $this->logEntry('2026-10-21', 500)->json('entry.id');
+
+        Sanctum::actingAs($this->makeUser('intruder@example.com'));
+        $this->patchJson("/api/calorie/entries/{$entryId}", ['calories' => 1])->assertNotFound();
+        $this->deleteJson("/api/calorie/entries/{$entryId}")->assertNotFound();
+
+        $this->assertDatabaseHas('calorie_entries', ['id' => $entryId, 'calories' => 500]);
+    }
+
+    public function test_food_memory_keeps_servings_and_lists_recent_foods(): void
+    {
+        Sanctum::actingAs($this->makeUser('recent@example.com'));
+
+        $remember = fn (string $key, bool $used) => $this->postJson('/api/calorie/food-memory', [
+            'key' => $key,
+            'display_name' => ucfirst($key),
+            'lookup_name' => $key,
+            'calories' => 130,
+            'serving_quantity' => 100,
+            'serving_unit' => 'g',
+            'grams_per_serving' => 100,
+            'source' => 'meal_log',
+            'used' => $used,
+        ])->assertOk();
+
+        $remember('rice', true);
+        $remember('lookup_only', false);
+        $this->travel(1)->minutes();
+        $remember('adobo', true);
+        $remember('rice', true)->assertJsonPath('memory.useCount', 2);
+
+        $this->getJson('/api/calorie/food-memory?limit=5')
+            ->assertOk()
+            ->assertJsonCount(2, 'memories')
+            ->assertJsonPath('memories.0.key', 'rice')
+            ->assertJsonPath('memories.0.servingQuantity', 100)
+            ->assertJsonPath('memories.0.servingUnit', 'g');
+    }
 }
