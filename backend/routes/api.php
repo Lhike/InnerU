@@ -137,6 +137,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/calorie/entries', [CalorieController::class, 'storeEntry']);
     Route::get('/calorie/food-memory/{key}', [CalorieController::class, 'showFoodMemory']);
     Route::post('/calorie/food-memory', [CalorieController::class, 'upsertFoodMemory']);
+    Route::get('/calorie/food-memory', [CalorieController::class, 'indexFoodMemory']);
+    Route::patch('/calorie/entries/{entryId}', [CalorieController::class, 'updateEntry']);
+    Route::delete('/calorie/entries/{entryId}', [CalorieController::class, 'destroyEntry']);
+    Route::get('/calorie/profile', [CalorieController::class, 'showProfile']);
+    Route::post('/calorie/profile', [CalorieController::class, 'upsertProfile']);
     Route::get('/fasting', [FastingController::class, 'show']);
     Route::get('/fasting/history', [FastingController::class, 'history']);
     Route::post('/fasting/start', [FastingController::class, 'start']);

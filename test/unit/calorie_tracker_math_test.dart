@@ -33,6 +33,16 @@ void main() {
       defaultUnit: 'cup',
       gramsPerUnit: 158.0,
     ),
+    CalorieFoodPreset(
+      name: 'McDonald\'s Big Mac',
+      calories: 550,
+      protein: 25,
+      carbs: 45,
+      fat: 30,
+      aliases: ['big mac', 'big macs', 'mcdonalds big mac'],
+      defaultUnit: 'serving',
+      gramsPerUnit: 219.0,
+    ),
   ];
 
   group('CalorieTrackerMath', () {
@@ -102,6 +112,52 @@ void main() {
       expect(result.protein, 18);
       expect(result.carbs, 3);
       expect(result.fat, 15);
+    });
+
+    test('detects a fast-food item and scales its standard serving', () {
+      final result = CalorieTrackerMath.calculateFoodAmount(
+        query: '2 big macs',
+        presets: presets,
+      );
+
+      expect(result, isNotNull);
+      expect(result!.displayName, '2 serving McDonald\'s Big Mac');
+      expect(result.calories, 1100);
+      expect(result.protein, 50);
+      expect(result.carbs, 90);
+      expect(result.fat, 60);
+    });
+
+    test('calculates calories from macros for a nutrition sanity check', () {
+      expect(
+        CalorieTrackerMath.caloriesFromMacros(
+          protein: 31,
+          carbs: 0,
+          fat: 4,
+        ),
+        160,
+      );
+    });
+
+    test('flags nutrition values that are inconsistent with their macros', () {
+      expect(
+        CalorieTrackerMath.isCaloriesConsistent(
+          calories: 165,
+          protein: 31,
+          carbs: 0,
+          fat: 4,
+        ),
+        isTrue,
+      );
+      expect(
+        CalorieTrackerMath.isCaloriesConsistent(
+          calories: 500,
+          protein: 5,
+          carbs: 5,
+          fat: 5,
+        ),
+        isFalse,
+      );
     });
   });
 }
