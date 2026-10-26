@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\StepSubmissionController;
 use App\Http\Controllers\Api\AccountabilityMeetingController;
 use App\Http\Controllers\Api\AnalyticsEmployeeScoreController;
+use App\Http\Controllers\Api\AbundanceSessionController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', fn () => response()->json([
@@ -49,6 +50,7 @@ Route::prefix('auth')->group(function (): void {
 });
 
 Route::middleware('auth:sanctum')->group(function (): void {
+    Route::post('/abundance/session', AbundanceSessionController::class);
     Route::get('/me', [ProfileController::class, 'show']);
     Route::patch('/me', [ProfileController::class, 'update']);
     Route::delete('/me', [AuthController::class, 'destroy']);

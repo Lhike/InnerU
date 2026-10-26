@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/abundance_company.dart';
-import 'package:selfcare_projects/src/features/abundance/screens/mentee/goals_hub_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/mentee/goals_hub_route.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/UsersData/user_service.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
 import 'package:selfcare_projects/src/services/daily_score_service.dart';
@@ -2598,10 +2598,8 @@ class _TodoListScreenState extends State<TodoListScreen> {
         }
 
         if (_useAbundanceGoalsHub) {
-          return Theme(
-            data: AppTheme.company(companyTheme),
-            child: const GoalsHubScreen(),
-          );
+          final userId = AuthService.instance.currentSession?.id.toString() ?? '';
+          return buildAbundanceGoalsHub(companyTheme, userId);
         }
 
         final scorePanelColor = companyTheme.isDark

@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:selfcare_projects/setup_navbar.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/abundance_shell_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/mentee/goals_hub_route.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/mentee/goals_hub_screen.dart';
 import 'package:selfcare_projects/src/services/company_theme_service.dart';
 import 'package:selfcare_projects/src/services/default_landing_screen.dart';
 import 'package:selfcare_projects/src/services/Provider/time_provider.dart';
@@ -90,7 +92,7 @@ void main() {
         tester
             .widget<AbundanceShellScreen>(find.byType(AbundanceShellScreen))
             .initialIndex,
-        1,
+        2,
       );
       // The standard chrome must be gone entirely, not merely hidden behind
       // the shell.
@@ -157,6 +159,31 @@ void main() {
         find.byType(AbundanceShellScreen),
       );
       expect(shell.initialIndex, 0);
+    });
+
+    testWidgets('routes Abundance goals hub through the A12 goals service',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(home: themedGoalsHubRoute(_abundanceTheme())),
+      );
+
+      final goalsHub = tester.widget<GoalsHubScreen>(
+        find.byType(GoalsHubScreen),
+      );
+      expect(goalsHub.service, isNotNull);
+    });
+
+    testWidgets('legacy task page uses the A12 goals service for Abundance',
+        (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        home: buildAbundanceGoalsHub(_abundanceTheme(), 'inneru-user-1'),
+      ));
+
+      final goalsHub = tester.widget<GoalsHubScreen>(
+        find.byType(GoalsHubScreen),
+      );
+      expect(goalsHub.service, isNotNull);
+      expect(goalsHub.uid, 'inneru-user-1');
     });
   });
 

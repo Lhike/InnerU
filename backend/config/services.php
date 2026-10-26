@@ -70,4 +70,11 @@ return [
         'hash_config_path' => env('FIREBASE_HASH_CONFIG_PATH', storage_path('app/firestore-snapshot/hash-config.json')),
     ],
 
+    'a12' => [
+        'url' => env('A12_API_URL', 'https://a14-api.valenin.com'),
+        'bridge_secret' => env('A12_BRIDGE_SECRET'),
+        'connect_timeout' => (int) env('A12_CONNECT_TIMEOUT', 5),
+        'timeout' => (int) env('A12_TIMEOUT', 15),
+    ],
+
 ];

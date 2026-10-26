@@ -2,6 +2,7 @@
 
 use App\Models\PendingRegistration;
 use App\Models\User;
+use App\Services\A12BridgeClient;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -62,11 +63,11 @@ Route::get('/email/verify/{id}/{hash}', function (Request $request, string $id, 
             abort(403);
         }
 
-        DB::transaction(function () use ($pending): void {
+        $verifiedUser = DB::transaction(function () use ($pending): User {
             $user = User::where('email', $pending->email)->first();
 
             if ($user === null) {
-                User::create($pending->toUserAttributes());
+                $user = User::create($pending->toUserAttributes());
             } elseif ($user->email_verified_at === null) {
                 $updates = [
                     'name' => $pending->name,
@@ -100,7 +101,18 @@ Route::get('/email/verify/{id}/{hash}', function (Request $request, string $id, 
             }
 
             $pending->delete();
+
+            return $user;
         });
+
+        // Provision Abundance users after the InnerU transaction commits. A12
+        // is the source of truth for Abundance goals; a later session exchange
+        // can retry if this external call is temporarily unavailable.
+        try {
+            app(A12BridgeClient::class)->provisionAbundanceUser($verifiedUser);
+        } catch (\Throwable $throwable) {
+            report($throwable);
+        }
 
         return view('auth.email-verified', [
             'verified' => true,

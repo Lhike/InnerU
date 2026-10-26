@@ -129,7 +129,7 @@ class _SetuppageState extends State<Setuppage> {
     if (AbundanceCompany.matches(theme.companyCode, theme.companyName)) {
       return AbundanceShellScreen(
         isCoach: false,
-        service: GoalsService(),
+        service: GoalsService.abundance(),
         uid: AuthService.instance.currentUserId ?? '',
         companyTheme: theme,
         // Abundance only exposes Dashboard/Home and Goals/Quests from the
@@ -285,7 +285,7 @@ class _CoachSetuppageState extends State<CoachSetuppage> {
     if (AbundanceCompany.matches(theme.companyCode, theme.companyName)) {
       return AbundanceShellScreen(
         isCoach: true,
-        service: GoalsService(),
+        service: GoalsService.abundance(),
         uid: AuthService.instance.currentUserId ?? '',
         companyTheme: theme,
         initialIndex: _requestedScreen.safeAbundanceShellIndex,

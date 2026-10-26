@@ -5,18 +5,21 @@ import 'package:selfcare_projects/src/features/abundance/screens/mentee/abundanc
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/goals_hub_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
 import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
+import 'package:selfcare_projects/src/features/abundance/widgets/abundance_profile_menu.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/coach_dashboard/coach_dashboard_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/leaderboard/leaderboard_screen.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/dashboard/daily_tracker.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/community/community_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/profile/profile_settings.dart';
-import 'package:selfcare_projects/src/models/bottom_sheet.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/notifications/notifications_screen.dart';
 import 'package:selfcare_projects/src/services/company_theme_service.dart';
+import 'package:selfcare_projects/src/services/auth_service.dart';
+import 'package:selfcare_projects/src/services/session_cleanup_service.dart';
 
-/// The custom app shell (header + 5-tab bottom nav) A12-Tracker wraps every
-/// screen in, built only for Abundance members. Only the Quests tab has a
-/// finished redesign so far (mentee: [GoalsHubScreen]; coach:
-/// [CoachQuestsRosterScreen]) — Home/Guild/Profile/More render InnerU's
-/// existing equivalent screens verbatim as placeholders until their own
-/// specs land (see the design spec's "App shell" section).
+/// The custom app shell (header + six-tab bottom nav) A12-Tracker wraps every
+/// screen in, built only for Abundance members. The Home tab uses the
+/// reference A12 dashboard while Mission, Quests, Awards, Guild, and Profile
+/// reuse InnerU functionality inside the isolated Abundance shell.
 ///
 /// The "ABUNDANCE 12" / "THE GAME OF MY LIFE" header copy is static ported
 /// brand text, not derived from [companyTheme]'s company name — A12 is
@@ -64,7 +67,7 @@ class AbundanceShellScreen extends StatefulWidget {
 }
 
 class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
-  // Tab order is Home(0)/Quests(1)/Guild(2)/Profile(3)/More(4). Seeded from
+  // Tab order mirrors the reference: Home/Mission/Quests/Awards/Guild/Profile.
   // widget.initialIndex (defaults to Home) in initState below.
   late int _index;
 
@@ -77,16 +80,25 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   // touch Firebase/network state directly in their State's field
   // initializers, which is unsafe to do for tabs the user hasn't opened yet
   // (and, in widget tests without a live Firebase app, throws outright).
-  final List<Widget> _builtTabs = List<Widget>.filled(5, const SizedBox.shrink());
+  final List<Widget> _builtTabs =
+      List<Widget>.filled(6, const SizedBox.shrink());
   final Set<int> _visited = {};
 
-  static const _tabLabels = ['Home', 'Quests', 'Guild', 'Profile', 'More'];
+  static const _tabLabels = [
+    'Home',
+    'Mission',
+    'Quests',
+    'Awards',
+    'Guild',
+    'Profile'
+  ];
   static const _tabIcons = [
     Icons.home_outlined,
+    Icons.calendar_month_outlined,
     Icons.military_tech_outlined,
+    Icons.emoji_events_outlined,
     Icons.groups_outlined,
     Icons.person_outline,
-    Icons.more_horiz,
   ];
 
   Widget get _questsTabBody => widget.isCoach
@@ -117,13 +129,17 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       case 0:
         return _homeTabBody;
       case 1:
-        return _questsTabBody;
+        return const UserProgressPage();
       case 2:
-        return const Leaderboard();
+        return _questsTabBody;
       case 3:
+        return const Leaderboard();
+      case 4:
+        return const _AbundanceGuildTab();
+      case 5:
         return const ProfileSettings();
       default:
-        return const SizedBox.shrink(); // "More" never actually renders.
+        return const SizedBox.shrink();
     }
   }
 
@@ -136,51 +152,105 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
   @override
   void initState() {
     super.initState();
-    // Clamped to 0-3, not 0-4: index 4 ("More") is a bottom-sheet trigger,
-    // not a tab body, so landing on it would show an empty SizedBox.shrink().
-    _index = widget.initialIndex.clamp(0, 3);
+    _index = widget.initialIndex.clamp(0, 5);
     _ensureBuilt(_index);
   }
 
   void _onTabTapped(int newIndex) {
-    if (newIndex == 4) {
-      BottomSheetWidget.show(context);
-      return; // stay on the current tab; More is a trigger, not a screen.
-    }
     setState(() {
       _index = newIndex;
       _ensureBuilt(newIndex);
     });
   }
 
-  static const int _questsTabIndex = 1;
+  static const int _questsTabIndex = 2;
 
-  PreferredSizeWidget _buildShellHeader() {
+  PreferredSizeWidget _buildShellHeader(BuildContext context) {
     return AppBar(
       backgroundColor: AbundanceColors.surfaceRaised,
       surfaceTintColor: Colors.transparent,
       automaticallyImplyLeading: false,
-      title: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+      toolbarHeight: 72,
+      titleSpacing: 18,
+      title: Row(
         children: [
-          Text('ABUNDANCE 12',
-              style: TextStyle(
-                  color: AbundanceColors.foreground,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14)),
-          Text('THE GAME OF MY LIFE',
-              style: TextStyle(
-                  color: AbundanceColors.primaryGold, fontSize: 10)),
+          Image.asset(
+            'assets/images/abundance/brand/a12-logo.png',
+            width: 42,
+            height: 38,
+            fit: BoxFit.contain,
+          ),
+          const SizedBox(width: 9),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'ABUNDANCE 12',
+                  style: TextStyle(
+                    color: AbundanceColors.foreground,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 18,
+                    letterSpacing: 1.6,
+                  ),
+                ),
+                Text(
+                  'THE GAME OF MY LIFE',
+                  style: TextStyle(
+                    color: AbundanceColors.primaryGold,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 9,
+                    letterSpacing: 2,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
       actions: [
-        IconButton(
-          icon: const Icon(Icons.notifications_none,
-              color: AbundanceColors.foreground),
-          onPressed: () {},
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: AbundanceColors.borderStrong),
+          ),
+          child: const Icon(
+            Icons.notifications_none,
+            color: AbundanceColors.mutedStrong,
+            size: 21,
+          ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 10),
+        Padding(
+          padding: const EdgeInsets.only(right: 10),
+          child: AbundanceProfileMenuButton(
+            displayName: AuthService.instance.currentSession?.name ?? '',
+            email: AuthService.instance.currentSession?.email ?? '',
+            roleLabel: widget.isCoach ? 'Coach' : 'Student',
+            onNotifications: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => NotificationsScreen(
+                  userId:
+                      AuthService.instance.currentSession?.id.toString() ?? '',
+                ),
+              ),
+            ),
+            onProfile: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ProfileSettings()),
+            ),
+            onReplayTutorial: () {},
+            onSignOut: () async {
+              await SessionCleanupService.signOut();
+              if (context.mounted) {
+                Navigator.of(context)
+                    .pushNamedAndRemoveUntil('/login', (_) => false);
+              }
+            },
+          ),
+        ),
       ],
     );
   }
@@ -200,7 +270,7 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
       // Neither Quests-tab body has an AppBar of its own — GoalsHubScreen has
       // no Scaffold at all and CoachQuestsRosterScreen's Scaffold passes no
       // appBar — so this is the one tab that needs the shell to supply one.
-      appBar: _index == _questsTabIndex ? _buildShellHeader() : null,
+      appBar: _index == _questsTabIndex ? _buildShellHeader(context) : null,
       body: IndexedStack(index: _index, children: _builtTabs),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
@@ -217,6 +287,27 @@ class _AbundanceShellScreenState extends State<AbundanceShellScreen> {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// Keeps the Guild tab's chrome inside the Abundance shell. The underlying
+/// community feed remains the existing implementation; only the wrapper is
+/// Abundance-specific, so other companies keep their original navigation.
+class _AbundanceGuildTab extends StatelessWidget {
+  const _AbundanceGuildTab();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AbundanceColors.background,
+      appBar: AppBar(
+        backgroundColor: AbundanceColors.surfaceRaised,
+        foregroundColor: AbundanceColors.foreground,
+        surfaceTintColor: Colors.transparent,
+        title: const Text('Guild'),
+      ),
+      body: const CommunityScreen(showStandaloneAppBar: false),
     );
   }
 }

@@ -11,6 +11,11 @@ import 'package:selfcare_projects/src/features/abundance/domain/domain.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/scoring.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/goal_detail_screen.dart';
 import 'package:selfcare_projects/src/features/abundance/screens/mentee/goal_form_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/mentee/abundance_home_presentation.dart';
+import 'package:selfcare_projects/src/features/abundance/theme/abundance_assets.dart';
+import 'package:selfcare_projects/src/features/abundance/theme/abundance_theme.dart';
+import 'package:selfcare_projects/src/features/abundance/widgets/abundance_profile_menu.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/notifications/notifications_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/dashboard/emotion_tracker.dart';
 import 'package:selfcare_projects/src/features/abundance/services/goals_service.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/UsersData/user_service.dart';
@@ -20,6 +25,7 @@ import 'package:selfcare_projects/src/services/emotion_service.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
 import 'package:selfcare_projects/src/services/company_membership_service.dart';
 import 'package:selfcare_projects/src/services/company_theme_service.dart';
+import 'package:selfcare_projects/src/services/session_cleanup_service.dart';
 import 'package:selfcare_projects/src/utils/theme/app_theme.dart';
 
 /// Whether this screen grants an Abundance member access, given the company
@@ -35,6 +41,22 @@ bool abundanceMenteeDashboardAccessAllowed({
   String code = '',
 }) {
   return AbundanceCompany.matches(code, name);
+}
+
+class _A12Progression {
+  const _A12Progression(this.key, this.name, this.level);
+  final String key;
+  final String name;
+  final int level;
+}
+
+/// Rank thresholds used by the source-of-truth A12 dashboard service.
+_A12Progression _a12ProgressionFor(double score) {
+  if (score >= 100) return const _A12Progression('IMMORTAL', 'Immortal', 5);
+  if (score > 75) return const _A12Progression('DIVINE', 'Divine', 4);
+  if (score > 50) return const _A12Progression('ANCIENT', 'Ancient', 3);
+  if (score > 25) return const _A12Progression('LEGEND', 'Legend', 2);
+  return const _A12Progression('ARCHON', 'Archon', 1);
 }
 
 class AbundanceMenteeDashboardScreen extends StatefulWidget {
@@ -56,6 +78,9 @@ class _AbundanceMenteeDashboardScreenState
     extends State<AbundanceMenteeDashboardScreen> {
   late final GoalsService _service;
   late Future<_DashboardData> _dashboardFuture;
+  final Map<String, bool> _missionOverrides = <String, bool>{};
+  String? _missionReward;
+  String? _pendingMission;
 
   @override
   void initState() {
@@ -102,9 +127,7 @@ class _AbundanceMenteeDashboardScreenState
     final coach = await _loadCoachProfile();
 
     final displayName = _displayNameFrom(userData, fallback: session.email);
-    final joinedAt = _dateFrom(
-          userData['createdAt'],
-        ) ??
+    final joinedAt = _dateFrom(userData['createdAt']) ??
         _dateFrom(userData['joinedAt']) ??
         DateTime.now().subtract(const Duration(days: 365));
 
@@ -147,15 +170,11 @@ class _AbundanceMenteeDashboardScreenState
     );
   }
 
-  List<_DailyLog> _buildDailyLogs(
-    List<Map<String, dynamic>> docs,
-  ) {
+  List<_DailyLog> _buildDailyLogs(List<Map<String, dynamic>> docs) {
     final byDay = <String, _DailyLog>{};
     for (final data in docs) {
       final day = _dayKeyFrom(data);
-      final timestamp = _dateFrom(
-            data['lastUpdated'],
-          ) ??
+      final timestamp = _dateFrom(data['lastUpdated']) ??
           _dateFrom(data['updatedAt']) ??
           _dateFrom(data['createdAt']) ??
           DateTime.fromMillisecondsSinceEpoch(0);
@@ -165,6 +184,9 @@ class _AbundanceMenteeDashboardScreenState
         dayKey: day,
         completedTasks: completed,
         totalTasks: total,
+        completedFields: {
+          for (final field in _taskFields) field: data[field] == true,
+        },
         updatedAt: timestamp,
       );
 
@@ -179,9 +201,7 @@ class _AbundanceMenteeDashboardScreenState
     return logs;
   }
 
-  List<_EmotionLog> _buildEmotionLogs(
-    List<Map<String, dynamic>> docs,
-  ) {
+  List<_EmotionLog> _buildEmotionLogs(List<Map<String, dynamic>> docs) {
     final byDay = <String, _EmotionLog>{};
     for (final data in docs) {
       final day = _stringValue(data['date']).trim().isNotEmpty
@@ -192,9 +212,7 @@ class _AbundanceMenteeDashboardScreenState
                   _dateFrom(data['createdAt']) ??
                   DateTime.now(),
             );
-      final timestamp = _dateFrom(
-            data['lastLoggedAt'],
-          ) ??
+      final timestamp = _dateFrom(data['lastLoggedAt']) ??
           _dateFrom(data['updatedAt']) ??
           _dateFrom(data['createdAt']) ??
           DateTime.fromMillisecondsSinceEpoch(0);
@@ -268,10 +286,7 @@ class _AbundanceMenteeDashboardScreenState
     if (!data.allowed) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => GoalFormScreen(
-          service: _service,
-          uid: data.userId,
-        ),
+        builder: (_) => GoalFormScreen(service: _service, uid: data.userId),
       ),
     );
     if (mounted) await _reloadDashboard();
@@ -297,6 +312,125 @@ class _AbundanceMenteeDashboardScreenState
     await Navigator.of(context).pushNamed(routeName);
   }
 
+  Future<void> _toggleHomeMission(
+    AbundanceHomeMission mission,
+    bool completed,
+    _DashboardData data,
+  ) async {
+    final next = !completed;
+    setState(() {
+      _missionOverrides[mission.key] = next;
+      _pendingMission = mission.key;
+      _missionReward = null;
+    });
+    try {
+      final date = isoDay(DateTime.now());
+      final kwargs = <String, dynamic>{'date': date};
+      switch (mission.payloadField) {
+        case 'call':
+          kwargs['call'] = next;
+          break;
+        case 'steps':
+          kwargs['steps'] = next;
+          break;
+        case 'exercise':
+          kwargs['exercise'] = next;
+          break;
+        case 'meditation':
+          kwargs['meditation'] = next;
+          break;
+        case 'learning':
+          kwargs['learning'] = next;
+          break;
+        case 'add_value':
+          kwargs['addValue'] = next;
+          break;
+      }
+      await DailyTrackerApiService.instance.upsert(
+        date: kwargs['date'] as String,
+        call: kwargs['call'] as bool?,
+        steps: kwargs['steps'] as bool?,
+        exercise: kwargs['exercise'] as bool?,
+        meditation: kwargs['meditation'] as bool?,
+        learning: kwargs['learning'] as bool?,
+        addValue: kwargs['addValue'] as bool?,
+        username: data.displayName,
+        companyCode: data.companyCode,
+        companyName: data.companyName,
+      );
+      if (next && mounted) {
+        setState(() => _missionReward = '+50 XP earned');
+        final completedCount = abundanceHomeMissionCatalog
+            .where((item) => item.key == 'meditation' || item.key == 'exercise')
+            .where(
+              (item) =>
+                  _missionOverrides[item.key] ??
+                  data.dailyLogs
+                      .firstWhere(
+                        (log) => log.dayKey == date,
+                        orElse: () => _DailyLog(
+                          dayKey: date,
+                          completedTasks: 0,
+                          totalTasks: _taskFields.length,
+                          completedFields: const <String, bool>{},
+                          updatedAt: DateTime.now(),
+                        ),
+                      )
+                      .completedFields[item.key] ??
+                  false,
+            )
+            .length;
+        await _showMissionReward(completedCount);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _missionOverrides.remove(mission.key));
+    } finally {
+      if (mounted) setState(() => _pendingMission = null);
+    }
+  }
+
+  Future<void> _showMissionReward(int completedCount) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: .68),
+      builder: (dialogContext) => Dialog(
+        backgroundColor: AbundanceColors.surfaceRaised,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: const BorderSide(color: AbundanceColors.primaryGold),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '$completedCount/2 COMPLETED',
+                style: const TextStyle(
+                  color: AbundanceColors.primaryGold,
+                  fontSize: 25,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '+50 XP earned',
+                style:
+                    TextStyle(color: AbundanceColors.mutedStrong, fontSize: 18),
+              ),
+              const SizedBox(height: 18),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Continue'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<_DashboardData>(
@@ -313,6 +447,11 @@ class _AbundanceMenteeDashboardScreenState
           return _AccessDeniedView(theme: data.theme);
         }
 
+        return _buildReferenceHome(data);
+
+        // Legacy dashboard branch retained below for reference while the
+        // Abundance company uses the reference home above.
+        // ignore: dead_code
         final goals = data.goals;
         final scoreGoals = goals
             .map(
@@ -434,21 +573,17 @@ class _AbundanceMenteeDashboardScreenState
                   const SizedBox(height: 18),
                   _QuickActionGrid(
                     theme: data.theme,
-                    onGoals: () =>
-                        unawaited(_openNamedRoute('/goalsHub')),
+                    onGoals: () => unawaited(_openNamedRoute('/goalsHub')),
                     onCheckIn: () =>
                         unawaited(_openNamedRoute('/emotionScreen')),
-                    onRank: () =>
-                        unawaited(_openNamedRoute('/leaderboard')),
-                    onTasks: () =>
-                        unawaited(_openNamedRoute('/userprogress')),
+                    onRank: () => unawaited(_openNamedRoute('/leaderboard')),
+                    onTasks: () => unawaited(_openNamedRoute('/userprogress')),
                   ),
                   const SizedBox(height: 18),
                   _SectionHeader(
                     title: 'Goals by category',
                     actionLabel: 'Open goals',
-                    onAction: () =>
-                        unawaited(_openNamedRoute('/goalsHub')),
+                    onAction: () => unawaited(_openNamedRoute('/goalsHub')),
                   ),
                   if (requiredGoalGaps(goals).isNotEmpty) ...[
                     const SizedBox(height: 10),
@@ -519,11 +654,7 @@ class _AbundanceMenteeDashboardScreenState
                       }
 
                       return Column(
-                        children: [
-                          left,
-                          const SizedBox(height: 12),
-                          right,
-                        ],
+                        children: [left, const SizedBox(height: 12), right],
                       );
                     },
                   ),
@@ -534,10 +665,7 @@ class _AbundanceMenteeDashboardScreenState
                     onAction: () => unawaited(_reloadDashboard()),
                   ),
                   const SizedBox(height: 10),
-                  _AnalyticsCard(
-                    theme: data.theme,
-                    points: momentumPoints,
-                  ),
+                  _AnalyticsCard(theme: data.theme, points: momentumPoints),
                   const SizedBox(height: 18),
                   _SectionHeader(
                     title: 'Achievements',
@@ -575,6 +703,202 @@ class _AbundanceMenteeDashboardScreenState
     );
   }
 
+  Widget _buildReferenceHome(_DashboardData data) {
+    final scoreGoals = data.goals
+        .map(
+          (goal) => ScorableGoal(
+            status: goal.status,
+            progress: goal.progress,
+            category: goal.category,
+            goalType: goal.goalType,
+            targetValue: goal.targetValue,
+            currentValue: goal.currentValue,
+          ),
+        )
+        .toList();
+    final score = computeUserScore(
+      UserScoreInputs(
+        userId: data.userId,
+        joinedAt: data.joinedAt,
+        goals: scoreGoals,
+        completionDays: _completionDaysFrom(data.dailyLogs),
+        checkInDays: data.emotionLogs.map((log) => log.dayKey).toList(),
+        activeCoreTaskCount: _taskFields.length,
+      ),
+      asOf: DateTime.now(),
+    );
+    // A12 Life Power is the mean progress of the user's active goals. This is
+    // intentionally separate from InnerU's richer analytics score: the
+    // reference app's rank/level is earned from the goal progress shown here.
+    final power = data.goals.isEmpty
+        ? 0
+        : (data.goals.fold<int>(0, (sum, goal) => sum + goal.progress) /
+                data.goals.length)
+            .round()
+            .clamp(0, 100);
+    final progression = _a12ProgressionFor(power.toDouble());
+    final today = data.dailyLogs.firstWhere(
+      (log) => log.dayKey == isoDay(DateTime.now()),
+      orElse: () => data.dailyLogs.isNotEmpty
+          ? data.dailyLogs.last
+          : _DailyLog(
+              dayKey: isoDay(DateTime.now()),
+              completedTasks: 0,
+              totalTasks: _taskFields.length,
+              completedFields: const <String, bool>{},
+              updatedAt: DateTime.now(),
+            ),
+    );
+    final greeting = abundanceHomeGreeting(DateTime.now());
+    final displayName = data.displayName.isEmpty ? 'PLAYER' : data.displayName;
+
+    return Theme(
+      data: AppTheme.company(data.theme),
+      child: Scaffold(
+        backgroundColor: AbundanceColors.background,
+        body: SafeArea(
+          bottom: false,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Image.asset(
+                  'assets/images/abundance/scenes/bg2.webp',
+                  fit: BoxFit.cover,
+                  opacity: const AlwaysStoppedAnimation(0.28),
+                ),
+              ),
+              Positioned.fill(
+                child: ColoredBox(
+                  color: AbundanceColors.background.withValues(alpha: 0.72),
+                ),
+              ),
+              Column(
+                children: [
+                  _AbundanceReferenceHeader(
+                    displayName: displayName,
+                    profilePic: data.profilePic,
+                    userId: data.userId,
+                    roleLabel:
+                        AuthService.instance.currentSession?.isCoach == true
+                            ? 'Coach'
+                            : 'Student',
+                  ),
+                  Expanded(
+                    child: RefreshIndicator(
+                      color: AbundanceColors.primaryGold,
+                      backgroundColor: AbundanceColors.surfaceRaised,
+                      onRefresh: _reloadDashboard,
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(18, 18, 18, 32),
+                        children: [
+                          _AbundanceReferenceHero(
+                            greeting: greeting,
+                            displayName: displayName,
+                            rankName: progression.name,
+                            rankKey: progression.key,
+                            level: progression.level,
+                            power: power,
+                          ),
+                          const SizedBox(height: 18),
+                          _AbundanceReferenceMissionPanel(
+                            today: today,
+                            overrides: _missionOverrides,
+                            pendingMission: _pendingMission,
+                            reward: _missionReward,
+                            resetCountdown: _resetCountdownLabel(
+                              DateTime.now(),
+                            ),
+                            onToggle: (mission, completed) =>
+                                _toggleHomeMission(mission, completed, data),
+                            onCalendar: () =>
+                                unawaited(_openNamedRoute('/userprogress')),
+                          ),
+                          const SizedBox(height: 22),
+                          _AbundanceReferenceSectionHeading(
+                            title: 'GOALS',
+                            action: 'View all',
+                            onTap: () =>
+                                unawaited(_openNamedRoute('/goalsHub')),
+                          ),
+                          const SizedBox(height: 10),
+                          for (final goal in data.goals.take(3)) ...[
+                            _AbundanceReferenceGoalCard(
+                              goal: goal,
+                              onTap: () => _showGoalProgress(goal),
+                            ),
+                            const SizedBox(height: 14),
+                          ],
+                          if (data.goals.isEmpty)
+                            const _AbundanceReferenceEmpty(
+                              text: 'Your goals will appear here after setup.',
+                            ),
+                          const SizedBox(height: 8),
+                          _AbundanceReferenceSectionHeading(
+                            title: 'ACHIEVEMENTS',
+                            action:
+                                '${_buildAchievements(score, data.goals).where((item) => item.unlocked).length} of 15 earned ›',
+                            onTap: () =>
+                                unawaited(_openNamedRoute('/leaderboard')),
+                          ),
+                          const SizedBox(height: 12),
+                          _AbundanceReferenceAchievements(
+                            unlocked: _buildAchievements(
+                              score,
+                              data.goals,
+                            ).where((item) => item.unlocked).length,
+                          ),
+                          const SizedBox(height: 18),
+                          const Text(
+                            'THE KINGDOM OF YOUR LIFE IS NOT GIVEN TO YOU. IT IS BUILT BY YOUR DAILY CHOICES.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AbundanceColors.mutedStrong,
+                              fontStyle: FontStyle.italic,
+                              fontSize: 14,
+                              height: 1.7,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showGoalProgress(GoalSummary goal) async {
+    final data = await _dashboardFuture;
+    if (!mounted || !data.allowed) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AbundanceColors.surfaceRaised,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) => _AbundanceGoalProgressSheet(
+        goal: goal,
+        onViewGoal: () {
+          Navigator.of(sheetContext).pop();
+          unawaited(_openGoalDetail(goal));
+        },
+      ),
+    );
+  }
+
+  String _resetCountdownLabel(DateTime now) {
+    final tomorrow = DateTime(now.year, now.month, now.day + 1);
+    final remaining = tomorrow.difference(now);
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${two(remaining.inHours)}:${two(remaining.inMinutes.remainder(60))}:${two(remaining.inSeconds.remainder(60))}';
+  }
+
   List<String> _completionDaysFrom(List<_DailyLog> logs) {
     final days = <String>[];
     for (final log in logs) {
@@ -591,7 +915,11 @@ class _AbundanceMenteeDashboardScreenState
   ) {
     final stats = <GoalCategory, _CategoryStat>{
       for (final category in GoalCategory.values)
-        category: const _CategoryStat(totalGoals: 0, completedGoals: 0, score: 0),
+        category: const _CategoryStat(
+          totalGoals: 0,
+          completedGoals: 0,
+          score: 0,
+        ),
     };
 
     for (final goal in goals) {
@@ -607,8 +935,12 @@ class _AbundanceMenteeDashboardScreenState
     return stats;
   }
 
-  List<_Achievement> _buildAchievements(UserScore score, List<GoalSummary> goals) {
-    final completed = goals.where((goal) => goal.status == GoalStatus.completed).length;
+  List<_Achievement> _buildAchievements(
+    UserScore score,
+    List<GoalSummary> goals,
+  ) {
+    final completed =
+        goals.where((goal) => goal.status == GoalStatus.completed).length;
     final hasAllCategories = requiredGoalGaps(goals).isEmpty;
     final hasAnyGoal = goals.isNotEmpty;
     final hasNoOverdue = goals.every((goal) => !goal.isOverdue);
@@ -655,7 +987,9 @@ class _AbundanceMenteeDashboardScreenState
 
   List<_MomentumPoint> _buildMomentumPoints(_DashboardData data) {
     final days = lastNDays(7);
-    final trackerByDay = <String, _DailyLog>{for (final log in data.dailyLogs) log.dayKey: log};
+    final trackerByDay = <String, _DailyLog>{
+      for (final log in data.dailyLogs) log.dayKey: log,
+    };
     final checkInsByDay = <String, _EmotionLog>{
       for (final log in data.emotionLogs) log.dayKey: log,
     };
@@ -742,12 +1076,14 @@ class _DailyLog {
     required this.dayKey,
     required this.completedTasks,
     required this.totalTasks,
+    required this.completedFields,
     required this.updatedAt,
   });
 
   final String dayKey;
   final int completedTasks;
   final int totalTasks;
+  final Map<String, bool> completedFields;
   final DateTime updatedAt;
 }
 
@@ -776,10 +1112,7 @@ class _CategoryStat {
 }
 
 class _MomentumPoint {
-  const _MomentumPoint({
-    required this.label,
-    required this.value,
-  });
+  const _MomentumPoint({required this.label, required this.value});
 
   final String label;
   final double value;
@@ -797,6 +1130,899 @@ class _Achievement {
   final String subtitle;
   final IconData icon;
   final bool unlocked;
+}
+
+class _AbundanceReferenceHeader extends StatelessWidget {
+  const _AbundanceReferenceHeader({
+    required this.displayName,
+    required this.profilePic,
+    required this.userId,
+    required this.roleLabel,
+  });
+
+  final String displayName;
+  final String profilePic;
+  final String userId;
+  final String roleLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AbundanceColors.surfaceRaised,
+        border: Border(bottom: BorderSide(color: AbundanceColors.border)),
+      ),
+      padding: const EdgeInsets.fromLTRB(18, 14, 12, 14),
+      child: Row(
+        children: [
+          Image.asset(
+            'assets/images/abundance/brand/a12-logo.png',
+            width: 52,
+            height: 48,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => const Icon(
+              Icons.auto_awesome,
+              color: AbundanceColors.accentCyan,
+              size: 32,
+            ),
+          ),
+          const SizedBox(width: 9),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'ABUNDANCE 12',
+                  style: TextStyle(
+                    color: AbundanceColors.foreground,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.7,
+                  ),
+                ),
+                Text(
+                  'THE GAME OF MY LIFE',
+                  style: TextStyle(
+                    color: AbundanceColors.primaryGold,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 2.1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Semantics(
+            button: true,
+            label: 'Notifications',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(24),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => NotificationsScreen(userId: userId),
+                ),
+              ),
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AbundanceColors.borderStrong),
+                ),
+                child: const Icon(
+                  Icons.notifications_none,
+                  color: AbundanceColors.mutedStrong,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          AbundanceProfileMenuButton(
+            displayName: displayName,
+            profilePic: profilePic,
+            email: AuthService.instance.currentSession?.email ?? '',
+            roleLabel: roleLabel,
+            onNotifications: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => NotificationsScreen(userId: userId),
+              ),
+            ),
+            onProfile: () =>
+                Navigator.of(context).pushNamed('/profileSettings'),
+            onReplayTutorial: () {},
+            onSignOut: () async {
+              await SessionCleanupService.signOut();
+              if (context.mounted) {
+                Navigator.of(context)
+                    .pushNamedAndRemoveUntil('/login', (_) => false);
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AbundanceReferenceHero extends StatelessWidget {
+  const _AbundanceReferenceHero({
+    required this.greeting,
+    required this.displayName,
+    required this.rankName,
+    required this.rankKey,
+    required this.level,
+    required this.power,
+  });
+
+  final String greeting;
+  final String displayName;
+  final String rankName;
+  final String rankKey;
+  final int level;
+  final int power;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 540),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: AbundanceColors.accentCyan.withValues(alpha: .35),
+          ),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Image.asset(
+                'assets/images/abundance/scenes/bg2.webp',
+                fit: BoxFit.cover,
+              ),
+            ),
+            Positioned.fill(
+              child: ColoredBox(color: Colors.black.withValues(alpha: .38)),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$greeting,',
+                    style: const TextStyle(
+                      color: AbundanceColors.sceneMuted,
+                      fontSize: 17,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    displayName.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AbundanceColors.foreground,
+                      fontFamily: 'Georgia',
+                      fontSize: 35,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Image.asset(
+                        abundanceRankMedalAsset(rankKey),
+                        width: 84,
+                        height: 84,
+                        errorBuilder: (_, __, ___) => const Icon(
+                          Icons.shield,
+                          color: AbundanceColors.primaryGold,
+                          size: 64,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            rankName.toUpperCase(),
+                            style: const TextStyle(
+                              color: AbundanceColors.primaryGold,
+                              fontFamily: 'Georgia',
+                              fontSize: 24,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          Text(
+                            'LEVEL $level',
+                            style: const TextStyle(
+                              color: AbundanceColors.sceneMuted,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'You hold $rankName, the rank your Life Power has earned.',
+                    style: const TextStyle(
+                      color: AbundanceColors.sceneMuted,
+                      fontSize: 17,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(14, 18, 14, 18),
+                    decoration: BoxDecoration(
+                      color: AbundanceColors.surfaceRaised.withValues(
+                        alpha: .94,
+                      ),
+                      border: Border.all(color: AbundanceColors.border),
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text(
+                          'LIFE POWER',
+                          style: TextStyle(
+                            color: AbundanceColors.primaryGold,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 3,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: 220,
+                          height: 220,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              CircularProgressIndicator(
+                                value: 1,
+                                strokeWidth: 12,
+                                valueColor: AlwaysStoppedAnimation(
+                                  AbundanceColors.accentCyan.withValues(
+                                    alpha: .22,
+                                  ),
+                                ),
+                              ),
+                              CircularProgressIndicator(
+                                value: power / 100,
+                                strokeWidth: 12,
+                                valueColor: const AlwaysStoppedAnimation(
+                                  AbundanceColors.accentCyan,
+                                ),
+                              ),
+                              Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    '$power%',
+                                    style: const TextStyle(
+                                      color: AbundanceColors.foreground,
+                                      fontSize: 48,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                  const Text(
+                                    'of 100',
+                                    style: TextStyle(
+                                      color: AbundanceColors.mutedStrong,
+                                      fontSize: 18,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'The kingdom answers to you.',
+                          style: TextStyle(
+                            color: AbundanceColors.mutedStrong,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AbundanceReferenceMissionPanel extends StatefulWidget {
+  const _AbundanceReferenceMissionPanel({
+    required this.today,
+    required this.overrides,
+    required this.pendingMission,
+    required this.reward,
+    required this.resetCountdown,
+    required this.onToggle,
+    required this.onCalendar,
+  });
+
+  final _DailyLog today;
+  final Map<String, bool> overrides;
+  final String? pendingMission;
+  final String? reward;
+  final String resetCountdown;
+  final Future<void> Function(AbundanceHomeMission mission, bool completed)
+      onToggle;
+  final VoidCallback onCalendar;
+
+  @override
+  State<_AbundanceReferenceMissionPanel> createState() =>
+      _AbundanceReferenceMissionPanelState();
+}
+
+class _AbundanceReferenceMissionPanelState
+    extends State<_AbundanceReferenceMissionPanel> {
+  late String _countdown;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _countdown = widget.resetCountdown;
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() => _countdown = _resetCountdownLabel(DateTime.now()));
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String _resetCountdownLabel(DateTime now) {
+    final remaining =
+        DateTime(now.year, now.month, now.day + 1).difference(now);
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${two(remaining.inHours)}:${two(remaining.inMinutes.remainder(60))}:${two(remaining.inSeconds.remainder(60))}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final missions = abundanceHomeMissionCatalog
+        .where((item) => item.key == 'meditation' || item.key == 'exercise')
+        .toList(growable: false);
+    final completedCount = missions
+        .where(
+          (mission) =>
+              widget.overrides[mission.key] ??
+              widget.today.completedFields[mission.key] ??
+              false,
+        )
+        .length;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
+      decoration: BoxDecoration(
+        color: AbundanceColors.surfaceRaised,
+        border: Border.all(color: AbundanceColors.border),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  "TODAY'S MISSION",
+                  style: TextStyle(
+                    color: AbundanceColors.primaryGold,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 2,
+                  ),
+                ),
+              ),
+              const Icon(
+                Icons.access_time,
+                color: AbundanceColors.muted,
+                size: 18,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Resets in $_countdown',
+                style: TextStyle(
+                  color: AbundanceColors.mutedStrong,
+                  fontSize: 12,
+                ),
+              ),
+              IconButton(
+                onPressed: widget.onCalendar,
+                icon: const Icon(
+                  Icons.calendar_month,
+                  color: AbundanceColors.primaryGold,
+                  size: 20,
+                ),
+              ),
+            ],
+          ),
+          if (widget.reward != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              '$completedCount/2 COMPLETED  ·  ${widget.reward}',
+              style: const TextStyle(
+                color: AbundanceColors.primaryGold,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: missions.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: .86,
+            ),
+            itemBuilder: (context, index) {
+              final mission = missions[index];
+              final complete = widget.overrides[mission.key] ??
+                  widget.today.completedFields[mission.key] ??
+                  false;
+              final pending = widget.pendingMission == mission.key;
+              final accent = mission.tone == AbundanceMissionTone.body
+                  ? AbundanceColors.accentCyan
+                  : const Color(0xFF9A64FF);
+              return InkWell(
+                borderRadius: BorderRadius.circular(18),
+                onTap:
+                    pending ? null : () => widget.onToggle(mission, complete),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AbundanceColors.surfaceSunken,
+                    border: Border.all(
+                      color: complete
+                          ? AbundanceColors.scoreExcellent.withValues(alpha: .7)
+                          : accent.withValues(alpha: .9),
+                    ),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: .12),
+                          border: Border.all(color: accent),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Icon(mission.icon, color: accent, size: 27),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        mission.title,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: complete
+                              ? AbundanceColors.mutedStrong
+                              : AbundanceColors.foreground,
+                          decoration:
+                              complete ? TextDecoration.lineThrough : null,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        mission.description,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AbundanceColors.muted,
+                          fontSize: 11,
+                        ),
+                      ),
+                      const Spacer(),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            complete ? '+50 XP' : '+0 XP',
+                            style: const TextStyle(
+                              color: AbundanceColors.mutedStrong,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Container(
+                            width: 26,
+                            height: 26,
+                            decoration: BoxDecoration(
+                              color: complete
+                                  ? AbundanceColors.primaryGold
+                                  : Colors.transparent,
+                              border: Border.all(
+                                color: complete
+                                    ? AbundanceColors.primaryGold
+                                    : AbundanceColors.borderStrong,
+                                width: 2,
+                              ),
+                              shape: BoxShape.circle,
+                            ),
+                            child: complete
+                                ? const Icon(
+                                    Icons.check,
+                                    color: AbundanceColors.surfaceSunken,
+                                    size: 18,
+                                  )
+                                : null,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AbundanceReferenceSectionHeading extends StatelessWidget {
+  const _AbundanceReferenceSectionHeading({
+    required this.title,
+    required this.action,
+    required this.onTap,
+  });
+  final String title;
+  final String action;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: AbundanceColors.primaryGold,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 2,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: onTap,
+            child: Text(
+              action,
+              style: const TextStyle(
+                color: AbundanceColors.primaryGold,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      );
+}
+
+class _AbundanceReferenceGoalCard extends StatelessWidget {
+  const _AbundanceReferenceGoalCard({required this.goal, required this.onTap});
+  final GoalSummary goal;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) {
+    final accent = AbundanceColors.categoryColor(goal.category.code);
+    final progress = goal.progress.clamp(0, 100).round();
+    final scene = abundanceQuestSceneAsset(goal.category.code);
+    return InkWell(
+      borderRadius: BorderRadius.circular(22),
+      onTap: onTap,
+      child: Container(
+        height: 176,
+        decoration: BoxDecoration(
+          border: Border.all(color: AbundanceColors.border),
+          borderRadius: BorderRadius.circular(22),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          children: [
+            if (scene != null)
+              Positioned.fill(child: Image.asset(scene, fit: BoxFit.cover)),
+            Positioned.fill(
+              child: ColoredBox(color: Colors.black.withValues(alpha: .52)),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: accent, width: 1.5),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: Text(
+                      goal.category.label.toUpperCase(),
+                      style: TextStyle(
+                        color: accent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    goal.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AbundanceColors.foreground,
+                      fontFamily: 'Georgia',
+                      fontSize: 26,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$progress%',
+                    style: const TextStyle(
+                      color: AbundanceColors.foreground,
+                      fontFamily: 'Georgia',
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const Spacer(),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(99),
+                    child: LinearProgressIndicator(
+                      value: progress / 100,
+                      minHeight: 8,
+                      backgroundColor: Colors.black.withValues(alpha: .55),
+                      valueColor: AlwaysStoppedAnimation(accent),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '$progress% complete · Tap to log progress',
+                    style: const TextStyle(
+                      color: AbundanceColors.sceneMuted,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AbundanceReferenceAchievements extends StatelessWidget {
+  const _AbundanceReferenceAchievements({required this.unlocked});
+  final int unlocked;
+  @override
+  Widget build(BuildContext context) {
+    const entries = [
+      ('given-freely.png', 'GIVEN FREELY'),
+      ('finished-first.png', 'FIRST FINISH'),
+    ];
+    return Row(
+      children: [
+        for (final entry in entries)
+          Expanded(
+            child: Column(
+              children: [
+                Image.asset(
+                  'assets/images/abundance/achievements/${entry.$1}',
+                  width: 74,
+                  height: 74,
+                  errorBuilder: (_, __, ___) => const Icon(
+                    Icons.emoji_events,
+                    color: AbundanceColors.primaryGold,
+                    size: 64,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  entry.$2,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AbundanceColors.mutedStrong,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        Expanded(
+          child: Column(
+            children: [
+              Container(
+                width: 74,
+                height: 74,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AbundanceColors.borderStrong,
+                    width: 1.5,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.diamond_outlined,
+                  color: AbundanceColors.mutedStrong,
+                  size: 30,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'KEEP GOING',
+                style: TextStyle(
+                  color: AbundanceColors.mutedStrong,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AbundanceReferenceEmpty extends StatelessWidget {
+  const _AbundanceReferenceEmpty({required this.text});
+  final String text;
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: AbundanceColors.surfaceRaised,
+          border: Border.all(color: AbundanceColors.border),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: AbundanceColors.mutedStrong),
+        ),
+      );
+}
+
+class _AbundanceGoalProgressSheet extends StatelessWidget {
+  const _AbundanceGoalProgressSheet({
+    required this.goal,
+    required this.onViewGoal,
+  });
+  final GoalSummary goal;
+  final VoidCallback onViewGoal;
+  @override
+  Widget build(BuildContext context) {
+    final progress = goal.progress.clamp(0, 100).round();
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(22, 12, 22, 22),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 54,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: AbundanceColors.mutedStrong,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              goal.title,
+              style: const TextStyle(
+                color: AbundanceColors.foreground,
+                fontFamily: 'Georgia',
+                fontSize: 28,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${goal.category.label} · ${goal.status.label}',
+              style: const TextStyle(
+                color: AbundanceColors.accentCyan,
+                fontSize: 17,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Where you are now',
+                  style: TextStyle(
+                    color: AbundanceColors.mutedStrong,
+                    fontSize: 16,
+                  ),
+                ),
+                Text(
+                  '$progress%',
+                  style: const TextStyle(
+                    color: AbundanceColors.foreground,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 18,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(
+              value: progress / 100,
+              minHeight: 10,
+              borderRadius: BorderRadius.circular(99),
+              backgroundColor: AbundanceColors.border,
+              valueColor: const AlwaysStoppedAnimation(
+                AbundanceColors.scoreExcellent,
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: onViewGoal,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AbundanceColors.primaryGold,
+                  foregroundColor: AbundanceColors.surfaceSunken,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                ),
+                child: const Text(
+                  'View goal page ↗',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _AccessDeniedView extends StatelessWidget {
@@ -896,10 +2122,7 @@ class _HeroCard extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            theme.primaryColor,
-            theme.accentColor,
-          ],
+          colors: [theme.primaryColor, theme.accentColor],
         ),
         borderRadius: BorderRadius.circular(28),
       ),
@@ -945,10 +2168,11 @@ class _HeroCard extends StatelessWidget {
                     children: [
                       Text(
                         'Welcome back, $displayName',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w900,
-                            ),
+                        style:
+                            Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                ),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -984,10 +2208,7 @@ class _HeroCard extends StatelessWidget {
                 const SizedBox(width: 16),
                 Column(
                   children: [
-                    _ScoreRing(
-                      score: goalTotalScore,
-                      accent: scoreColor,
-                    ),
+                    _ScoreRing(score: goalTotalScore, accent: scoreColor),
                     const SizedBox(height: 10),
                     Text(
                       rankLabel,
@@ -997,10 +2218,7 @@ class _HeroCard extends StatelessWidget {
                           ),
                     ),
                     const SizedBox(height: 8),
-                    _AvatarFrame(
-                      profilePic: profilePic,
-                      fallback: displayName,
-                    ),
+                    _AvatarFrame(profilePic: profilePic, fallback: displayName),
                   ],
                 ),
               ],
@@ -1013,10 +2231,7 @@ class _HeroCard extends StatelessWidget {
 }
 
 class _MiniMetric extends StatelessWidget {
-  const _MiniMetric({
-    required this.label,
-    required this.value,
-  });
+  const _MiniMetric({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -1055,10 +2270,7 @@ class _MiniMetric extends StatelessWidget {
 }
 
 class _ScoreRing extends StatelessWidget {
-  const _ScoreRing({
-    required this.score,
-    required this.accent,
-  });
+  const _ScoreRing({required this.score, required this.accent});
 
   final double score;
   final Color accent;
@@ -1130,10 +2342,7 @@ class _ScoreRing extends StatelessWidget {
 }
 
 class _AvatarFrame extends StatelessWidget {
-  const _AvatarFrame({
-    required this.profilePic,
-    required this.fallback,
-  });
+  const _AvatarFrame({required this.profilePic, required this.fallback});
 
   final String profilePic;
   final String fallback;
@@ -1239,10 +2448,7 @@ class _ActionSpec {
 }
 
 class _ActionCard extends StatelessWidget {
-  const _ActionCard({
-    required this.theme,
-    required this.action,
-  });
+  const _ActionCard({required this.theme, required this.action});
 
   final CompanyThemeData theme;
   final _ActionSpec action;
@@ -1328,10 +2534,7 @@ class _SectionHeader extends StatelessWidget {
                 ),
           ),
         ),
-        TextButton(
-          onPressed: onAction,
-          child: Text(actionLabel),
-        ),
+        TextButton(onPressed: onAction, child: Text(actionLabel)),
       ],
     );
   }
@@ -1344,7 +2547,8 @@ class _MissingCategoryBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final missing = gaps.map((category) => category.label.toLowerCase()).join(' or ');
+    final missing =
+        gaps.map((category) => category.label.toLowerCase()).join(' or ');
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -1545,7 +2749,9 @@ class _DeadlineTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(
-                late ? Icons.warning_amber_rounded : Icons.calendar_month_rounded,
+                late
+                    ? Icons.warning_amber_rounded
+                    : Icons.calendar_month_rounded,
                 color: late ? Colors.red : color,
               ),
             ),
@@ -1566,9 +2772,9 @@ class _DeadlineTile extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     '${category.label} · ${DateFormat.MMMd().format(goal.targetDate)}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: theme.mutedInkColor,
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: theme.mutedInkColor),
                   ),
                 ],
               ),
@@ -1644,11 +2850,14 @@ class _CoachAndCheckInsCard extends StatelessWidget {
                   CircleAvatar(
                     radius: 22,
                     backgroundColor: theme.iconColor.withValues(alpha: 0.12),
-                    backgroundImage:
-                        coach!.profilePic.isNotEmpty ? NetworkImage(coach!.profilePic) : null,
+                    backgroundImage: coach!.profilePic.isNotEmpty
+                        ? NetworkImage(coach!.profilePic)
+                        : null,
                     child: coach!.profilePic.isEmpty
                         ? Text(
-                            coach!.name.isNotEmpty ? coach!.name[0].toUpperCase() : 'C',
+                            coach!.name.isNotEmpty
+                                ? coach!.name[0].toUpperCase()
+                                : 'C',
                             style: TextStyle(
                               color: theme.iconColor,
                               fontWeight: FontWeight.w900,
@@ -1663,20 +2872,22 @@ class _CoachAndCheckInsCard extends StatelessWidget {
                       children: [
                         Text(
                           coach!.name,
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                color: theme.inkColor,
-                                fontWeight: FontWeight.w800,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    color: theme.inkColor,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                         ),
                         const SizedBox(height: 3),
                         Text(
                           coach!.headline,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: theme.mutedInkColor,
-                                height: 1.35,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: theme.mutedInkColor,
+                                    height: 1.35,
+                                  ),
                         ),
                       ],
                     ),
@@ -1735,9 +2946,9 @@ class _CoachAndCheckInsCard extends StatelessWidget {
           if (recentCheckIns.isEmpty)
             Text(
               'No recent check-ins yet.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: theme.mutedInkColor,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: theme.mutedInkColor),
             )
           else
             Column(
@@ -1756,10 +2967,7 @@ class _CoachAndCheckInsCard extends StatelessWidget {
 }
 
 class _CheckInTile extends StatelessWidget {
-  const _CheckInTile({
-    required this.theme,
-    required this.entry,
-  });
+  const _CheckInTile({required this.theme, required this.entry});
 
   final CompanyThemeData theme;
   final _EmotionLog entry;
@@ -1795,9 +3003,9 @@ class _CheckInTile extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   entry.dayKey,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: theme.mutedInkColor,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: theme.mutedInkColor),
                 ),
               ],
             ),
@@ -1809,10 +3017,7 @@ class _CheckInTile extends StatelessWidget {
 }
 
 class _AnalyticsCard extends StatelessWidget {
-  const _AnalyticsCard({
-    required this.theme,
-    required this.points,
-  });
+  const _AnalyticsCard({required this.theme, required this.points});
 
   final CompanyThemeData theme;
   final List<_MomentumPoint> points;
@@ -1821,7 +3026,10 @@ class _AnalyticsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final maxY = math.max(
       100.0,
-      points.fold<double>(0, (total, point) => math.max(total, point.value + 10)),
+      points.fold<double>(
+        0,
+        (total, point) => math.max(total, point.value + 10),
+      ),
     );
 
     return Container(
@@ -1844,9 +3052,9 @@ class _AnalyticsCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             'A gentle blend of daily task completion and check-ins.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: theme.mutedInkColor,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: theme.mutedInkColor),
           ),
           const SizedBox(height: 12),
           SizedBox(
@@ -1880,9 +3088,10 @@ class _AnalyticsCard extends StatelessWidget {
                         if (value % 25 != 0) return const SizedBox.shrink();
                         return Text(
                           value.toInt().toString(),
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: theme.mutedInkColor,
-                              ),
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelSmall
+                              ?.copyWith(color: theme.mutedInkColor),
                         );
                       },
                     ),
@@ -1900,7 +3109,10 @@ class _AnalyticsCard extends StatelessWidget {
                           padding: const EdgeInsets.only(top: 8),
                           child: Text(
                             points[index].label,
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
                                   color: theme.mutedInkColor,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -1959,10 +3171,7 @@ class _AnalyticsCard extends StatelessWidget {
 }
 
 class _AchievementCard extends StatelessWidget {
-  const _AchievementCard({
-    required this.theme,
-    required this.achievement,
-  });
+  const _AchievementCard({required this.theme, required this.achievement});
 
   final CompanyThemeData theme;
   final _Achievement achievement;
@@ -2013,10 +3222,7 @@ class _AchievementCard extends StatelessWidget {
           const Spacer(),
           Chip(
             label: Text(achievement.unlocked ? 'Unlocked' : 'Locked'),
-            labelStyle: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w700,
-            ),
+            labelStyle: TextStyle(color: color, fontWeight: FontWeight.w700),
             visualDensity: VisualDensity.compact,
             backgroundColor: color.withValues(alpha: 0.08),
             side: BorderSide(color: color.withValues(alpha: 0.12)),

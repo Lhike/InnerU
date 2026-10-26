@@ -13,8 +13,11 @@ class AbundanceColors {
   static const Color surfaceRaised = Color(0xFF0D1330);
   static const Color surfaceSunken = Color(0xFF060916);
   static const Color border = Color(0xFF1C2650);
+  static const Color borderStrong = Color(0xFF2A336B);
   static const Color foreground = Color(0xFFF2ECD8);
   static const Color muted = Color(0xFF9FA8C9);
+  static const Color mutedStrong = Color(0xFFC3C9DF);
+  static const Color sceneMuted = Color(0xFFD4D9EA);
 
   static const Color primaryGold = Color(0xFFEAB73F);
   static const Color accentCyan = Color(0xFF58C8FF);

@@ -7,6 +7,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/day_keys.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/domain.dart';
 import 'package:selfcare_projects/src/features/abundance/domain/scoring.dart';
+import 'package:selfcare_projects/src/features/abundance/services/a12_api_transport.dart';
+import 'package:selfcare_projects/src/features/abundance/services/abundance_api_transport.dart';
 import 'package:selfcare_projects/src/services/api_client.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
 
@@ -262,9 +264,14 @@ List<GoalCategory> requiredGoalGaps(List<GoalSummary> goals) {
 
 class GoalsService {
   GoalsService([FirebaseFirestore? legacyFirestore])
-      : _legacyFirestore = legacyFirestore;
+      : _legacyFirestore = legacyFirestore,
+        _api = InnerUAbundanceApiTransport();
 
-  final ApiClient _api = ApiClient.instance;
+  GoalsService.abundance({AbundanceApiTransport? transport})
+      : _legacyFirestore = null,
+        _api = transport ?? A12ApiTransport();
+
+  final AbundanceApiTransport _api;
   final FirebaseFirestore? _legacyFirestore;
 
   String? get _token => AuthService.instance.currentSession?.token;
@@ -1036,7 +1043,8 @@ class GoalsService {
     if (raw is! List) return const <CoachMenteeGoals>[];
     return raw
         .whereType<Map>()
-        .map((entry) => CoachMenteeGoals.fromJson(Map<String, dynamic>.from(entry)))
+        .map((entry) =>
+            CoachMenteeGoals.fromJson(Map<String, dynamic>.from(entry)))
         .toList();
   }
 

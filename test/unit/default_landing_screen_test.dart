@@ -39,8 +39,8 @@ void main() {
         ]),
       );
       expect(DefaultLandingScreen.dashboard.safeAbundanceShellIndex, 0);
-      expect(DefaultLandingScreen.goals.safeAbundanceShellIndex, 1);
-      expect(DefaultLandingScreen.profile.safeAbundanceShellIndex, 3);
+      expect(DefaultLandingScreen.goals.safeAbundanceShellIndex, 2);
+      expect(DefaultLandingScreen.profile.safeAbundanceShellIndex, 5);
       expect(DefaultLandingScreen.community.safeAbundanceShellIndex, 0);
     });
 

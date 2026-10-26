@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:selfcare_projects/firebase_options.dart';
-import 'package:selfcare_projects/src/features/abundance/screens/mentee/goals_hub_screen.dart';
+import 'package:selfcare_projects/src/features/abundance/screens/mentee/goals_hub_route.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/adminscreen/admin_dashboard.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/adminscreen/admin_profile.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/adminscreen/manage_companies.dart';
@@ -216,7 +216,10 @@ class App extends StatelessWidget {
           '/adminProfile': (context) => const AdminProfileScreen(),
           '/adminCompanies': (context) => const ManageCompaniesScreen(),
           '/emotionScreen': (context) => _companyThemed(EmotionTrackerPage()),
-          '/goalsHub': (context) => _companyThemed(const GoalsHubScreen()),
+          '/goalsHub': (context) => CompanyThemeBuilder(
+                builder: (context, companyTheme) =>
+                    themedGoalsHubRoute(companyTheme),
+              ),
           '/userprogress': (context) =>
               _companyThemed(const UserProgressPage()),
           '/communityScreen': (context) => CommunityScreen(),

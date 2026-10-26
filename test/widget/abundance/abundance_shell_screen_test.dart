@@ -60,7 +60,8 @@ void main() {
 
     await tester.tap(find.text('Home'));
     await tester.pumpAndSettle();
-    expect(find.text('Home'), findsWidgets); // the tab label itself, still visible
+    expect(
+        find.text('Home'), findsWidgets); // the tab label itself, still visible
   });
 
   testWidgets('coach shell shows the coach roster on the Quests tab',
@@ -84,7 +85,7 @@ void main() {
         // synchronously in a field initializer and crashes with no live
         // Firebase app in this widget-test environment. This is a test-only
         // override, not a change to production behavior.
-        initialIndex: 1,
+        initialIndex: 2,
       ),
     ));
     await tester.pumpAndSettle();
@@ -163,7 +164,7 @@ void main() {
           companyName: 'Abundance',
           isCompanyTheme: true,
         ),
-        initialIndex: 1, // land directly on Quests
+        initialIndex: 2, // land directly on Quests
       ),
     ));
     await tester.pumpAndSettle();
@@ -180,8 +181,7 @@ void main() {
     expect(find.textContaining('Life Power'), findsNothing);
   });
 
-  testWidgets(
-      'tapping More opens the bottom sheet without changing the selected tab',
+  testWidgets('the Awards tab is available without changing the selected tab',
       (tester) async {
     final service = GoalsService(FakeFirebaseFirestore());
 
@@ -203,20 +203,14 @@ void main() {
     await tester.pumpAndSettle();
 
     // Navigate to Quests first (the shell's real default landing tab is now
-    // Home) and confirm its content is showing before More is tapped, so the
-    // "still there after" check below is meaningful.
+    // Home) and confirm its content is showing before Awards is tapped.
     await tester.tap(find.text('Quests'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Life Power'), findsWidgets);
 
-    await tester.tap(find.text('More'));
+    await tester.tap(find.text('Awards'));
     await tester.pumpAndSettle();
-
-    // BottomSheetWidget.show opened — its menu tiles are on screen.
-    expect(find.text('Log out'), findsOneWidget);
-    expect(find.text('Activity Logs'), findsOneWidget);
-    // The tab underneath is untouched: still Quests, not some 5th "More" body.
-    expect(find.textContaining('Life Power'), findsWidgets);
+    expect(find.text('Awards'), findsWidgets);
   });
 
   // -------------------------------------------------------------------
@@ -335,7 +329,8 @@ void main() {
     expect(find.text('ABUNDANCE 12'), findsNothing);
   });
 
-  testWidgets('initialIndex can never land on the More trigger', (tester) async {
+  testWidgets('initialIndex is clamped to the final Profile tab',
+      (tester) async {
     final service = GoalsService(FakeFirebaseFirestore());
 
     await tester.pumpWidget(MaterialApp(
@@ -348,9 +343,7 @@ void main() {
           companyName: 'Abundance',
           isCompanyTheme: true,
         ),
-        // 4 is "More" — a bottom-sheet trigger, not a tab body. It must clamp
-        // down to a real tab (3, Profile) instead of showing a blank screen.
-        initialIndex: 4,
+        initialIndex: 99,
         questsAccessResolverOverride: (_) async => true,
       ),
     ));
@@ -359,6 +352,6 @@ void main() {
     final nav = tester.widget<BottomNavigationBar>(
       find.byType(BottomNavigationBar),
     );
-    expect(nav.currentIndex, 3);
+    expect(nav.currentIndex, 5);
   });
 }
