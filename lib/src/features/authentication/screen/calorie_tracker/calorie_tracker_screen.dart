@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_image_labeling/google_mlkit_image_labeling.dart';
@@ -8,10 +9,13 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/calorie_tracker/barcode_scanner_screen.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/calorie_tracker/calorie_entry_edit_sheet.dart';
+import 'package:selfcare_projects/src/features/authentication/screen/calorie_tracker/calorie_goal_sheet.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/calorie_tracker/calorie_tracker_math.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
 import 'package:selfcare_projects/src/services/calorie_tracker_api_service.dart';
 import 'package:selfcare_projects/src/services/company_theme_service.dart';
+import 'package:selfcare_projects/src/services/daily_tracker_api_service.dart';
 import 'package:selfcare_projects/src/services/image_storage_service.dart';
 import 'package:selfcare_projects/src/services/ollama_nutrition_service.dart';
 import 'package:selfcare_projects/src/utils/theme/app_theme.dart';
@@ -125,6 +129,117 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
       defaultUnit: 'tsp',
       gramsPerUnit: 5.0,
     ),
+    // Standard restaurant reference portions. Menus vary by country.
+    _PresetFood(
+      name: 'McDonald\'s Big Mac',
+      calories: 550,
+      protein: 25,
+      carbs: 45,
+      fat: 30,
+      aliases: ['big mac', 'big macs', 'big mac burger', 'mcdonalds big mac'],
+      defaultUnit: 'serving',
+      gramsPerUnit: 219.0,
+    ),
+    _PresetFood(
+      name: 'McDonald\'s McChicken',
+      calories: 400,
+      protein: 14,
+      carbs: 39,
+      fat: 21,
+      aliases: ['mcchicken', 'mcdonalds mcchicken', 'chicken burger'],
+      defaultUnit: 'serving',
+      gramsPerUnit: 173.0,
+    ),
+    _PresetFood(
+      name: 'McDonald\'s Medium Fries',
+      calories: 320,
+      protein: 5,
+      carbs: 43,
+      fat: 15,
+      aliases: ['mcdonalds fries', 'medium fries', 'fast food fries'],
+      defaultUnit: 'serving',
+      gramsPerUnit: 111.0,
+    ),
+    _PresetFood(
+      name: 'McDonald\'s 10-piece McNuggets',
+      calories: 410,
+      protein: 23,
+      carbs: 25,
+      fat: 24,
+      aliases: ['10 piece nuggets', '10 pc nuggets', 'mcnuggets'],
+      defaultUnit: 'serving',
+      gramsPerUnit: 162.0,
+    ),
+    _PresetFood(
+      name: 'Burger King Whopper',
+      calories: 670,
+      protein: 31,
+      carbs: 54,
+      fat: 40,
+      aliases: ['whopper', 'whoppers', 'burger king whopper'],
+      defaultUnit: 'serving',
+      gramsPerUnit: 291.0,
+    ),
+    _PresetFood(
+      name: 'KFC Original Recipe Chicken Breast',
+      calories: 390,
+      protein: 39,
+      carbs: 11,
+      fat: 21,
+      aliases: ['kfc chicken', 'kfc breast', 'fried chicken breast'],
+      defaultUnit: 'piece',
+      gramsPerUnit: 181.0,
+    ),
+    _PresetFood(
+      name: 'Jollibee Chickenjoy',
+      calories: 320,
+      protein: 22,
+      carbs: 8,
+      fat: 20,
+      aliases: [
+        'chickenjoy',
+        'chickenjoys',
+        'jollibee chicken',
+        'jollibee fried chicken',
+      ],
+      defaultUnit: 'piece',
+      gramsPerUnit: 170.0,
+    ),
+    _PresetFood(
+      name: 'Jollibee Jolly Spaghetti',
+      calories: 560,
+      protein: 19,
+      carbs: 64,
+      fat: 25,
+      aliases: ['jolly spaghetti', 'jollibee spaghetti'],
+      defaultUnit: 'serving',
+      gramsPerUnit: 330.0,
+    ),
+    _PresetFood(
+      name: 'Subway Italian B.M.T. 6-inch',
+      calories: 410,
+      protein: 18,
+      carbs: 46,
+      fat: 17,
+      aliases: ['subway italian bmt', 'italian bmt', 'subway bmt'],
+      defaultUnit: 'serving',
+      gramsPerUnit: 238.0,
+    ),
+    _PresetFood(
+      name: 'Fast-food Cheeseburger',
+      calories: 303,
+      protein: 15,
+      carbs: 30,
+      fat: 14,
+      aliases: [
+        'cheeseburger',
+        'cheeseburgers',
+        'fast food burger',
+        'hamburger with cheese',
+      ],
+      defaultUnit: 'piece',
+      gramsPerUnit: 150.0,
+    ),
   ];
 
   static const List<String> _mealTypes = [
@@ -190,9 +305,10 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
   bool _showPresetFoods = false;
   bool _showGoalHintBubble = false;
   bool? _isOllamaReachable;
-  String _selectedMealType = 'Breakfast';
+  String _selectedMealType = CalorieActivityMath.mealTypeFor(DateTime.now());
   String _selectedMeasurementUnit = 'piece';
   String _selectedHistoryDateKey = '';
+  String? _nutritionSourceLabel;
   final GlobalKey _addMealSectionKey = GlobalKey();
   late DateTime _historyWeekStart;
   String? _mealPhotoPath;
@@ -200,9 +316,27 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
       'Saved foods are reused first. AI is only used for new foods.';
   List<_NutritionLookupResult> _onlineSuggestions = [];
 
+  /// What the current food's nutrition is measured against; quantity and
+  /// unit changes rescale from it. Null for manually typed nutrition.
+  FoodNutritionBasis? _basis;
+
+  /// True when the nutrition fields were typed by the user rather than
+  /// filled from [_basis], so they are kept if the name changes.
+  bool _nutritionEditedManually = false;
+
+  /// Shown when the chosen unit can't be converted for this food.
+  String? _portionMessage;
+
+  CalorieProfile? _profile;
+  int _todaySteps = 0;
+  List<_NutritionLookupResult> _recentFoods = [];
+  bool _showAllTodayEntries = false;
+
   String get _todayKey => DateFormat('yyyy-MM-dd').format(DateTime.now());
   String get _sessionUserId =>
-      AuthService.instance.currentUserId ?? AuthService.instance.currentSession?.id.toString() ?? '';
+      AuthService.instance.currentUserId ??
+      AuthService.instance.currentSession?.id.toString() ??
+      '';
 
   @override
   void initState() {
@@ -333,10 +467,13 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
       final historyResponse = results[1] as List<Map<String, dynamic>>;
       final dayData = dayResponse['day'];
       final entries = dayResponse['entries'];
-      final goal = (dayData is Map
-              ? (dayData['dailyGoal'] as num?)?.toInt()
-              : null) ??
-          _dailyGoal;
+      final profileData = dayResponse['profile'];
+      // A day with no entries yet still has a goal: the saved profile goal
+      // or yesterday's, resolved by the server.
+      final goal =
+          (dayData is Map ? (dayData['dailyGoal'] as num?)?.toInt() : null) ??
+              (dayResponse['defaultGoal'] as num?)?.toInt() ??
+              _dailyGoal;
 
       setState(() {
         _todayDayData = dayData is Map
@@ -349,10 +486,14 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
                 .toList()
             : <Map<String, dynamic>>[];
         _historyDays = historyResponse;
-        setState(() {
-          _dailyGoal = goal;
-        });
+        _dailyGoal = goal;
+        _profile = CalorieProfile.fromApi(
+          profileData is Map ? profileData.cast<String, dynamic>() : null,
+        );
       });
+
+      unawaited(_loadTodaySteps());
+      unawaited(_loadRecentFoods());
     } catch (_) {
       if (mounted) {
         _showSnackBar('Could not load calorie data.');
@@ -364,6 +505,79 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
         });
       }
     }
+  }
+
+  Future<void> _loadTodaySteps() async {
+    try {
+      final response =
+          await DailyTrackerApiService.instance.fetch(date: _todayKey);
+      final tracker = response['tracker'];
+      final steps =
+          tracker is Map ? (tracker['stepCount'] as num?)?.toInt() ?? 0 : 0;
+      if (mounted) setState(() => _todaySteps = steps);
+    } catch (error) {
+      debugPrint('Could not load steps for calorie budget: $error');
+    }
+  }
+
+  Future<void> _loadRecentFoods() async {
+    try {
+      final memories = await _calorieApi.fetchRecentFoods(limit: 12);
+      if (!mounted) return;
+      setState(() {
+        _recentFoods = memories
+            .map(_nutritionResultFromMemory)
+            .whereType<_NutritionLookupResult>()
+            .toList();
+      });
+    } catch (error) {
+      debugPrint('Could not load recent foods: $error');
+    }
+  }
+
+  /// Calories burned from today's steps, counted only when the goal was set
+  /// up to exclude walking (otherwise it would be counted twice).
+  int get _stepCalories {
+    final profile = _profile;
+    if (profile == null || !profile.countSteps) return 0;
+    return CalorieActivityMath.stepCalories(
+      _todaySteps,
+      weightKg: profile.weightKg,
+      heightCm: profile.heightCm,
+    );
+  }
+
+  /// Puts a day returned by the API into the history list so weekly
+  /// totals and the calendar update without reloading.
+  void _upsertHistoryDay(Map<String, dynamic> day) {
+    final date = day['date']?.toString();
+    if (date == null) return;
+    final index = _historyDays.indexWhere((d) => d['date']?.toString() == date);
+    if (index >= 0) {
+      _historyDays[index] = day;
+    } else {
+      _historyDays = [day, ..._historyDays]..sort((a, b) =>
+          (b['date']?.toString() ?? '').compareTo(a['date']?.toString() ?? ''));
+    }
+  }
+
+  void _applyDayResponse(Map<String, dynamic> response) {
+    final day = response['day'];
+    final entries = response['entries'];
+    setState(() {
+      if (day is Map) {
+        final dayMap = day.cast<String, dynamic>();
+        _todayDayData = dayMap;
+        _dailyGoal = (dayMap['dailyGoal'] as num?)?.toInt() ?? _dailyGoal;
+        _upsertHistoryDay(dayMap);
+      }
+      if (entries is List) {
+        _todayEntries = entries
+            .whereType<Map>()
+            .map((item) => item.cast<String, dynamic>())
+            .toList();
+      }
+    });
   }
 
   Future<void> _refreshOllamaStatus() async {
@@ -396,10 +610,14 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
     }
   }
 
-  Future<void> _saveGoalValue(int goal) async {
-    if (goal <= 0) {
-      _showSnackBar('Enter a valid calorie goal.');
-      return;
+  static const int _minGoal = 800;
+  static const int _maxGoal = 10000;
+
+  /// Saves [goal] for today and as the default for future days.
+  Future<bool> _saveGoalValue(int goal, {CalorieProfile? profile}) async {
+    if (goal < _minGoal || goal > _maxGoal) {
+      _showSnackBar('Enter a goal between $_minGoal and $_maxGoal kcal.');
+      return false;
     }
 
     setState(() {
@@ -407,21 +625,31 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
     });
 
     try {
-      final response = await _calorieApi.updateDay(
+      final response = await _calorieApi.saveProfile(
+        profile:
+            profile?.toApi(dailyGoalOverride: goal) ?? {'daily_goal': goal},
         date: _todayKey,
-        dailyGoal: goal,
       );
       final day = response['day'];
+      final savedProfile = response['profile'];
 
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _dailyGoal = goal;
         if (day is Map) {
           _todayDayData = day.cast<String, dynamic>();
+          _upsertHistoryDay(_todayDayData!);
+        }
+        if (savedProfile is Map) {
+          _profile =
+              CalorieProfile.fromApi(savedProfile.cast<String, dynamic>()) ??
+                  _profile;
         }
       });
+      return true;
     } catch (_) {
       _showSnackBar('Failed to save calorie goal.');
+      return false;
     } finally {
       if (mounted) {
         setState(() {
@@ -445,7 +673,9 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
             onChanged: (value) => goalText = value,
             decoration: const InputDecoration(
               hintText: 'Ex. 2200',
-              helperText: 'This is your target calorie intake for the day.',
+              suffixText: 'kcal',
+              helperText:
+                  'Used today and every day after, until you change it.',
             ),
           ),
           actions: [
@@ -470,207 +700,20 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
   }
 
   Future<void> _openCalorieCalculator() async {
-    String selectedSex = 'Male';
-    double activityMultiplier = 1.375;
-    String activityLabel = 'Lightly active';
-    var ageText = '';
-    var weightText = '';
-    var heightText = '';
-
-    final result = await showDialog<int>(
-      context: context,
-      builder: (context) {
-        String? validationMessage;
-
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            void clearValidation() {
-              if (validationMessage == null) return;
-              setDialogState(() {
-                validationMessage = null;
-              });
-            }
-
-            return AlertDialog(
-              title: const Text('Calorie Intake Calculator'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    DropdownButtonFormField<String>(
-                      initialValue: selectedSex,
-                      decoration: const InputDecoration(labelText: 'Sex'),
-                      items: const [
-                        DropdownMenuItem(value: 'Male', child: Text('Male')),
-                        DropdownMenuItem(
-                            value: 'Female', child: Text('Female')),
-                      ],
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setDialogState(() {
-                          selectedSex = value;
-                          validationMessage = null;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      initialValue: ageText,
-                      keyboardType: TextInputType.number,
-                      onChanged: (value) {
-                        ageText = value;
-                        clearValidation();
-                      },
-                      decoration: const InputDecoration(
-                        labelText: 'Age',
-                        hintText: 'Ex. 24',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      initialValue: weightText,
-                      keyboardType: TextInputType.number,
-                      onChanged: (value) {
-                        weightText = value;
-                        clearValidation();
-                      },
-                      decoration: const InputDecoration(
-                        labelText: 'Weight (kg)',
-                        hintText: 'Ex. 65',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      initialValue: heightText,
-                      keyboardType: TextInputType.number,
-                      onChanged: (value) {
-                        heightText = value;
-                        clearValidation();
-                      },
-                      decoration: const InputDecoration(
-                        labelText: 'Height (cm)',
-                        hintText: 'Ex. 170',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: activityLabel,
-                      decoration: const InputDecoration(labelText: 'Activity'),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'Sedentary',
-                          child: Text('Sedentary'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Lightly active',
-                          child: Text('Lightly active'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Moderately active',
-                          child: Text('Moderately active'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'Very active',
-                          child: Text('Very active'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setDialogState(() {
-                          activityLabel = value;
-                          validationMessage = null;
-                          activityMultiplier = switch (value) {
-                            'Sedentary' => 1.2,
-                            'Moderately active' => 1.55,
-                            'Very active' => 1.725,
-                            _ => 1.375,
-                          };
-                        });
-                      },
-                    ),
-                    if (validationMessage != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        validationMessage!,
-                        style: const TextStyle(
-                          color: Colors.redAccent,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    final age = double.tryParse(ageText.trim());
-                    final weight = double.tryParse(weightText.trim());
-                    final height = double.tryParse(heightText.trim());
-
-                    if (age == null ||
-                        weight == null ||
-                        height == null ||
-                        age <= 0 ||
-                        weight <= 0 ||
-                        height <= 0) {
-                      setDialogState(() {
-                        validationMessage =
-                            'Enter valid age, weight, and height.';
-                      });
-                      return;
-                    }
-
-                    final bmr = selectedSex == 'Male'
-                        ? 10 * weight + 6.25 * height - 5 * age + 5
-                        : 10 * weight + 6.25 * height - 5 * age - 161;
-                    Navigator.pop(
-                      context,
-                      (bmr * activityMultiplier).round(),
-                    );
-                  },
-                  child: const Text('Calculate'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+    final birthdate = AuthService.instance.currentSession?.birthdate;
+    final profile = await showCalorieGoalSheet(
+      context,
+      initialProfile: _profile,
+      ageFromBirthdate: CalorieActivityMath.ageFromBirthdate(
+        DateTime.tryParse(birthdate ?? ''),
+        DateTime.now(),
+      ),
     );
+    if (profile == null || !mounted) return;
 
-    if (result == null || !mounted) return;
-
-    final shouldUse = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Use Suggested Intake?'),
-          content: Text(
-            'Your estimated daily calorie intake is $result kcal. Do you want to use this as your daily goal?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Not Now'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Use This'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (shouldUse != true || !mounted) return;
-    await _saveGoalValue(result);
-    if (!mounted) return;
-    _showSnackBar('Daily goal updated to $result kcal.');
+    final saved = await _saveGoalValue(profile.dailyGoal, profile: profile);
+    if (!saved || !mounted) return;
+    _showSnackBar('Daily goal set to ${profile.dailyGoal} kcal.');
   }
 
   Future<void> _captureMealPhoto() async {
@@ -731,29 +774,7 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
       try {
         final inputImage = InputImage.fromFilePath(imagePath);
         final labels = await labeler.processImage(inputImage);
-        final detectedMealName = await _bestDetectedMealName(labels);
-        if (!mounted || detectedMealName == null || detectedMealName.isEmpty) {
-          return false;
-        }
-
-        _mealController.text = detectedMealName;
-        _handleMealNameChanged(detectedMealName);
-        final nutrition = await _ensureNutritionForMeal(detectedMealName);
-
-        if (!mounted) return false;
-        if (nutrition != null ||
-            (int.tryParse(_calorieController.text.trim()) ?? 0) > 0) {
-          final reusedSavedFood =
-              nutrition?.subtitle == 'Saved from your previous logs';
-          _showSnackBar(
-            reusedSavedFood
-                ? 'Matched $detectedMealName from your saved food history.'
-                : 'Detected $detectedMealName and filled calories automatically.',
-          );
-          return true;
-        }
-
-        return false;
+        return await _autofillFromImageLabels(labels);
       } finally {
         await labeler.close();
       }
@@ -769,9 +790,10 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
     }
   }
 
-  Future<String?> _bestDetectedMealName(List<ImageLabel> labels) async {
-    if (labels.isEmpty) return null;
-
+  /// Tries the photo's labels against the user's saved foods and presets,
+  /// then the AI estimate. Generic labels ("fruit") are never auto-filled
+  /// from the online database; they become a search the user picks from.
+  Future<bool> _autofillFromImageLabels(List<ImageLabel> labels) async {
     const ignoredLabels = {
       'food',
       'dish',
@@ -787,101 +809,81 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
     };
 
     final candidates = labels
-        .map((label) => label.label.trim())
-        .where((label) => label.isNotEmpty)
-        .map((label) => label.toLowerCase())
-        .where((label) => !ignoredLabels.contains(label))
+        .map((label) => label.label.trim().toLowerCase())
+        .where((label) => label.isNotEmpty && !ignoredLabels.contains(label))
         .toList();
 
     for (final candidate in candidates) {
-      final cached = await _lookupFoodMemory(candidate);
-      if (cached != null) {
-        _applyOnlineSuggestion(cached);
-        return cached.displayName;
+      final saved = await _lookupFoodMemory(candidate);
+      if (saved != null && mounted) {
+        _applyLookupResult(saved);
+        _showSnackBar('Matched ${saved.displayName} from your saved foods.');
+        return true;
       }
     }
 
     for (final candidate in candidates) {
       final preset = _findPresetFood(candidate);
       if (preset != null) {
-        return preset.name;
+        _applyPresetFood(preset);
+        _showSnackBar('Detected ${preset.name}. Check the portion.');
+        return true;
       }
     }
 
-    for (final candidate in candidates) {
-      try {
-        final suggestions = await _fetchOnlineSuggestions(candidate, limit: 1);
-        if (suggestions.isNotEmpty) {
-          return suggestions.first.displayName;
-        }
-      } catch (_) {
-        // Keep trying other labels or fall back to manual input.
-      }
+    if (await _tryAutofillMealFromFallbackImageAnalysis(_mealPhotoPath)) {
+      return true;
     }
 
-    final ollamaEstimate = await _estimateMealWithOllama(_mealPhotoPath);
-    if (ollamaEstimate != null) {
-      final result = await _nutritionResultFromDetectedMealName(
-        ollamaEstimate.mealName,
-        fallback: _nutritionResultFromOllamaEstimate(ollamaEstimate),
-      );
-      _applyOnlineSuggestion(result);
-      await _saveFoodMemory(
-        result.displayName,
-        result,
-        source: 'ollama_image_estimate',
-      );
-      return result.displayName;
-    }
-
-    return null;
+    if (candidates.isEmpty || !mounted) return false;
+    _mealController.text = candidates.first;
+    _handleMealNameChanged(candidates.first);
+    _showSnackBar(
+        'Looks like ${candidates.first}. Pick the closest match below.');
+    return true;
   }
 
   Future<bool> _tryAutofillMealFromFallbackImageAnalysis(
-      String imagePath) async {
+    String? imagePath,
+  ) async {
     final ollamaEstimate = await _estimateMealWithOllama(imagePath);
     if (!mounted || ollamaEstimate == null) return false;
 
-    final result = await _nutritionResultFromDetectedMealName(
-      ollamaEstimate.mealName,
-      fallback: _nutritionResultFromOllamaEstimate(ollamaEstimate),
-    );
-    _mealController.text = result.displayName;
-    _handleMealNameChanged(result.displayName);
-    _applyOnlineSuggestion(result);
-    await _saveFoodMemory(
-      result.displayName,
-      result,
-      source: 'ollama_image_estimate',
-    );
-
+    // The user's own saved food wins; otherwise keep the AI's portion-aware
+    // numbers instead of swapping in a database item of a different size.
+    final saved = await _lookupFoodMemory(ollamaEstimate.mealName);
     if (!mounted) return false;
+    final result = saved ?? _nutritionResultFromOllamaEstimate(ollamaEstimate);
+    _applyLookupResult(result);
+
     _showSnackBar(
-      'Estimated ${result.displayName} from your photo and filled calories automatically.',
+      'Estimated ${result.displayName} from your photo. Check the portion before adding.',
     );
     return true;
   }
 
   _NutritionLookupResult _nutritionResultFromOllamaEstimate(
-    OllamaNutritionEstimate ollamaEstimate,
+    OllamaNutritionEstimate estimate,
   ) {
+    final grams = estimate.portionGrams;
+    final confidence = estimate.confidence;
     return _NutritionLookupResult(
-      displayName: ollamaEstimate.mealName,
-      calories: ollamaEstimate.calories,
-      protein: ollamaEstimate.protein,
-      carbs: ollamaEstimate.carbs,
-      fat: ollamaEstimate.fat,
-      subtitle: 'Estimated by local AI',
+      basis: FoodNutritionBasis(
+        name: estimate.mealName,
+        perServing: NutritionValues(
+          calories: estimate.calories.toDouble(),
+          protein: estimate.protein.toDouble(),
+          carbs: estimate.carbs.toDouble(),
+          fat: estimate.fat.toDouble(),
+        ),
+        servingQuantity: grams ?? 1,
+        servingUnit: grams == null ? 'serving' : 'g',
+        gramsPerServing: grams,
+      ),
+      subtitle: confidence == null
+          ? 'AI estimate · check the portion'
+          : 'AI estimate (${(confidence * 100).round()}% sure) · check the portion',
     );
-  }
-
-  Future<_NutritionLookupResult> _nutritionResultFromDetectedMealName(
-    String mealName, {
-    required _NutritionLookupResult fallback,
-  }) async {
-    final lookup = await _lookupNutritionForMealName(mealName);
-    if (lookup != null) return lookup;
-    return fallback;
   }
 
   Future<OllamaNutritionEstimate?> _estimateMealWithOllama(
@@ -900,7 +902,7 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
   }
 
   Future<String?> _uploadMealPhotoIfNeeded() async {
-      final photoPath = _mealPhotoPath;
+    final photoPath = _mealPhotoPath;
     if (photoPath == null || photoPath.isEmpty) return null;
     if (!ImageStorageService.isConfigured) return null;
 
@@ -921,150 +923,146 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
 
     _mealController.clear();
     _quantityController.clear();
-    _calorieController.clear();
-    _proteinController.clear();
-    _carbController.clear();
-    _fatController.clear();
+    _clearNutritionFields();
     _searchDebounce?.cancel();
 
     setState(() {
       _mealPhotoPath = null;
       _onlineSuggestions = [];
       _isSearchingSuggestions = false;
-      _selectedMealType = 'Breakfast';
-      _selectedMeasurementUnit = 'piece';
+      _nutritionSourceLabel = null;
+      _basis = null;
+      _nutritionEditedManually = false;
+      _portionMessage = null;
+      _selectedMealType = CalorieActivityMath.mealTypeFor(DateTime.now());
+      _selectedMeasurementUnit = 'serving';
     });
   }
 
-  String _foodMemoryKey(String mealName) {
-    return mealName
-        .trim()
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-        .replaceAll(RegExp(r'_+'), '_')
-        .replaceAll(RegExp(r'^_|_$'), '');
+  void _clearNutritionFields() {
+    _calorieController.clear();
+    _proteinController.clear();
+    _carbController.clear();
+    _fatController.clear();
+  }
+
+  _NutritionLookupResult? _nutritionResultFromMemory(
+    Map<String, dynamic> data, {
+    String? fallbackName,
+  }) {
+    final calories = CalorieTrackerMath.parseLooseNumber(data['calories']);
+    if (calories == null || calories <= 0) return null;
+    final name = data['displayName']?.toString().trim();
+    final displayName =
+        name != null && name.isNotEmpty ? name : (fallbackName ?? '').trim();
+    if (displayName.isEmpty) return null;
+
+    double read(String key) =>
+        CalorieTrackerMath.parseLooseNumber(data[key]) ?? 0;
+    final servingQuantity =
+        CalorieTrackerMath.parseLooseNumber(data['servingQuantity']);
+    final servingUnit = data['servingUnit']?.toString().trim();
+
+    return _NutritionLookupResult(
+      basis: FoodNutritionBasis(
+        name: displayName,
+        perServing: NutritionValues(
+          calories: calories,
+          protein: read('protein'),
+          carbs: read('carbs'),
+          fat: read('fat'),
+        ),
+        // Older saved foods have no serving info: treat them as 1 serving.
+        servingQuantity: servingQuantity != null && servingQuantity > 0
+            ? servingQuantity
+            : 1,
+        servingUnit: servingUnit == null || servingUnit.isEmpty
+            ? 'serving'
+            : servingUnit,
+        gramsPerServing:
+            CalorieTrackerMath.parseLooseNumber(data['gramsPerServing']),
+      ),
+      subtitle: 'Saved from your previous logs',
+    );
   }
 
   Future<_NutritionLookupResult?> _lookupFoodMemory(String mealName) async {
-    final key = _foodMemoryKey(mealName);
+    final key = CalorieTrackerMath.foodMemoryKey(mealName);
     if (key.isEmpty) return null;
 
     try {
       final data = await _calorieApi.lookupFoodMemory(key);
       if (data == null) return null;
-
-      final calories = (data['calories'] as num?)?.toInt();
-      if (calories == null || calories <= 0) return null;
-
-      return _NutritionLookupResult(
-        displayName: (data['displayName'] as String?)?.trim().isNotEmpty == true
-            ? (data['displayName'] as String).trim()
-            : mealName,
-        calories: calories,
-        protein: (data['protein'] as num?)?.toInt() ?? 0,
-        carbs: (data['carbs'] as num?)?.toInt() ?? 0,
-        fat: (data['fat'] as num?)?.toInt() ?? 0,
-        subtitle: 'Saved from your previous logs',
-      );
+      return _nutritionResultFromMemory(data, fallbackName: mealName);
     } catch (error) {
       debugPrint('Food memory lookup failed: $error');
       return null;
     }
   }
 
-  Future<_NutritionLookupResult?> _lookupNutritionForMealName(
-    String mealName,
-  ) async {
-    final cached = await _lookupFoodMemory(mealName);
-    if (cached != null) return cached;
-
-    final preset = _findPresetFood(mealName);
-    if (preset != null) {
-      return _NutritionLookupResult(
-        displayName: preset.name,
-        calories: preset.calories,
-        protein: preset.protein,
-        carbs: preset.carbs,
-        fat: preset.fat,
-        subtitle: 'Matched from your saved food presets',
-      );
-    }
-
-    try {
-      final suggestions = await _fetchOnlineSuggestions(mealName, limit: 1);
-      if (suggestions.isNotEmpty) {
-        return suggestions.first;
-      }
-    } catch (error) {
-      debugPrint('Meal nutrition lookup failed: $error');
-    }
-
-    return null;
-  }
-
-  Future<void> _saveFoodMemory(
-    String mealName,
-    _NutritionLookupResult nutrition, {
-    String source = 'manual',
+  /// Remembers what was logged, per serving, so the next lookup scales
+  /// correctly instead of treating a 2-serving total as one serving.
+  Future<void> _saveFoodMemory({
+    required String mealName,
+    required FoodNutritionBasis basis,
+    String source = 'meal_log',
   }) async {
-    final key = _foodMemoryKey(mealName);
+    final key = CalorieTrackerMath.foodMemoryKey(mealName);
     if (key.isEmpty) return;
 
     try {
       await _calorieApi.upsertFoodMemory(
         key: key,
-        displayName: nutrition.displayName,
-        lookupName: mealName.trim(),
-        calories: nutrition.calories,
-        protein: nutrition.protein,
-        carbs: nutrition.carbs,
-        fat: nutrition.fat,
+        displayName: mealName.trim(),
+        lookupName: mealName.trim().toLowerCase(),
+        calories: math.max(1, basis.perServing.roundedCalories),
+        protein: basis.perServing.roundedProtein,
+        carbs: basis.perServing.roundedCarbs,
+        fat: basis.perServing.roundedFat,
+        servingQuantity: basis.servingQuantity,
+        servingUnit: basis.servingUnit,
+        gramsPerServing: basis.gramsPerServing,
         source: source,
+        used: true,
       );
     } catch (error) {
       debugPrint('Failed to save food memory: $error');
     }
   }
 
+  int? _parseField(TextEditingController controller) =>
+      int.tryParse(controller.text.trim());
+
   Future<void> _addMeal() async {
     final mealName = _mealController.text.trim();
     if (mealName.isEmpty) {
-      _showSnackBar('Enter a meal name first.');
+      _showSnackBar('Enter a food name first.');
       return;
     }
 
-    final lookedUpNutrition = await _ensureNutritionForMeal(mealName);
+    final calories = _parseField(_calorieController);
+    if (calories == null || calories <= 0) {
+      await _fillNutritionForTypedName(mealName);
+      return;
+    }
+
+    final protein = _parseField(_proteinController) ?? 0;
+    final carbs = _parseField(_carbController) ?? 0;
+    final fat = _parseField(_fatController) ?? 0;
+    final quantity =
+        double.tryParse(_quantityController.text.trim().replaceAll(',', '.'));
+
+    final warning = CalorieTrackerMath.macroWarning(
+      calories: calories,
+      protein: protein,
+      carbs: carbs,
+      fat: fat,
+    );
+    if (warning != null && !await _confirmSaveWithWarning(warning)) return;
     if (!mounted) return;
 
-    final calories = int.tryParse(_calorieController.text.trim());
-    final protein = int.tryParse(_proteinController.text.trim()) ?? 0;
-    final carbs = int.tryParse(_carbController.text.trim()) ?? 0;
-    final fat = int.tryParse(_fatController.text.trim()) ?? 0;
-    final quantity = double.tryParse(_quantityController.text.trim());
-
-    if (calories == null || calories <= 0) {
-      _showSnackBar(
-        lookedUpNutrition == null
-            ? 'Could not detect calories automatically. Please enter them manually.'
-            : 'Enter a valid calorie amount.',
-      );
-      return;
-    }
-
+    setState(() => _isLookingUpFood = true);
     try {
-      await _saveFoodMemory(
-        mealName,
-        _NutritionLookupResult(
-          displayName: mealName,
-          calories: calories,
-          protein: protein,
-          carbs: carbs,
-          fat: fat,
-        ),
-        source: 'meal_log',
-      );
-      if (!mounted) return;
-
       final photoUrl = await _uploadMealPhotoIfNeeded();
       if (!mounted) return;
 
@@ -1081,26 +1079,103 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
         photoUrl: photoUrl,
       );
       if (!mounted) return;
+      _applyDayResponse(response);
 
-      final day = response['day'];
-      final entries = response['entries'];
-      setState(() {
-        if (day is Map) {
-          _todayDayData = day.cast<String, dynamic>();
-          _dailyGoal = (day['dailyGoal'] as num?)?.toInt() ?? _dailyGoal;
-        }
-        _todayEntries = entries is List
-            ? entries
-                .whereType<Map>()
-                .map((item) => item.cast<String, dynamic>())
-                .toList()
-            : _todayEntries;
-      });
+      // Remember the food only once it was actually logged. Use the food's
+      // own serving when we have one, otherwise exactly what was logged.
+      final basis = _basis != null && !_nutritionEditedManually
+          ? _basis!
+          : FoodNutritionBasis(
+              name: mealName,
+              perServing: NutritionValues(
+                calories: calories.toDouble(),
+                protein: protein.toDouble(),
+                carbs: carbs.toDouble(),
+                fat: fat.toDouble(),
+              ),
+              servingQuantity: quantity != null && quantity > 0 ? quantity : 1,
+              servingUnit: _selectedMeasurementUnit,
+            );
+      unawaited(
+        _saveFoodMemory(mealName: mealName, basis: basis)
+            .then((_) => _loadRecentFoods()),
+      );
 
       _clearMealComposer();
       FocusManager.instance.primaryFocus?.unfocus();
+      _showSnackBar('Added $mealName · $calories kcal');
     } catch (_) {
-      _showSnackBar('Failed to add meal.');
+      _showSnackBar('Failed to add meal. Check your connection and try again.');
+    } finally {
+      if (mounted) setState(() => _isLookingUpFood = false);
+    }
+  }
+
+  Future<bool> _confirmSaveWithWarning(String warning) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Double-check the numbers'),
+        content: Text(warning),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Edit'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Save anyway'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  /// "Add Entry" was tapped without calories: fill them from the user's
+  /// saved foods or presets for review, or show database matches to pick
+  /// from. Never saves a guess silently.
+  Future<void> _fillNutritionForTypedName(String mealName) async {
+    final amount = _calculateFoodAmount(mealName);
+    if (amount != null) {
+      _applyLookupResult(amount);
+      _showSnackBar(
+          'Filled ${amount.displayName}. Check it, then tap Add Entry.');
+      return;
+    }
+
+    final saved = await _lookupFoodMemory(mealName);
+    if (!mounted) return;
+    if (saved != null) {
+      _applyLookupResult(saved);
+      _showSnackBar(
+          'Filled from your saved foods. Check it, then tap Add Entry.');
+      return;
+    }
+
+    final preset = _findPresetFood(mealName);
+    if (preset != null) {
+      _applyPresetFood(preset);
+      _showSnackBar('Filled ${preset.name}. Check it, then tap Add Entry.');
+      return;
+    }
+
+    setState(() => _isSearchingSuggestions = true);
+    try {
+      final results = await _fetchOnlineSuggestions(mealName, limit: 6);
+      if (!mounted) return;
+      setState(() => _onlineSuggestions = results);
+      _showSnackBar(
+        results.isEmpty
+            ? 'No match found. Enter the calories yourself.'
+            : 'Pick the closest match below, or enter the calories yourself.',
+      );
+    } on TimeoutException {
+      _showSnackBar('Food lookup timed out. You can enter calories yourself.');
+    } catch (_) {
+      _showSnackBar('Food lookup failed. You can enter calories yourself.');
+    } finally {
+      if (mounted) setState(() => _isSearchingSuggestions = false);
     }
   }
 
@@ -1125,31 +1200,137 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
     }
   }
 
-  void _applyPresetFood(_PresetFood preset) {
-    if (!mounted) return;
+  Future<void> _editEntry(Map<String, dynamic> entry) async {
+    final entryId = entry['id']?.toString();
+    if (entryId == null || entryId.isEmpty) return;
 
-    _mealController.text = preset.name;
-    _calorieController.text = preset.calories.toString();
-    _proteinController.text = preset.protein.toString();
-    _carbController.text = preset.carbs.toString();
-    _fatController.text = preset.fat.toString();
+    final edit = await showCalorieEntryEditSheet(
+      context,
+      entry: entry,
+      mealTypes: _mealTypes,
+    );
+    if (edit == null || !mounted) return;
+
+    try {
+      final response = edit.delete
+          ? await _calorieApi.deleteEntry(entryId)
+          : await _calorieApi.updateEntry(
+              entryId: entryId,
+              meal: edit.meal,
+              mealType: edit.mealType,
+              calories: edit.calories,
+              protein: edit.protein,
+              carbs: edit.carbs,
+              fat: edit.fat,
+            );
+      if (!mounted) return;
+      _applyDayResponse(response);
+      _showSnackBar(edit.delete ? 'Entry deleted.' : 'Entry updated.');
+    } catch (_) {
+      _showSnackBar(
+        edit.delete
+            ? 'Could not delete the entry.'
+            : 'Could not update the entry.',
+      );
+    }
+  }
+
+  void _applyPresetFood(_PresetFood preset) {
+    _applyBasis(
+      FoodNutritionBasis.fromPreset(
+        preset,
+        sourceLabel: 'Standard reference portion',
+      ),
+    );
+  }
+
+  void _applyLookupResult(_NutritionLookupResult result) {
+    _applyBasis(
+      result.basis.copyWith(sourceLabel: result.subtitle),
+      quantity: result.quantity,
+      unit: result.unit,
+    );
+  }
+
+  /// Selects a food: its name, default portion and nutrition. Quantity and
+  /// unit changes afterwards rescale from [basis].
+  void _applyBasis(
+    FoodNutritionBasis basis, {
+    double? quantity,
+    String? unit,
+  }) {
+    if (!mounted) return;
+    _searchDebounce?.cancel();
+
+    _mealController.text = basis.name;
+    _mealController.selection =
+        TextSelection.collapsed(offset: basis.name.length);
+    final selectedUnit = unit == null
+        ? basis.servingUnit
+        : CalorieTrackerMath.normalizeMeasurementUnit(unit);
+    _quantityController.text =
+        _formatQuantity(quantity ?? basis.servingQuantity);
+
     setState(() {
-      _selectedMeasurementUnit = _normalizeMeasurementUnit(preset.defaultUnit);
+      _basis = basis;
+      _nutritionEditedManually = false;
+      _selectedMeasurementUnit = selectedUnit;
+      _nutritionSourceLabel = basis.sourceLabel ?? 'Nutrition database result';
+      _onlineSuggestions = [];
+      _isSearchingSuggestions = false;
+    });
+    _recalculateFromBasis();
+  }
+
+  static String _formatQuantity(double quantity) {
+    if (quantity == quantity.roundToDouble()) {
+      return quantity.toInt().toString();
+    }
+    return quantity.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '');
+  }
+
+  /// Fills the nutrition fields for the current quantity and unit.
+  void _recalculateFromBasis() {
+    final basis = _basis;
+    if (basis == null || !mounted) return;
+
+    final quantity =
+        double.tryParse(_quantityController.text.trim().replaceAll(',', '.'));
+    if (quantity == null || quantity <= 0) {
+      setState(() => _portionMessage = 'Enter how much you had.');
+      return;
+    }
+
+    final scaled = basis.scaled(quantity, _selectedMeasurementUnit);
+    if (scaled == null) {
+      setState(() {
+        _portionMessage =
+            "We don't know the weight of this food, so it can't be measured in "
+            '${_measurementUnitLabels[_selectedMeasurementUnit] ?? _selectedMeasurementUnit}. '
+            'Use ${basis.supportedUnits.map((u) => _measurementUnitLabels[u] ?? u).join(' or ')}.';
+      });
+      return;
+    }
+
+    _calorieController.text = scaled.roundedCalories.toString();
+    _proteinController.text = scaled.roundedProtein.toString();
+    _carbController.text = scaled.roundedCarbs.toString();
+    _fatController.text = scaled.roundedFat.toString();
+    setState(() {
+      _portionMessage = null;
+      _nutritionEditedManually = false;
     });
   }
 
-  void _applyFoodAmount(CalorieFoodAmount calculated) {
-    if (!mounted) return;
-
-    _mealController.text = calculated.displayName;
-    _calorieController.text = calculated.calories.toString();
-    _proteinController.text = calculated.protein.toString();
-    _carbController.text = calculated.carbs.toString();
-    _fatController.text = calculated.fat.toString();
-    _quantityController.text = calculated.quantityLabel;
-    setState(() {
-      _selectedMeasurementUnit = calculated.unit;
-    });
+  /// Units to offer: the food's convertible units when one is selected.
+  List<String> get _availableUnits {
+    final basis = _basis;
+    if (basis == null) return _measurementUnits;
+    final units = [...basis.supportedUnits];
+    if (!units.contains(_selectedMeasurementUnit)) {
+      units.add(_selectedMeasurementUnit);
+    }
+    return units;
   }
 
   _PresetFood? _findPresetFood(String query) {
@@ -1158,175 +1339,55 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
     return preset is _PresetFood ? preset : null;
   }
 
-  String _normalizeMeasurementUnit(String rawUnit) {
-    return CalorieTrackerMath.normalizeMeasurementUnit(rawUnit);
-  }
-
-  _CalculatedFoodAmount? _calculateFromMeasurement({
-    required String mealName,
-    required double quantity,
-    required String unit,
-  }) {
-    final result = CalorieTrackerMath.calculateFromMeasurement(
-      mealName: mealName,
-      quantity: quantity,
-      unit: unit,
-      presets: _presetFoods,
-    );
-    if (result == null) return null;
-    return _CalculatedFoodAmount(
-      displayName: result.displayName,
-      quantityLabel: result.quantityLabel,
-      unit: result.unit,
-      calories: result.calories,
-      protein: result.protein,
-      carbs: result.carbs,
-      fat: result.fat,
-    );
-  }
-
-  _CalculatedFoodAmount? _calculateFoodAmount(String query) {
-    final result = CalorieTrackerMath.calculateFoodAmount(
+  /// Reads "2 big macs" or "150g rice" as a preset with an amount.
+  _NutritionLookupResult? _calculateFoodAmount(String query) {
+    final amount = CalorieTrackerMath.calculateFoodAmount(
       query: query,
       presets: _presetFoods,
     );
-    if (result == null) return null;
-    return _CalculatedFoodAmount(
-      displayName: result.displayName,
-      quantityLabel: result.quantityLabel,
-      unit: result.unit,
-      calories: result.calories,
-      protein: result.protein,
-      carbs: result.carbs,
-      fat: result.fat,
+    if (amount == null) return null;
+    final preset = _presetFoods.firstWhere(
+      (food) => amount.displayName.endsWith(food.name),
+      orElse: () => _presetFoods.first,
+    );
+    final quantity = double.tryParse(amount.quantityLabel);
+    if (quantity == null) return null;
+    final basis = FoodNutritionBasis.fromPreset(
+      preset,
+      sourceLabel: 'Calculated from your portion',
+    );
+    final unitIsServing = amount.unit == basis.servingUnit;
+    return _NutritionLookupResult(
+      basis: basis,
+      subtitle: 'Calculated from your portion',
+      // "2 chicken" means 2 servings of 100 g, not 2 g.
+      quantity: unitIsServing && basis.servingQuantity != 1
+          ? quantity * basis.servingQuantity
+          : quantity,
+      unit: amount.unit,
     );
   }
 
+  /// Typing never rewrites the name. If the text no longer matches the
+  /// selected food, that food (and its auto-filled numbers) is dropped so
+  /// nothing stale is saved.
   void _handleMealNameChanged(String value) {
     if (!mounted) return;
-
-    final measuredAmount = _calculateAmountFromFields(value);
-    if (measuredAmount != null) {
-      _applyFoodAmount(measuredAmount);
+    final basis = _basis;
+    if (basis != null &&
+        value.trim().toLowerCase() != basis.name.trim().toLowerCase()) {
+      if (!_nutritionEditedManually) _clearNutritionFields();
       setState(() {
-        _onlineSuggestions = [];
+        _basis = null;
+        _nutritionSourceLabel = null;
+        _portionMessage = null;
       });
-      return;
     }
-
-    final calculatedAmount = _calculateFoodAmount(value);
-    if (calculatedAmount != null) {
-      _applyFoodAmount(calculatedAmount);
-      setState(() {
-        _onlineSuggestions = [];
-      });
-      return;
-    }
-
-    final preset = _findPresetFood(value);
-    if (preset != null) {
-      _applyPresetFood(preset);
-      setState(() {
-        _onlineSuggestions = [];
-      });
-      return;
-    }
-
     _queueSuggestionSearch(value);
   }
 
-  _CalculatedFoodAmount? _calculateAmountFromFields(String mealName) {
-    final quantity = double.tryParse(_quantityController.text.trim());
-    if (quantity == null || quantity <= 0) return null;
-
-    return _calculateFromMeasurement(
-      mealName: mealName,
-      quantity: quantity,
-      unit: _selectedMeasurementUnit,
-    );
-  }
-
-  Future<_NutritionLookupResult?> _ensureNutritionForMeal(
-      String mealName) async {
-    final existingCalories = int.tryParse(_calorieController.text.trim());
-    if (existingCalories != null && existingCalories > 0) return null;
-
-    final cached = await _lookupFoodMemory(mealName);
-    if (!mounted) return null;
-    if (cached != null) {
-      _applyOnlineSuggestion(cached);
-      return cached;
-    }
-
-    final measuredAmount = _calculateAmountFromFields(mealName);
-    if (measuredAmount != null) {
-      _applyFoodAmount(measuredAmount);
-      return _NutritionLookupResult(
-        displayName: measuredAmount.displayName,
-        calories: measuredAmount.calories,
-        protein: measuredAmount.protein,
-        carbs: measuredAmount.carbs,
-        fat: measuredAmount.fat,
-      );
-    }
-
-    final calculatedAmount = _calculateFoodAmount(mealName);
-    if (calculatedAmount != null) {
-      _applyFoodAmount(calculatedAmount);
-      return _NutritionLookupResult(
-        displayName: calculatedAmount.displayName,
-        calories: calculatedAmount.calories,
-        protein: calculatedAmount.protein,
-        carbs: calculatedAmount.carbs,
-        fat: calculatedAmount.fat,
-      );
-    }
-
-    final preset = _findPresetFood(mealName);
-    if (preset != null) {
-      _applyPresetFood(preset);
-      return _NutritionLookupResult(
-        displayName: preset.name,
-        calories: preset.calories,
-        protein: preset.protein,
-        carbs: preset.carbs,
-        fat: preset.fat,
-      );
-    }
-
-    return _lookupFoodOnline(mealName);
-  }
-
-  Future<_NutritionLookupResult?> _lookupFoodOnline(String mealName) async {
-    if (_isLookingUpFood) return null;
-
-    if (!mounted) return null;
-    setState(() {
-      _isLookingUpFood = true;
-    });
-
-    try {
-      final suggestions = await _fetchOnlineSuggestions(mealName, limit: 1);
-      if (!mounted) return null;
-      if (suggestions.isEmpty) return null;
-      final result = suggestions.first;
-      _applyOnlineSuggestion(result);
-      await _saveFoodMemory(mealName, result, source: 'online_lookup');
-      return result;
-    } on TimeoutException {
-      _showSnackBar(
-          'Food lookup timed out. You can still enter calories manually.');
-    } catch (_) {
-      // leave manual entry available
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLookingUpFood = false;
-        });
-      }
-    }
-
-    return null;
+  void _handlePortionChanged() {
+    if (_basis != null) _recalculateFromBasis();
   }
 
   Future<List<_NutritionLookupResult>> _fetchOnlineSuggestions(
@@ -1342,6 +1403,7 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
         'action': 'process',
         'json': '1',
         'page_size': '$limit',
+        'fields': _openFoodFactsFields,
       },
     );
 
@@ -1359,90 +1421,30 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
     final suggestions = <_NutritionLookupResult>[];
 
     for (final product in products) {
-      if (product is! Map<String, dynamic>) continue;
-      final result = _nutritionFromProductMap(product);
+      if (product is! Map) continue;
+      final result = _nutritionFromProductMap(product.cast<String, dynamic>());
       if (result != null) suggestions.add(result);
     }
 
     return suggestions;
   }
 
+  static const _openFoodFactsFields =
+      'product_name,product_name_en,generic_name,brands,serving_size,'
+      'serving_quantity,serving_quantity_unit,nutriments';
+
   _NutritionLookupResult? _nutritionFromProductMap(
-      Map<String, dynamic> product) {
-    final nutriments = product['nutriments'];
-    if (nutriments is! Map<String, dynamic>) return null;
-
-    final servingCalories = _readDouble(nutriments['energy-kcal_serving']);
-    final servingProtein = _readDouble(nutriments['proteins_serving']);
-    final servingCarbs = _readDouble(nutriments['carbohydrates_serving']);
-    final servingFat = _readDouble(nutriments['fat_serving']);
-    final hundredCalories = _readDouble(nutriments['energy-kcal_100g']);
-    final hundredProtein = _readDouble(nutriments['proteins_100g']);
-    final hundredCarbs = _readDouble(nutriments['carbohydrates_100g']);
-    final hundredFat = _readDouble(nutriments['fat_100g']);
-    final fallbackCalories = _readDouble(nutriments['energy-kcal']);
-    final servingGrams = _servingSizeInGrams(product['serving_size']);
-    final servingMultiplier = servingGrams == null ? null : servingGrams / 100;
-
-    final calculatedServingCalories =
-        servingMultiplier == null || hundredCalories == null
-            ? null
-            : hundredCalories * servingMultiplier;
-    final calculatedServingProtein =
-        servingMultiplier == null || hundredProtein == null
-            ? null
-            : hundredProtein * servingMultiplier;
-    final calculatedServingCarbs =
-        servingMultiplier == null || hundredCarbs == null
-            ? null
-            : hundredCarbs * servingMultiplier;
-    final calculatedServingFat = servingMultiplier == null || hundredFat == null
-        ? null
-        : hundredFat * servingMultiplier;
-
-    final calories = servingCalories ??
-        calculatedServingCalories ??
-        hundredCalories ??
-        fallbackCalories;
-    if (calories == null || calories <= 0) return null;
-
-    final productName = (product['product_name'] as String?)?.trim();
-    final brands = (product['brands'] as String?)?.trim();
-    final amountSuffix =
-        servingCalories != null || calculatedServingCalories != null
-            ? 'serving'
-            : '100g';
-    final displayName = productName == null || productName.isEmpty
-        ? 'Food ($amountSuffix)'
-        : '$productName ($amountSuffix)';
-
+    Map<String, dynamic> product,
+  ) {
+    final basis = FoodNutritionBasis.fromOpenFoodFacts(product);
+    if (basis == null) return null;
+    final per = basis.servingUnit == 'serving'
+        ? 'per serving${basis.gramsPerServing == null ? '' : ' (${_formatQuantity(basis.gramsPerServing!)} g)'}'
+        : 'per ${_formatQuantity(basis.servingQuantity)} ${basis.servingUnit}';
     return _NutritionLookupResult(
-      displayName: displayName,
-      calories: calories.round(),
-      protein:
-          (servingProtein ?? calculatedServingProtein ?? hundredProtein ?? 0)
-              .round(),
-      carbs:
-          (servingCarbs ?? calculatedServingCarbs ?? hundredCarbs ?? 0).round(),
-      fat: (servingFat ?? calculatedServingFat ?? hundredFat ?? 0).round(),
-      subtitle: brands == null || brands.isEmpty ? null : brands,
+      basis: basis,
+      subtitle: 'Food database · $per',
     );
-  }
-
-  double? _readDouble(dynamic value) {
-    if (value is num) return value.toDouble();
-    if (value is String) {
-      return double.tryParse(value.trim().replaceAll(',', '.'));
-    }
-    return null;
-  }
-
-  double? _servingSizeInGrams(dynamic servingSize) {
-    if (servingSize is! String) return null;
-    final match = RegExp(r'(\d+(?:[\.,]\d+)?)\s*(g|gram|grams|ml|mL)')
-        .firstMatch(servingSize);
-    if (match == null) return null;
-    return double.tryParse(match.group(1)!.replaceAll(',', '.'));
   }
 
   void _queueSuggestionSearch(String query) {
@@ -1463,10 +1465,11 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
       _isSearchingSuggestions = true;
     });
 
-    _searchDebounce = Timer(const Duration(milliseconds: 500), () async {
+    // Wait for a pause in typing to stay within the database's rate limit.
+    _searchDebounce = Timer(const Duration(milliseconds: 700), () async {
       try {
         final results = await _fetchOnlineSuggestions(query, limit: 6);
-        if (!mounted) return;
+        if (!mounted || _mealController.text.trim() != query.trim()) return;
         setState(() {
           _onlineSuggestions = results;
           _isSearchingSuggestions = false;
@@ -1478,20 +1481,6 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
           _isSearchingSuggestions = false;
         });
       }
-    });
-  }
-
-  void _applyOnlineSuggestion(_NutritionLookupResult suggestion) {
-    if (!mounted) return;
-
-    _mealController.text = suggestion.displayName;
-    _calorieController.text = suggestion.calories.toString();
-    _proteinController.text = suggestion.protein.toString();
-    _carbController.text = suggestion.carbs.toString();
-    _fatController.text = suggestion.fat.toString();
-
-    setState(() {
-      _onlineSuggestions = [];
     });
   }
 
@@ -1512,7 +1501,7 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
     try {
       final product = await _fetchBarcodeProduct(barcode);
       if (product == null) {
-        _showSnackBar('Could not fetch barcode nutrition info.');
+        _showSnackBar('This product is not in the food database yet.');
         return;
       }
 
@@ -1523,7 +1512,9 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
       }
 
       if (!mounted) return;
-      _applyOnlineSuggestion(result);
+      _applyLookupResult(result);
+      _showSnackBar('Found ${result.displayName}. Set how much you had.');
+      unawaited(_scrollToSection(_addMealSectionKey));
     } on TimeoutException {
       _showSnackBar('Barcode lookup timed out. Please try again.');
     } catch (_) {
@@ -1543,7 +1534,7 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
         'world.openfoodfacts.org',
         '/api/v2/product/$barcode',
         {
-          'fields': 'product_name,brands,serving_size,nutriments',
+          'fields': _openFoodFactsFields,
         },
       );
 
@@ -1673,6 +1664,33 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
     );
   }
 
+  Widget _budgetStat(String label, String value, {Color? color}) {
+    final colors = Theme.of(context).colorScheme;
+    return Expanded(
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: color ?? colors.onSurface,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: colors.onSurface.withValues(alpha: 0.65),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDailyProgressCard({
     required int totalCalories,
     required int currentGoal,
@@ -1683,6 +1701,8 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
     required double progress,
   }) {
     final goalLabel = currentGoal <= 0 ? '--' : currentGoal.toString();
+    final stepCalories = _stepCalories;
+    final remaining = currentGoal + stepCalories - totalCalories;
     final progressPercent = (progress * 100).round().clamp(0, 100);
     final theme = Theme.of(context);
 
@@ -1713,15 +1733,18 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
         children: [
           Row(
             children: [
-              Text(
-                'Daily Progress',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: theme.colorScheme.onSurface,
+              Expanded(
+                child: Text(
+                  'Daily Progress',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: theme.colorScheme.onSurface,
+                  ),
                 ),
               ),
-              const Spacer(),
               InkWell(
                 borderRadius: BorderRadius.circular(16),
                 onTap: _isSavingGoal
@@ -1836,10 +1859,11 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
                       ),
                     ),
                     Text(
-                      'Calories',
+                      'eaten',
                       style: TextStyle(
                         fontSize: 14,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.72),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -1852,7 +1876,8 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
                     '0%',
                     style: TextStyle(
                       fontSize: 12,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
+                      color:
+                          theme.colorScheme.onSurface.withValues(alpha: 0.72),
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -1864,7 +1889,8 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
                     '$progressPercent%',
                     style: TextStyle(
                       fontSize: 12,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
+                      color:
+                          theme.colorScheme.onSurface.withValues(alpha: 0.72),
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -1872,6 +1898,43 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
               ],
             ),
           ),
+          Row(
+            children: [
+              _budgetStat('Goal', goalLabel),
+              _budgetStat('Food', '−$totalCalories'),
+              _budgetStat(
+                'Steps',
+                _profile?.countSteps == true ? '+$stepCalories' : 'off',
+              ),
+              _budgetStat(
+                remaining >= 0 ? 'Remaining' : 'Over',
+                '${remaining.abs()}',
+                color: remaining >= 0
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.error,
+              ),
+            ],
+          ),
+          if (_profile == null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Set up your goal to add the calories you burn walking.',
+              style: TextStyle(
+                fontSize: 12,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+              ),
+            ),
+          ] else if (_profile!.countSteps && _todaySteps > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${NumberFormat.decimalPattern().format(_todaySteps)} steps today',
+              style: TextStyle(
+                fontSize: 12,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
           Row(
             children: [
               _macroTile('Carbs', totalCarbs, const Color(0xFF8FAF86)),
@@ -1892,7 +1955,7 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
                 color: theme.colorScheme.primary,
               ),
               label: Text(
-                'Calculate Intake',
+                _profile == null ? 'Set up my goal' : 'Update my goal',
                 style: TextStyle(
                   color: theme.colorScheme.primary,
                   fontWeight: FontWeight.w700,
@@ -2009,15 +2072,18 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
         children: [
           Row(
             children: [
-              Text(
-                'History',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: colorScheme.onSurface,
+              Expanded(
+                child: Text(
+                  'History',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: colorScheme.onSurface,
+                  ),
                 ),
               ),
-              const Spacer(),
               IconButton(
                 onPressed: () {
                   setState(() {
@@ -2043,8 +2109,8 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
                           _historyWeekStart =
                               weekStart.add(const Duration(days: 7));
                         });
-                    }
-                  : null,
+                      }
+                    : null,
                 icon: const Icon(Icons.chevron_right_rounded),
                 visualDensity: VisualDensity.compact,
                 color: colorScheme.primary,
@@ -2242,14 +2308,7 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
     String label, {
     String? hint,
     String? suffix,
-    String? previewSuffix,
   }) {
-    final rawValue = controller.text.trim();
-    final previewValue = rawValue.isEmpty
-        ? null
-        : previewSuffix == null || previewSuffix.isEmpty
-            ? rawValue
-            : '$rawValue $previewSuffix';
     final theme = Theme.of(context);
 
     return Expanded(
@@ -2258,15 +2317,140 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
         keyboardType: TextInputType.number,
         onChanged: (_) {
           if (!mounted) return;
-          setState(() {});
+          // Typed numbers are the user's call: keep them if the name changes.
+          setState(() => _nutritionEditedManually = true);
         },
         decoration: _themedInputDecoration(
           theme: theme,
           labelText: label,
           hintText: hint ?? label,
-          helperText: previewValue,
           suffixText: suffix,
         ),
+      ),
+    );
+  }
+
+  Widget _buildNutritionPreview() {
+    final calories = int.tryParse(_calorieController.text.trim()) ?? 0;
+    final protein = int.tryParse(_proteinController.text.trim()) ?? 0;
+    final carbs = int.tryParse(_carbController.text.trim()) ?? 0;
+    final fat = int.tryParse(_fatController.text.trim()) ?? 0;
+    if (calories <= 0) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final warning = CalorieTrackerMath.macroWarning(
+      calories: calories,
+      protein: protein,
+      carbs: carbs,
+      fat: fat,
+    );
+    final isConsistent = warning == null;
+
+    Widget metric(String label, String value, Color color) {
+      return Expanded(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value,
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  )),
+              const SizedBox(height: 2),
+              Text(label,
+                  style: TextStyle(
+                    color: colorScheme.onSurface.withValues(alpha: 0.68),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  )),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.fact_check_outlined,
+                  size: 18, color: colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Nutrition preview',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: colorScheme.onSurface,
+                      fontWeight: FontWeight.w800,
+                    )),
+              ),
+              Text('$calories kcal',
+                  style: TextStyle(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w800,
+                  )),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              metric('Protein', '${protein}g', const Color(0xFFE06464)),
+              const SizedBox(width: 8),
+              metric('Carbs', '${carbs}g', const Color(0xFF6E9B67)),
+              const SizedBox(width: 8),
+              metric('Fat', '${fat}g', const Color(0xFF8B6F47)),
+            ],
+          ),
+          const SizedBox(height: 9),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                isConsistent ? Icons.verified_outlined : Icons.warning_amber,
+                size: 16,
+                color:
+                    isConsistent ? colorScheme.primary : colorScheme.tertiary,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  isConsistent
+                      ? (_nutritionEditedManually
+                          ? 'Entered by you'
+                          : _nutritionSourceLabel ??
+                              'Review the serving size before saving.')
+                      : warning,
+                  style: TextStyle(
+                    color: isConsistent
+                        ? colorScheme.onSurface.withValues(alpha: 0.72)
+                        : colorScheme.tertiary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -2400,7 +2584,7 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Check the Food Name first, then enter the Grams so calories match the portion more accurately.',
+            'Check the food name, then adjust the amount. Calories update as you change it.',
             style: TextStyle(
               color: colorScheme.onSurface.withValues(alpha: 0.72),
               height: 1.3,
@@ -2493,6 +2677,71 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
     );
   }
 
+  /// Instant suggestions while typing: an amount the user typed ("2 eggs"),
+  /// their recent foods, then presets.
+  Iterable<_NutritionLookupResult> _localFoodOptions(String text) {
+    final query = text.trim().toLowerCase();
+    if (query.isEmpty ||
+        (_basis != null && query == _basis!.name.toLowerCase())) {
+      return const [];
+    }
+    final options = <_NutritionLookupResult>[];
+    final amount = _calculateFoodAmount(query);
+    if (amount != null) options.add(amount);
+    for (final recent in _recentFoods) {
+      if (recent.displayName.toLowerCase().contains(query)) options.add(recent);
+    }
+    for (final preset in _presetFoods) {
+      final matches = preset.name.toLowerCase().contains(query) ||
+          preset.aliases.any((alias) => alias.contains(query));
+      if (!matches) continue;
+      if (options.any((o) => o.displayName == preset.name)) continue;
+      options.add(_NutritionLookupResult(
+        basis: FoodNutritionBasis.fromPreset(preset),
+        subtitle: 'Standard reference portion',
+      ));
+    }
+    return options.take(8);
+  }
+
+  Widget _buildRecentFoods() {
+    if (_recentFoods.isEmpty) return const SizedBox.shrink();
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Recent · tap to log again',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: colors.onSurface.withValues(alpha: 0.72),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 40,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _recentFoods.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final food = _recentFoods[index];
+                return ActionChip(
+                  avatar: const Icon(Icons.history_rounded, size: 18),
+                  label: Text('${food.displayName} · ${food.calories} kcal'),
+                  onPressed: () => _applyLookupResult(food),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMealTypeSelector() {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -2554,15 +2803,18 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
         children: [
           Row(
             children: [
-              Text(
-                'Water Tracker',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.onSurface,
+              Expanded(
+                child: Text(
+                  'Water Tracker',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.onSurface,
+                  ),
                 ),
               ),
-              const Spacer(),
               Text(
                 '$waterGlasses/$waterGoal glasses',
                 style: TextStyle(
@@ -2704,15 +2956,18 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
         children: [
           Row(
             children: [
-              Text(
-                'Today\'s Entries',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: colorScheme.onSurface,
+              Expanded(
+                child: Text(
+                  'Today\'s Entries',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: colorScheme.onSurface,
+                  ),
                 ),
               ),
-              const Spacer(),
               Text(
                 '${entries.length} item${entries.length == 1 ? '' : 's'}',
                 style: TextStyle(
@@ -2758,11 +3013,12 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            ...entries.take(4).map((entry) {
-              final meal =
-                  (entry['meal'] as String?)?.trim().isNotEmpty == true
-                      ? (entry['meal'] as String).trim()
-                      : 'Meal';
+            ...entries
+                .take(_showAllTodayEntries ? entries.length : 5)
+                .map((entry) {
+              final meal = (entry['meal'] as String?)?.trim().isNotEmpty == true
+                  ? (entry['meal'] as String).trim()
+                  : 'Meal';
               final mealType =
                   (entry['mealType'] as String?)?.trim().isNotEmpty == true
                       ? (entry['mealType'] as String).trim()
@@ -2772,85 +3028,110 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
               final unit = (entry['measurementUnit'] as String?)?.trim();
 
               final quantityText = [
-                if (quantity != null && quantity.isNotEmpty && quantity != 'null')
+                if (quantity != null &&
+                    quantity.isNotEmpty &&
+                    quantity != 'null')
                   quantity,
                 if (unit != null && unit.isNotEmpty) unit,
               ].join(' ').trim();
 
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Material(
                   color: colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(18),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        mealType,
-                        style: TextStyle(
-                          color: colorScheme.onPrimaryContainer,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: () => _editEntry(entry),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            meal,
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: colorScheme.onSurface,
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
                             ),
-                          ),
-                          if (quantityText.isNotEmpty) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              quantityText,
+                            decoration: BoxDecoration(
+                              color: colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              mealType,
                               style: TextStyle(
-                                color: colorScheme.onSurface
-                                    .withValues(alpha: 0.66),
+                                color: colorScheme.onPrimaryContainer,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
-                          ],
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  meal,
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    color: colorScheme.onSurface,
+                                  ),
+                                ),
+                                if (quantityText.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    quantityText,
+                                    style: TextStyle(
+                                      color: colorScheme.onSurface
+                                          .withValues(alpha: 0.66),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            '$calories kcal',
+                            style: TextStyle(
+                              color: colorScheme.onSurface,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.edit_outlined,
+                            size: 16,
+                            color:
+                                colorScheme.onSurface.withValues(alpha: 0.45),
+                          ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Text(
-                      '$calories kcal',
-                      style: TextStyle(
-                        color: colorScheme.onSurface,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               );
             }),
-            if (entries.length > 4)
-              Text(
-                '+${entries.length - 4} more logged items',
-                style: TextStyle(
-                  color: colorScheme.onSurface.withValues(alpha: 0.65),
-                  fontWeight: FontWeight.w600,
+            if (entries.length > 5)
+              TextButton(
+                onPressed: () => setState(
+                  () => _showAllTodayEntries = !_showAllTodayEntries,
+                ),
+                child: Text(
+                  _showAllTodayEntries
+                      ? 'Show less'
+                      : 'Show all ${entries.length} entries',
                 ),
               ),
+            Text(
+              'Tap an entry to edit or delete it.',
+              style: TextStyle(
+                fontSize: 12,
+                color: colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
           ],
         ],
       ),
@@ -2859,9 +3140,11 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final weekStart =
-        DateTime.now().subtract(Duration(days: DateTime.now().weekday - 1));
-    final weekStartKey = DateFormat('yyyy-MM-dd').format(weekStart);
+    final weekStartKey = DateFormat('yyyy-MM-dd').format(_historyWeekStart);
+    final weekEndKey = DateFormat('yyyy-MM-dd')
+        .format(_historyWeekStart.add(const Duration(days: 6)));
+    final isCurrentWeek =
+        _historyWeekStart == _startOfWeekSunday(DateTime.now());
     return CompanyThemeBuilder(
       builder: (context, companyTheme) {
         return Theme(
@@ -2929,9 +3212,9 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
                     : Builder(
                         builder: (context) {
                           final dayData = _todayDayData ?? {};
-                          final currentGoal = (dayData['dailyGoal'] as num?)
-                                  ?.toInt() ??
-                              _dailyGoal;
+                          final currentGoal =
+                              (dayData['dailyGoal'] as num?)?.toInt() ??
+                                  _dailyGoal;
                           final totalCalories =
                               (dayData['totalCalories'] as num?)?.toInt() ?? 0;
                           final totalProtein =
@@ -2954,11 +3237,11 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
                                   .toDouble();
 
                           final dayDocs = _historyDays;
-                          final weekDocs = dayDocs
-                              .where((doc) =>
-                                  (doc['date']?.toString() ?? '')
-                                      .compareTo(weekStartKey) >= 0)
-                              .toList();
+                          final weekDocs = dayDocs.where((doc) {
+                            final date = doc['date']?.toString() ?? '';
+                            return date.compareTo(weekStartKey) >= 0 &&
+                                date.compareTo(weekEndKey) <= 0;
+                          }).toList();
                           Map<String, dynamic>? selectedHistoryData;
                           for (final day in dayDocs) {
                             if (day['date']?.toString() ==
@@ -2978,560 +3261,610 @@ class _CalorieTrackerScreenState extends State<CalorieTrackerScreen> {
                               _weeklyTotal(weekDocs, 'totalCarbs');
                           final weeklyFat = _weeklyTotal(weekDocs, 'totalFat');
 
-                          return SingleChildScrollView(
-                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _buildDailyProgressCard(
-                                  totalCalories: totalCalories,
-                                  currentGoal: currentGoal,
-                                  totalCarbs: totalCarbs,
-                                  totalProtein: totalProtein,
-                                  totalFat: totalFat,
-                                  mealCount: mealCount,
-                                  progress: progress,
-                                ),
-                                const SizedBox(height: 18),
-                                _buildWaterTracker(
-                                  waterGlasses: waterGlasses,
-                                  waterGoal: waterGoal,
-                                ),
-                                const SizedBox(height: 18),
-                                _buildTodayEntriesCard(_todayEntries),
-                                const SizedBox(height: 18),
-                                _buildSoftSection(
-                                  title: 'Preset Foods',
-                                  trailing: TextButton(
-                                    onPressed: () {
-                                      setState(() {
-                                        _showPresetFoods = !_showPresetFoods;
-                                      });
-                                    },
-                                    child: Text(
-                                      _showPresetFoods ? 'Hide' : 'Show',
-                                    ),
+                          return RefreshIndicator(
+                            onRefresh: _loadCalorieData,
+                            child: SingleChildScrollView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding:
+                                  const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildDailyProgressCard(
+                                    totalCalories: totalCalories,
+                                    currentGoal: currentGoal,
+                                    totalCarbs: totalCarbs,
+                                    totalProtein: totalProtein,
+                                    totalFat: totalFat,
+                                    mealCount: mealCount,
+                                    progress: progress,
                                   ),
-                                  child: _showPresetFoods
-                                      ? Wrap(
-                                          spacing: 10,
-                                          runSpacing: 10,
-                                          children: _presetFoods.map((preset) {
-                                            return ActionChip(
-                                              label: Text(preset.name),
-                                              onPressed: () =>
-                                                  _applyPresetFood(preset),
-                                            );
-                                          }).toList(),
-                                        )
-                                      : Text(
-                                          'Show quick picks for common foods and portion ideas.',
-                                          style: TextStyle(
-                                            color: theme.colorScheme.onSurface
-                                                .withValues(alpha: 0.72),
-                                          ),
-                                        ),
-                                ),
-                                const SizedBox(height: 18),
-                                _buildSoftSection(
-                                  key: _addMealSectionKey,
-                                  title: 'Add Meal',
-                                  child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _buildMealTypeSelector(),
-                                    const SizedBox(height: 12),
-                                    _buildCapturedMealFieldsHint(),
-                                    RawAutocomplete<_PresetFood>(
-                                      textEditingController: _mealController,
-                                      focusNode: _mealFocusNode,
-                                      optionsBuilder: (textEditingValue) {
-                                        final query = textEditingValue.text
-                                            .trim()
-                                            .toLowerCase();
-                                        if (query.isEmpty) {
-                                          return const Iterable<
-                                              _PresetFood>.empty();
-                                        }
-                                        return _presetFoods.where(
-                                          (preset) => preset.name
-                                              .toLowerCase()
-                                              .contains(query),
-                                        );
+                                  const SizedBox(height: 18),
+                                  _buildWaterTracker(
+                                    waterGlasses: waterGlasses,
+                                    waterGoal: waterGoal,
+                                  ),
+                                  const SizedBox(height: 18),
+                                  _buildTodayEntriesCard(_todayEntries),
+                                  const SizedBox(height: 18),
+                                  _buildSoftSection(
+                                    title: 'Preset Foods',
+                                    trailing: TextButton(
+                                      onPressed: () {
+                                        setState(() {
+                                          _showPresetFoods = !_showPresetFoods;
+                                        });
                                       },
-                                      displayStringForOption: (option) =>
-                                          option.name,
-                                      onSelected: _applyPresetFood,
-                                      optionsViewBuilder:
-                                          (context, onSelected, options) {
-                                        final popupTheme = Theme.of(context);
-                                        final popupColors =
-                                            popupTheme.colorScheme;
-                                        return Align(
-                                          alignment: Alignment.topLeft,
-                                          child: Material(
-                                            elevation: 4,
-                                            color: popupColors.surface,
-                                            borderRadius:
-                                                BorderRadius.circular(14),
-                                            child: ConstrainedBox(
-                                              constraints: const BoxConstraints(
-                                                maxHeight: 220,
-                                                maxWidth: 360,
+                                      child: Text(
+                                        _showPresetFoods ? 'Hide' : 'Show',
+                                      ),
+                                    ),
+                                    child: _showPresetFoods
+                                        ? Wrap(
+                                            spacing: 10,
+                                            runSpacing: 10,
+                                            children:
+                                                _presetFoods.map((preset) {
+                                              return ActionChip(
+                                                label: Text(preset.name),
+                                                onPressed: () =>
+                                                    _applyPresetFood(preset),
+                                              );
+                                            }).toList(),
+                                          )
+                                        : Text(
+                                            'Show quick picks for common foods and portion ideas.',
+                                            style: TextStyle(
+                                              color: theme.colorScheme.onSurface
+                                                  .withValues(alpha: 0.72),
+                                            ),
+                                          ),
+                                  ),
+                                  const SizedBox(height: 18),
+                                  _buildSoftSection(
+                                    key: _addMealSectionKey,
+                                    title: 'Add Meal',
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        _buildRecentFoods(),
+                                        _buildMealTypeSelector(),
+                                        const SizedBox(height: 12),
+                                        _buildCapturedMealFieldsHint(),
+                                        RawAutocomplete<_NutritionLookupResult>(
+                                          textEditingController:
+                                              _mealController,
+                                          focusNode: _mealFocusNode,
+                                          optionsBuilder: (textEditingValue) =>
+                                              _localFoodOptions(
+                                                  textEditingValue.text),
+                                          displayStringForOption: (option) =>
+                                              option.displayName,
+                                          onSelected: _applyLookupResult,
+                                          optionsViewBuilder:
+                                              (context, onSelected, options) {
+                                            final popupTheme =
+                                                Theme.of(context);
+                                            final popupColors =
+                                                popupTheme.colorScheme;
+                                            return Align(
+                                              alignment: Alignment.topLeft,
+                                              child: Material(
+                                                elevation: 4,
+                                                color: popupColors.surface,
+                                                borderRadius:
+                                                    BorderRadius.circular(14),
+                                                child: ConstrainedBox(
+                                                  constraints:
+                                                      const BoxConstraints(
+                                                    maxHeight: 220,
+                                                    maxWidth: 360,
+                                                  ),
+                                                  child: ListView.builder(
+                                                    padding: EdgeInsets.zero,
+                                                    shrinkWrap: true,
+                                                    itemCount: options.length,
+                                                    itemBuilder:
+                                                        (context, index) {
+                                                      final option = options
+                                                          .elementAt(index);
+                                                      return ListTile(
+                                                        title: Text(
+                                                          option.quantity ==
+                                                                  null
+                                                              ? option
+                                                                  .displayName
+                                                              : '${_formatQuantity(option.quantity!)} ${_measurementUnitLabels[option.unit] ?? option.unit ?? ''} ${option.displayName}',
+                                                          style: TextStyle(
+                                                            color: popupColors
+                                                                .onSurface,
+                                                          ),
+                                                        ),
+                                                        subtitle: Text(
+                                                          '${option.calories} kcal · ${option.subtitle ?? ''}',
+                                                          style: TextStyle(
+                                                            color: popupColors
+                                                                .onSurface
+                                                                .withValues(
+                                                                    alpha:
+                                                                        0.72),
+                                                          ),
+                                                        ),
+                                                        onTap: () =>
+                                                            onSelected(option),
+                                                      );
+                                                    },
+                                                  ),
+                                                ),
                                               ),
-                                              child: ListView.builder(
-                                                padding: EdgeInsets.zero,
-                                                shrinkWrap: true,
-                                                itemCount: options.length,
-                                                itemBuilder: (context, index) {
-                                                  final option =
-                                                      options.elementAt(index);
+                                            );
+                                          },
+                                          fieldViewBuilder: (
+                                            context,
+                                            textEditingController,
+                                            focusNode,
+                                            onFieldSubmitted,
+                                          ) {
+                                            return TextField(
+                                              controller: textEditingController,
+                                              focusNode: focusNode,
+                                              onChanged: (value) {
+                                                _handleMealNameChanged(value);
+                                              },
+                                              decoration:
+                                                  _themedInputDecoration(
+                                                theme: theme,
+                                                labelText: 'Food Name',
+                                                hintText: _mealPhotoPath == null
+                                                    ? 'e.g. adobo, 2 eggs, 150g rice'
+                                                    : 'Detected food name',
+                                                helperText: _basis != null
+                                                    ? 'Change the amount below and calories update automatically.'
+                                                    : _mealPhotoPath == null
+                                                        ? 'Pick a match to fill calories automatically.'
+                                                        : 'Review the detected food name before saving.',
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: TextField(
+                                                controller: _quantityController,
+                                                keyboardType:
+                                                    const TextInputType
+                                                        .numberWithOptions(
+                                                  decimal: true,
+                                                ),
+                                                onChanged: (_) =>
+                                                    _handlePortionChanged(),
+                                                decoration:
+                                                    _themedInputDecoration(
+                                                  theme: theme,
+                                                  labelText: 'Amount',
+                                                  hintText: '1',
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: DropdownButtonFormField<
+                                                  String>(
+                                                key: ValueKey(
+                                                    '${_basis?.name}-$_selectedMeasurementUnit'),
+                                                initialValue:
+                                                    _selectedMeasurementUnit,
+                                                style: TextStyle(
+                                                  color: theme
+                                                      .colorScheme.onSurface,
+                                                ),
+                                                dropdownColor:
+                                                    theme.colorScheme.surface,
+                                                decoration:
+                                                    _themedInputDecoration(
+                                                  theme: theme,
+                                                  labelText:
+                                                      _mealPhotoPath == null
+                                                          ? 'Measurement'
+                                                          : 'Unit',
+                                                ),
+                                                items:
+                                                    _availableUnits.map((unit) {
+                                                  return DropdownMenuItem<
+                                                      String>(
+                                                    value: unit,
+                                                    child: Text(
+                                                      _measurementUnitLabels[
+                                                              unit] ??
+                                                          unit,
+                                                    ),
+                                                  );
+                                                }).toList(),
+                                                onChanged: (value) {
+                                                  if (value == null) return;
+                                                  setState(() {
+                                                    _selectedMeasurementUnit =
+                                                        value;
+                                                  });
+                                                  _handlePortionChanged();
+                                                },
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        if (_portionMessage != null)
+                                          Padding(
+                                            padding:
+                                                const EdgeInsets.only(top: 8),
+                                            child: Text(
+                                              _portionMessage!,
+                                              style: TextStyle(
+                                                color: theme.colorScheme.error,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        if (_isSearchingSuggestions)
+                                          const Padding(
+                                            padding: EdgeInsets.only(top: 8),
+                                            child: LinearProgressIndicator(
+                                                minHeight: 3),
+                                          ),
+                                        if (_onlineSuggestions.isNotEmpty) ...[
+                                          const SizedBox(height: 10),
+                                          Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: theme.colorScheme.surface,
+                                              borderRadius:
+                                                  BorderRadius.circular(18),
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  'Suggestions',
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: theme
+                                                        .colorScheme.onSurface,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 8),
+                                                ..._onlineSuggestions
+                                                    .map((suggestion) {
                                                   return ListTile(
+                                                    contentPadding:
+                                                        EdgeInsets.zero,
                                                     title: Text(
-                                                      option.name,
+                                                      suggestion.displayName,
                                                       style: TextStyle(
-                                                        color: popupColors
+                                                        color: theme.colorScheme
                                                             .onSurface,
                                                       ),
                                                     ),
                                                     subtitle: Text(
-                                                      '${option.calories} kcal',
+                                                      '${suggestion.calories} kcal ${suggestion.subtitle == null ? '' : '· ${suggestion.subtitle}'}\nP ${suggestion.protein}g  C ${suggestion.carbs}g  F ${suggestion.fat}g',
                                                       style: TextStyle(
-                                                        color: popupColors
+                                                        color: theme.colorScheme
                                                             .onSurface
                                                             .withValues(
                                                                 alpha: 0.72),
                                                       ),
                                                     ),
+                                                    trailing: Icon(
+                                                      Icons.north_west,
+                                                      color: theme
+                                                          .colorScheme.primary,
+                                                    ),
                                                     onTap: () =>
-                                                        onSelected(option),
+                                                        _applyLookupResult(
+                                                            suggestion),
                                                   );
-                                                },
+                                                }),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                        if (OllamaNutritionService
+                                            .isConfigured) ...[
+                                          const SizedBox(height: 12),
+                                          _buildOllamaStatusBanner(),
+                                        ],
+                                        const SizedBox(height: 12),
+                                        Material(
+                                          color: theme.colorScheme.surface,
+                                          borderRadius:
+                                              BorderRadius.circular(22),
+                                          child: InkWell(
+                                            onTap: _isLookingUpFood ||
+                                                    _isCapturingMealPhoto
+                                                ? null
+                                                : _openScanOptions,
+                                            borderRadius:
+                                                BorderRadius.circular(22),
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 16,
+                                                vertical: 14,
+                                              ),
+                                              child: Row(
+                                                children: [
+                                                  Container(
+                                                    width: 46,
+                                                    height: 46,
+                                                    decoration: BoxDecoration(
+                                                      color: theme.colorScheme
+                                                          .primaryContainer,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              16),
+                                                    ),
+                                                    child: Icon(
+                                                      Icons
+                                                          .center_focus_weak_rounded,
+                                                      color: theme
+                                                          .colorScheme.primary,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 14),
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        Text(
+                                                          'Quick Scan',
+                                                          style: TextStyle(
+                                                            fontSize: 16,
+                                                            fontWeight:
+                                                                FontWeight.w700,
+                                                            color: theme
+                                                                .colorScheme
+                                                                .onSurface,
+                                                          ),
+                                                        ),
+                                                        SizedBox(height: 2),
+                                                        Text(
+                                                          'Open camera or barcode scanner',
+                                                          style: TextStyle(
+                                                            color: theme
+                                                                .colorScheme
+                                                                .onSurface
+                                                                .withValues(
+                                                                    alpha:
+                                                                        0.72),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    _isCapturingMealPhoto
+                                                        ? 'Opening...'
+                                                        : _isLookingUpFood
+                                                            ? 'Loading...'
+                                                            : 'Open',
+                                                    style: TextStyle(
+                                                      color: theme
+                                                          .colorScheme.primary,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ),
                                           ),
-                                        );
-                                      },
-                                      fieldViewBuilder: (
-                                        context,
-                                        textEditingController,
-                                        focusNode,
-                                        onFieldSubmitted,
-                                      ) {
-                                        return TextField(
-                                          controller: textEditingController,
-                                          focusNode: focusNode,
-                                          onChanged: (value) {
-                                            _handleMealNameChanged(value);
-                                          },
-                                          decoration: _themedInputDecoration(
-                                            theme: theme,
-                                            labelText: 'Food Name',
-                                            hintText: _mealPhotoPath == null
-                                                ? 'Meal or snack'
-                                                : 'Detected food name',
-                                            helperText: _mealPhotoPath == null
-                                                ? 'Use food name plus quantity/unit below for better accuracy.'
-                                                : 'Review the detected food name before saving.',
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: TextField(
-                                            controller: _quantityController,
-                                            keyboardType: const TextInputType
-                                                .numberWithOptions(
-                                              decimal: true,
-                                            ),
-                                            onChanged: (_) {
-                                              _handleMealNameChanged(
-                                                  _mealController.text.trim());
-                                            },
-                                            decoration: _themedInputDecoration(
-                                              theme: theme,
-                                              labelText: 'Quantity',
-                                              hintText: 'Enter amount',
-                                            ),
-                                          ),
                                         ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child:
-                                              DropdownButtonFormField<String>(
-                                            initialValue:
-                                                _selectedMeasurementUnit,
-                                            style: TextStyle(
-                                              color: theme.colorScheme.onSurface,
+                                        _buildMealPhotoPreview(),
+                                        const SizedBox(height: 12),
+                                        Row(
+                                          children: [
+                                            _numberField(
+                                              _calorieController,
+                                              'Calories',
+                                              hint: '200',
+                                              suffix: 'kcal',
                                             ),
-                                            dropdownColor:
-                                                theme.colorScheme.surface,
-                                            decoration: _themedInputDecoration(
-                                              theme: theme,
-                                              labelText: _mealPhotoPath == null
-                                                  ? 'Measurement'
-                                                  : 'Unit',
+                                            const SizedBox(width: 10),
+                                            _numberField(
+                                              _proteinController,
+                                              'Protein',
+                                              hint: '20',
+                                              suffix: 'g',
                                             ),
-                                            items:
-                                                _measurementUnits.map((unit) {
-                                              return DropdownMenuItem<String>(
-                                                value: unit,
-                                                child: Text(
-                                                  _measurementUnitLabels[
-                                                          unit] ??
-                                                      unit,
-                                                ),
-                                              );
-                                            }).toList(),
-                                            onChanged: (value) {
-                                              if (value == null) return;
-                                              setState(() {
-                                                _selectedMeasurementUnit =
-                                                    value;
-                                              });
-                                              _handleMealNameChanged(
-                                                  _mealController.text.trim());
-                                            },
+                                          ],
+                                        ),
+                                        const SizedBox(height: 10),
+                                        Row(
+                                          children: [
+                                            _numberField(
+                                              _carbController,
+                                              'Carbs',
+                                              hint: '30',
+                                              suffix: 'g',
+                                            ),
+                                            const SizedBox(width: 10),
+                                            _numberField(
+                                              _fatController,
+                                              'Fat',
+                                              hint: '10',
+                                              suffix: 'g',
+                                            ),
+                                          ],
+                                        ),
+                                        _buildNutritionPreview(),
+                                        const SizedBox(height: 14),
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: ElevatedButton(
+                                            onPressed: _isLookingUpFood
+                                                ? null
+                                                : _addMeal,
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor:
+                                                  theme.colorScheme.primary,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      vertical: 15),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(18),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              _isLookingUpFood
+                                                  ? 'Saving...'
+                                                  : _calorieController.text
+                                                          .trim()
+                                                          .isEmpty
+                                                      ? 'Find Calories'
+                                                      : 'Add Entry',
+                                              style: TextStyle(
+                                                color:
+                                                    theme.colorScheme.onPrimary,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
                                           ),
                                         ),
                                       ],
                                     ),
-                                    if (_isSearchingSuggestions)
-                                      const Padding(
-                                        padding: EdgeInsets.only(top: 8),
-                                        child: LinearProgressIndicator(
-                                            minHeight: 3),
-                                      ),
-                                    if (_onlineSuggestions.isNotEmpty) ...[
-                                      const SizedBox(height: 10),
-                                      Container(
-                                        width: double.infinity,
-                                        padding: const EdgeInsets.all(12),
-                                        decoration: BoxDecoration(
-                                          color: theme.colorScheme.surface,
-                                          borderRadius:
-                                              BorderRadius.circular(18),
-                                        ),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'Suggestions',
-                                              style: TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.bold,
-                                                color: theme
-                                                    .colorScheme.onSurface,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 8),
-                                            ..._onlineSuggestions
-                                                .map((suggestion) {
-                                              return ListTile(
-                                                contentPadding: EdgeInsets.zero,
-                                                title: Text(
-                                                  suggestion.displayName,
-                                                  style: TextStyle(
-                                                    color: theme.colorScheme
-                                                        .onSurface,
-                                                  ),
-                                                ),
-                                                subtitle: Text(
-                                                  suggestion.subtitle == null
-                                                      ? '${suggestion.calories} kcal'
-                                                      : '${suggestion.subtitle} - ${suggestion.calories} kcal',
-                                                  style: TextStyle(
-                                                    color: theme.colorScheme
-                                                        .onSurface
-                                                        .withValues(
-                                                            alpha: 0.72),
-                                                  ),
-                                                ),
-                                                trailing: Icon(
-                                                  Icons.north_west,
-                                                  color: theme.colorScheme
-                                                      .primary,
-                                                ),
-                                                onTap: () =>
-                                                    _applyOnlineSuggestion(
-                                                        suggestion),
-                                              );
-                                            }),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                    const SizedBox(height: 12),
-                                    _buildOllamaStatusBanner(),
-                                    const SizedBox(height: 12),
-                                    Material(
-                                      color: theme.colorScheme.surface,
-                                      borderRadius: BorderRadius.circular(22),
-                                      child: InkWell(
-                                        onTap: _isLookingUpFood ||
-                                                _isCapturingMealPhoto
-                                            ? null
-                                            : _openScanOptions,
-                                        borderRadius: BorderRadius.circular(22),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 16,
-                                            vertical: 14,
+                                  ),
+                                  const SizedBox(height: 18),
+                                  _buildSoftSection(
+                                    title: 'History',
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        _buildHistoryCalendarStrip(dayDocs),
+                                        const SizedBox(height: 18),
+                                        Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.all(16),
+                                          decoration: BoxDecoration(
+                                            color: theme.colorScheme
+                                                .surfaceContainerHighest,
+                                            borderRadius:
+                                                BorderRadius.circular(18),
                                           ),
-                                          child: Row(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
-                                              Container(
-                                                width: 46,
-                                                height: 46,
-                                                decoration: BoxDecoration(
-                                                  color: theme.colorScheme
-                                                      .primaryContainer,
-                                                  borderRadius:
-                                                      BorderRadius.circular(16),
-                                                ),
-                                                child: Icon(
-                                                  Icons
-                                                      .center_focus_weak_rounded,
-                                                  color: theme.colorScheme.primary,
+                                              Text(
+                                                '${isCurrentWeek ? 'This Week' : _historyWeekLabel(_historyWeekStart)}: $weeklyCalories kcal',
+                                                style: TextStyle(
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: theme
+                                                      .colorScheme.onSurface,
                                                 ),
                                               ),
-                                              const SizedBox(width: 14),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      'Quick Scan',
-                                                      style: TextStyle(
-                                                        fontSize: 16,
-                                                        fontWeight:
-                                                            FontWeight.w700,
-                                                        color: theme
-                                                            .colorScheme.onSurface,
-                                                      ),
-                                                    ),
-                                                    SizedBox(height: 2),
-                                                    Text(
-                                                      'Open camera or barcode scanner',
-                                                      style: TextStyle(
-                                                        color: theme
-                                                            .colorScheme
-                                                            .onSurface
-                                                            .withValues(
-                                                                alpha: 0.72),
-                                                      ),
-                                                    ),
-                                                  ],
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                'Protein: ${weeklyProtein}g',
+                                                style: TextStyle(
+                                                  color: theme
+                                                      .colorScheme.onSurface
+                                                      .withValues(alpha: 0.72),
                                                 ),
                                               ),
                                               Text(
-                                                _isCapturingMealPhoto
-                                                    ? 'Opening...'
-                                                    : _isLookingUpFood
-                                                        ? 'Loading...'
-                                                        : 'Open',
+                                                'Carbs: ${weeklyCarbs}g',
                                                 style: TextStyle(
-                                                  color: theme.colorScheme.primary,
-                                                  fontWeight: FontWeight.w700,
+                                                  color: theme
+                                                      .colorScheme.onSurface
+                                                      .withValues(alpha: 0.72),
+                                                ),
+                                              ),
+                                              Text(
+                                                'Fat: ${weeklyFat}g',
+                                                style: TextStyle(
+                                                  color: theme
+                                                      .colorScheme.onSurface
+                                                      .withValues(alpha: 0.72),
                                                 ),
                                               ),
                                             ],
                                           ),
                                         ),
-                                      ),
-                                    ),
-                                    _buildMealPhotoPreview(),
-                                    const SizedBox(height: 12),
-                                    Row(
-                                      children: [
-                                        _numberField(
-                                          _calorieController,
-                                          'Calories',
-                                          hint: '200',
-                                          suffix: 'cal',
-                                          previewSuffix: 'cal',
+                                        const SizedBox(height: 18),
+                                        _buildSoftSection(
+                                          title: 'Selected Day',
+                                          child: _buildSelectedDayHistoryCard(
+                                              selectedHistoryData),
                                         ),
-                                        const SizedBox(width: 10),
-                                        _numberField(
-                                          _proteinController,
-                                          'Protein',
-                                          hint: '20',
-                                          suffix: 'g',
-                                          previewSuffix: 'g protein',
-                                        ),
+                                        const SizedBox(height: 12),
+                                        if (dayDocs.isEmpty)
+                                          const Padding(
+                                            padding: EdgeInsets.symmetric(
+                                                vertical: 8),
+                                            child:
+                                                Text('No calorie history yet.'),
+                                          )
+                                        else
+                                          ...dayDocs.map((day) {
+                                            final dateKey =
+                                                day['date']?.toString() ?? '';
+                                            return Card(
+                                              margin: const EdgeInsets.only(
+                                                  bottom: 10),
+                                              elevation: 0,
+                                              color: theme.colorScheme
+                                                  .surfaceContainerHighest,
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(18),
+                                              ),
+                                              child: ListTile(
+                                                title: Text(
+                                                  dateKey,
+                                                  style: TextStyle(
+                                                    color: theme
+                                                        .colorScheme.onSurface,
+                                                  ),
+                                                ),
+                                                subtitle: Text(
+                                                  '${(day['totalCalories'] as num?)?.toInt() ?? 0} kcal - '
+                                                  'P ${(day['totalProtein'] as num?)?.toInt() ?? 0}g - '
+                                                  'C ${(day['totalCarbs'] as num?)?.toInt() ?? 0}g - '
+                                                  'F ${(day['totalFat'] as num?)?.toInt() ?? 0}g',
+                                                  style: TextStyle(
+                                                    color: theme
+                                                        .colorScheme.onSurface
+                                                        .withValues(
+                                                            alpha: 0.72),
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          }),
                                       ],
                                     ),
-                                    const SizedBox(height: 10),
-                                    Row(
-                                      children: [
-                                        _numberField(
-                                          _carbController,
-                                          'Carbs',
-                                          hint: '30',
-                                          suffix: 'g',
-                                          previewSuffix: 'g carbs',
-                                        ),
-                                        const SizedBox(width: 10),
-                                        _numberField(
-                                          _fatController,
-                                          'Fat',
-                                          hint: '10',
-                                          suffix: 'g',
-                                          previewSuffix: 'g fat',
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 14),
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: ElevatedButton(
-                                        onPressed:
-                                            _isLookingUpFood ? null : _addMeal,
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor:
-                                              theme.colorScheme.primary,
-                                          padding: const EdgeInsets.symmetric(
-                                              vertical: 15),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(18),
-                                          ),
-                                        ),
-                                        child: Text(
-                                          _isLookingUpFood
-                                              ? 'Looking Up Food...'
-                                              : 'Add Entry',
-                                          style: TextStyle(
-                                            color: theme.colorScheme.onPrimary,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
-                                const SizedBox(height: 18),
-                                _buildSoftSection(
-                                  title: 'History',
-                                  child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _buildHistoryCalendarStrip(dayDocs),
-                                    const SizedBox(height: 18),
-                                    Container(
-                                      width: double.infinity,
-                                      padding: const EdgeInsets.all(16),
-                                      decoration: BoxDecoration(
-                                        color: theme
-                                            .colorScheme.surfaceContainerHighest,
-                                        borderRadius: BorderRadius.circular(18),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'This Week: $weeklyCalories kcal',
-                                            style: TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                              color:
-                                                  theme.colorScheme.onSurface,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            'Protein: ${weeklyProtein}g',
-                                            style: TextStyle(
-                                              color: theme.colorScheme.onSurface
-                                                  .withValues(alpha: 0.72),
-                                            ),
-                                          ),
-                                          Text(
-                                            'Carbs: ${weeklyCarbs}g',
-                                            style: TextStyle(
-                                              color: theme.colorScheme.onSurface
-                                                  .withValues(alpha: 0.72),
-                                            ),
-                                          ),
-                                          Text(
-                                            'Fat: ${weeklyFat}g',
-                                            style: TextStyle(
-                                              color: theme.colorScheme.onSurface
-                                                  .withValues(alpha: 0.72),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 18),
-                                    _buildSoftSection(
-                                      title: 'Selected Day',
-                                      child: _buildSelectedDayHistoryCard(
-                                          selectedHistoryData),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    if (dayDocs.isEmpty)
-                                      const Padding(
-                                        padding:
-                                            EdgeInsets.symmetric(vertical: 8),
-                                        child: Text('No calorie history yet.'),
-                                      )
-                                    else
-                                      ...dayDocs.map((day) {
-                                        final dateKey =
-                                            day['date']?.toString() ?? '';
-                                        return Card(
-                                          margin:
-                                              const EdgeInsets.only(bottom: 10),
-                                          elevation: 0,
-                                          color: theme.colorScheme
-                                              .surfaceContainerHighest,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(18),
-                                          ),
-                                          child: ListTile(
-                                            title: Text(
-                                              dateKey,
-                                              style: TextStyle(
-                                                color:
-                                                    theme.colorScheme.onSurface,
-                                              ),
-                                            ),
-                                            subtitle: Text(
-                                              '${(day['totalCalories'] as num?)?.toInt() ?? 0} kcal - '
-                                              'P ${(day['totalProtein'] as num?)?.toInt() ?? 0}g - '
-                                              'C ${(day['totalCarbs'] as num?)?.toInt() ?? 0}g - '
-                                              'F ${(day['totalFat'] as num?)?.toInt() ?? 0}g',
-                                              style: TextStyle(
-                                                color: theme.colorScheme.onSurface
-                                                    .withValues(alpha: 0.72),
-                                              ),
-                                            ),
-                                          ),
-                                        );
-                                      }),
-                                  ],
-                                ),
-                              ),
-                              ],
                             ),
                           );
                         },
                       ),
-                );
-              },
-            ),
-          );
-        },
-      );
+              );
+            },
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -3548,34 +3881,32 @@ class _PresetFood extends CalorieFoodPreset {
   });
 }
 
-class _CalculatedFoodAmount extends CalorieFoodAmount {
-  const _CalculatedFoodAmount({
-    required super.displayName,
-    required super.quantityLabel,
-    required super.unit,
-    required super.calories,
-    required super.protein,
-    required super.carbs,
-    required super.fat,
-  });
-}
-
 class _NutritionLookupResult {
   const _NutritionLookupResult({
-    required this.displayName,
-    required this.calories,
-    required this.protein,
-    required this.carbs,
-    required this.fat,
+    required this.basis,
     this.subtitle,
+    this.quantity,
+    this.unit,
   });
 
-  final String displayName;
-  final int calories;
-  final int protein;
-  final int carbs;
-  final int fat;
+  final FoodNutritionBasis basis;
   final String? subtitle;
+
+  /// Portion to preselect; defaults to one serving of [basis].
+  final double? quantity;
+  final String? unit;
+
+  String get displayName => basis.name;
+
+  NutritionValues get _portion =>
+      basis.scaled(
+          quantity ?? basis.servingQuantity, unit ?? basis.servingUnit) ??
+      basis.perServing;
+
+  int get calories => _portion.roundedCalories;
+  int get protein => _portion.roundedProtein;
+  int get carbs => _portion.roundedCarbs;
+  int get fat => _portion.roundedFat;
 }
 
 class _ArcProgressPainter extends CustomPainter {

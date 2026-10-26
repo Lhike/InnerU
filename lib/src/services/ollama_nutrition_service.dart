@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:selfcare_projects/src/features/authentication/screen/calorie_tracker/calorie_tracker_math.dart';
 
 class OllamaNutritionService {
   OllamaNutritionService._();
@@ -107,14 +108,16 @@ You are a nutrition assistant.
 Analyze this food image and identify the most likely food or meal.
 Estimate a single realistic serving that best matches what is visible.
 Return ONLY valid compact JSON with these keys:
-meal_name, calories, protein, carbs, fat, confidence
+meal_name, portion_grams, calories, protein, carbs, fat, confidence
 
 Rules:
 - meal_name must be a short, searchable food name in plain English
 - prefer specific common names that could match a nutrition database
 - if the food is packaged or branded, use the product name when obvious
 - if multiple foods are visible, choose the main item in the portion
-- calories, protein, carbs, fat must be numbers
+- portion_grams is your estimate of the visible portion's weight in grams
+- calories, protein, carbs, fat are for that whole visible portion
+- all values must be plain numbers without units
 - confidence must be a number from 0 to 1
 - no markdown
 - no explanation
@@ -144,28 +147,51 @@ Rules:
     final rawResponse = payload['response'];
     if (rawResponse is! String || rawResponse.trim().isEmpty) return null;
 
-    final parsed = jsonDecode(rawResponse);
-    if (parsed is! Map<String, dynamic>) return null;
+    return parseEstimate(rawResponse);
+  }
 
-    final mealName = (parsed['meal_name'] as String?)?.trim();
-    final calories = (parsed['calories'] as num?)?.toDouble();
-    final protein = (parsed['protein'] as num?)?.toDouble();
-    final carbs = (parsed['carbs'] as num?)?.toDouble();
-    final fat = (parsed['fat'] as num?)?.toDouble();
-    final confidence = (parsed['confidence'] as num?)?.toDouble() ?? 0;
+  /// Parses the model's JSON reply. Tolerates numbers sent as text with
+  /// units ("250 kcal") and code fences. A reply without a confidence is
+  /// kept (and shown as unrated); one that rates itself below
+  /// [minimumConfidence] is dropped.
+  static OllamaNutritionEstimate? parseEstimate(String rawResponse) {
+    var text = rawResponse.trim();
+    final fenced = RegExp(r'\{[\s\S]*\}').firstMatch(text);
+    if (fenced != null) text = fenced.group(0)!;
+
+    final dynamic parsed;
+    try {
+      parsed = jsonDecode(text);
+    } on FormatException {
+      return null;
+    }
+    if (parsed is! Map) return null;
+
+    double? number(String key) => CalorieTrackerMath.parseLooseNumber(parsed[key]);
+
+    final mealName = parsed['meal_name']?.toString().trim();
+    final calories = number('calories');
+    var confidence = number('confidence');
+    // Some models answer on a 0-100 scale.
+    if (confidence != null && confidence > 1) confidence = confidence / 100;
+    final grams = number('portion_grams');
 
     if (mealName == null || mealName.isEmpty) return null;
     if (calories == null || calories <= 0) return null;
+    if (confidence != null && confidence < minimumConfidence) return null;
 
     return OllamaNutritionEstimate(
       mealName: mealName,
       calories: calories.round(),
-      protein: (protein ?? 0).round(),
-      carbs: (carbs ?? 0).round(),
-      fat: (fat ?? 0).round(),
+      protein: (number('protein') ?? 0).round(),
+      carbs: (number('carbs') ?? 0).round(),
+      fat: (number('fat') ?? 0).round(),
       confidence: confidence,
+      portionGrams: grams != null && grams > 0 ? grams : null,
     );
   }
+
+  static const double minimumConfidence = 0.65;
 }
 
 class OllamaNutritionEstimate {
@@ -175,7 +201,8 @@ class OllamaNutritionEstimate {
     required this.protein,
     required this.carbs,
     required this.fat,
-    required this.confidence,
+    this.confidence,
+    this.portionGrams,
   });
 
   final String mealName;
@@ -183,7 +210,12 @@ class OllamaNutritionEstimate {
   final int protein;
   final int carbs;
   final int fat;
-  final double confidence;
+
+  /// 0..1, or null when the model didn't rate itself.
+  final double? confidence;
+
+  /// Estimated weight of the photographed portion, when the model gave one.
+  final double? portionGrams;
 }
 
 class OllamaServiceStatus {
