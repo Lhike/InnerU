@@ -263,6 +263,11 @@ class LeaderboardApiService {
     );
     return StepLeaderboardSnapshot.fromJson(response);
   }
+
+  /// Saves the user's steps-race walker so their company sees it.
+  Future<void> saveWalkerLook(Map<String, dynamic> look) async {
+    await _api.postJson('/api/walker-look', {'look': look}, token: _token);
+  }
 }
 
 num _parseApiNumber(dynamic value, {num fallback = 0}) {
@@ -305,6 +310,7 @@ class StepLeaderboardEntry {
     required this.rank,
     this.profilePic,
     this.isCoach = false,
+    this.walkerLook,
   });
 
   final String userId;
@@ -315,6 +321,10 @@ class StepLeaderboardEntry {
   final String? profilePic;
   final bool isCoach;
 
+  /// The walker this member designed for the steps race, as saved by the
+  /// API; null if they never customized one.
+  final Map<String, dynamic>? walkerLook;
+
   factory StepLeaderboardEntry.fromJson(Map<String, dynamic> json) {
     return StepLeaderboardEntry(
       userId: json['userId']?.toString() ?? '',
@@ -324,6 +334,9 @@ class StepLeaderboardEntry {
       rank: _parseApiNumber(json['rank']).toInt(),
       profilePic: json['profilePic']?.toString(),
       isCoach: json['isCoach'] == true,
+      walkerLook: json['walkerLook'] is Map
+          ? Map<String, dynamic>.from(json['walkerLook'] as Map)
+          : null,
     );
   }
 }

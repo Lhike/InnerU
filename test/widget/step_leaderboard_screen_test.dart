@@ -273,6 +273,156 @@ void main() {
     expect(find.text('📍 Me'), findsNothing);
   });
 
+  group('shared walkers', () {
+    Map<String, dynamic> curlyLook({String accessory = 'none'}) => {
+          'skin': 0xFF8D5524,
+          'hairStyle': 'curly',
+          'hair': 0xFF1B1B1B,
+          'top': 'tank',
+          'topColor': 0xFF26A69A,
+          'bottom': 'shorts',
+          'bottomColor': 0xFF37474F,
+          'shoes': 0xFFEF5350,
+          'accessory': accessory,
+        };
+
+    StepLeaderboardSnapshot withLooks(
+      StepLeaderboardPeriod period,
+      Map<String, Map<String, dynamic>> looks,
+    ) {
+      final base = _snapshot(period);
+      return StepLeaderboardSnapshot(
+        period: period,
+        companyName: base.companyName,
+        companyTotalSteps: base.companyTotalSteps,
+        startDate: base.startDate,
+        endDate: base.endDate,
+        weekPlacements: base.weekPlacements,
+        entries: [
+          for (final e in base.entries)
+            StepLeaderboardEntry(
+              userId: e.userId,
+              name: e.name,
+              totalSteps: e.totalSteps,
+              daysTracked: e.daysTracked,
+              rank: e.rank,
+              walkerLook: looks[e.userId],
+            ),
+        ],
+      );
+    }
+
+    List<WalkerLook> walkerLooks(WidgetTester tester) => tester
+        .widgetList<WalkerAvatar>(find.byType(WalkerAvatar))
+        .map((w) => w.look)
+        .toList();
+
+    testWidgets('other runners walk in the look they saved', (tester) async {
+      usePhoneScreen(tester);
+      await tester.pumpWidget(MaterialApp(
+        home: StepLeaderboardScreen(
+          currentUserId: '4',
+          clock: () => DateTime(2026, 10, 21, 21, 10, 6),
+          lookSaver: (_) async {},
+          // Cara (3rd) saved a crown, which only the leader may wear.
+          loader: (period) async => withLooks(period, {
+            '3': curlyLook(accessory: 'crown'),
+          }),
+        ),
+      ));
+      await settle(tester);
+
+      // Cara's own design, minus the crown she hasn't earned today.
+      final caraLook = WalkerLook.fromMap(curlyLook());
+      expect(
+          walkerLooks(tester).where((look) => look == caraLook), hasLength(1));
+      expect(
+        walkerLooks(tester)
+            .where((look) => look.accessory == WalkerAccessory.crown),
+        hasLength(1),
+        reason: 'only the leader wears the crown',
+      );
+    });
+
+    testWidgets('saving a walker shares it through the API', (tester) async {
+      usePhoneScreen(tester);
+      final uploads = <Map<String, dynamic>>[];
+      await tester.pumpWidget(MaterialApp(
+        home: StepLeaderboardScreen(
+          currentUserId: '4',
+          clock: () => DateTime(2026, 10, 21, 21, 10, 6),
+          lookSaver: (look) async => uploads.add(look),
+          loader: (period) async => _snapshot(period),
+        ),
+      ));
+      await settle(tester);
+      expect(uploads, isEmpty, reason: 'nothing designed yet');
+
+      await tester.tap(find.text('🎨 Style'));
+      await settle(tester);
+      Future<void> tapText(String text) async {
+        await tester.scrollUntilVisible(find.text(text), 150,
+            scrollable: find.byType(Scrollable).last);
+        await tester.tap(find.text(text));
+        await tester.pump();
+      }
+
+      await tapText('Bun');
+      await tapText('Save my walker');
+      await settle(tester);
+
+      expect(uploads, hasLength(1));
+      expect(uploads.single['hairStyle'], 'bun');
+      expect(find.text('Walker saved. Your team will see it in the race.'),
+          findsOneWidget);
+    });
+
+    testWidgets('a walker saved on the server follows the user to a new phone',
+        (tester) async {
+      usePhoneScreen(tester);
+      final uploads = <Map<String, dynamic>>[];
+      await tester.pumpWidget(MaterialApp(
+        home: StepLeaderboardScreen(
+          currentUserId: '4',
+          clock: () => DateTime(2026, 10, 21, 21, 10, 6),
+          lookSaver: (look) async => uploads.add(look),
+          loader: (period) async => withLooks(period, {'4': curlyLook()}),
+        ),
+      ));
+      await settle(tester);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        WalkerLook.fromJson(prefs.getString('step_race_look')).hairStyle,
+        WalkerHairStyle.curly,
+      );
+      expect(uploads, isEmpty);
+    });
+
+    testWidgets('a walker only on this phone is uploaded once', (tester) async {
+      SharedPreferences.setMockInitialValues({'step_race_skin': 'champion'});
+      usePhoneScreen(tester);
+      final uploads = <Map<String, dynamic>>[];
+      await tester.pumpWidget(MaterialApp(
+        home: StepLeaderboardScreen(
+          currentUserId: '4',
+          clock: () => DateTime(2026, 10, 21, 21, 10, 6),
+          lookSaver: (look) async => uploads.add(look),
+          loader: (period) async => _snapshot(period),
+        ),
+      ));
+      await settle(tester);
+
+      await tester.tap(find.text('Today'));
+      await settle(tester);
+      await tester.tap(find.text('This Week').last);
+      await settle(tester);
+
+      expect(uploads, hasLength(1));
+      expect(uploads.single['accessory'], 'crown');
+    });
+  });
+
   testWidgets('the leader sees how far ahead they are', (tester) async {
     await tester.pumpWidget(_app(
       me: '1',

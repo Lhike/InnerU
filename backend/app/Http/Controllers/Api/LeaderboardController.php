@@ -88,6 +88,7 @@ class LeaderboardController extends Controller
                     'name' => $candidate->name,
                     'profilePic' => $candidate->profile_pic,
                     'isCoach' => (bool) $candidate->is_coach,
+                    'walkerLook' => $candidate->walker_look,
                     'totalSteps' => (int) ($row->total_steps ?? 0),
                     'daysTracked' => (int) ($row->days_tracked ?? 0),
                 ];

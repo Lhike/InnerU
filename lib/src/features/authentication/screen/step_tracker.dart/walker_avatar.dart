@@ -146,7 +146,8 @@ class WalkerLook {
     );
   }
 
-  String toJson() => jsonEncode({
+  /// The shape shared with the API and saved on the device.
+  Map<String, dynamic> toMap() => {
         'skin': skinTone.toARGB32(),
         'hairStyle': hairStyle.name,
         'hair': hairColor.toARGB32(),
@@ -156,20 +157,13 @@ class WalkerLook {
         'bottomColor': bottomColor.toARGB32(),
         'shoes': shoeColor.toARGB32(),
         'accessory': accessory.name,
-      });
+      };
+
+  String toJson() => jsonEncode(toMap());
 
   /// Parses a saved look; anything missing or invalid keeps its default.
-  static WalkerLook fromJson(String? source) {
+  static WalkerLook fromMap(Map<String, dynamic> json) {
     const fallback = WalkerLook();
-    if (source == null || source.isEmpty) return fallback;
-    final Map<String, dynamic> json;
-    try {
-      final decoded = jsonDecode(source);
-      if (decoded is! Map) return fallback;
-      json = decoded.cast<String, dynamic>();
-    } on FormatException {
-      return fallback;
-    }
 
     Color color(String key, Color orElse) {
       final value = json[key];
@@ -192,6 +186,18 @@ class WalkerLook {
       shoeColor: color('shoes', fallback.shoeColor),
       accessory: named(WalkerAccessory.values, 'accessory', fallback.accessory),
     );
+  }
+
+  static WalkerLook fromJson(String? source) {
+    if (source == null || source.isEmpty) return const WalkerLook();
+    try {
+      final decoded = jsonDecode(source);
+      return decoded is Map
+          ? fromMap(decoded.cast<String, dynamic>())
+          : const WalkerLook();
+    } on FormatException {
+      return const WalkerLook();
+    }
   }
 
   /// Converts the old single-colour skins so nobody loses their pick.

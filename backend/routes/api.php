@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AbundanceAdminController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\LeaderboardController;
+use App\Http\Controllers\Api\WalkerLookController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PostHeartController;
 use App\Http\Controllers\Api\ProfileController;
@@ -116,6 +117,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::delete('/todo-tasks/{todoTask}', [TodoTaskController::class, 'destroy']);
     Route::get('/leaderboard', [LeaderboardController::class, 'index']);
     Route::get('/leaderboard/steps', [LeaderboardController::class, 'steps']);
+    Route::get('/walker-look', [WalkerLookController::class, 'show']);
+    Route::post('/walker-look', [WalkerLookController::class, 'update']);
     Route::get('/coaches', [CoachManagementController::class, 'directory']);
     Route::get('/emotions/today', [EmotionController::class, 'today']);
     Route::get('/emotions/history', [EmotionController::class, 'history']);

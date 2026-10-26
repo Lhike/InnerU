@@ -14,6 +14,8 @@ typedef StepLeaderboardLoader = Future<StepLeaderboardSnapshot> Function(
   StepLeaderboardPeriod period,
 );
 
+typedef WalkerLookSaver = Future<void> Function(Map<String, dynamic> look);
+
 /// Company step race: the viewer walks through a scene chasing the
 /// colleague just ahead of them, with a race bar of every member below and
 /// their daily finishing places for the week on top. Overtakes since the
@@ -25,10 +27,14 @@ class StepLeaderboardScreen extends StatefulWidget {
     this.loader,
     this.currentUserId,
     this.clock,
+    this.lookSaver,
   });
 
   /// Overridable for tests; defaults to the leaderboard API.
   final StepLeaderboardLoader? loader;
+
+  /// Overridable for tests; defaults to saving through the API.
+  final WalkerLookSaver? lookSaver;
   final String? currentUserId;
 
   /// Overridable for tests; drives the countdown and the sky.
@@ -211,7 +217,7 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _now = _clock());
     });
-    _restoreLook();
+    _restoredLook = _restoreLook();
   }
 
   @override
@@ -224,26 +230,81 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
     super.dispose();
   }
 
+  /// Whether this phone has a look the user designed (or an old outfit
+  /// pick), as opposed to the default.
+  bool _hasLocalLook = false;
+  Future<void> _restoredLook = Future.value();
+  bool _lookSyncedThisSession = false;
+
   Future<void> _restoreLook() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final saved = prefs.getString(_lookKey);
+      final legacy = prefs.getString(_legacySkinKey);
       final look = saved != null
           ? WalkerLook.fromJson(saved)
-          : WalkerLook.fromLegacySkin(prefs.getString(_legacySkinKey));
+          : WalkerLook.fromLegacySkin(legacy);
+      _hasLocalLook = saved != null || legacy != null;
       if (mounted) setState(() => _look = look);
     } catch (_) {
       // Keep the default look.
     }
   }
 
-  Future<void> _saveLook(WalkerLook look) async {
-    setState(() => _look = look);
+  Future<void> _storeLookLocally(WalkerLook look) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_lookKey, look.toJson());
+      _hasLocalLook = true;
     } catch (_) {
       // The look still applies for this session.
+    }
+  }
+
+  Future<bool> _uploadLook(WalkerLook look) async {
+    try {
+      final saver =
+          widget.lookSaver ?? LeaderboardApiService.instance.saveWalkerLook;
+      await saver(look.toMap());
+      return true;
+    } catch (error) {
+      debugPrint('Could not save walker look: $error');
+      return false;
+    }
+  }
+
+  Future<void> _saveLook(WalkerLook look) async {
+    setState(() => _look = look);
+    await _storeLookLocally(look);
+    final uploaded = await _uploadLook(look);
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+      content: Text(
+        uploaded
+            ? 'Walker saved. Your team will see it in the race.'
+            : "Saved on this phone. We couldn't share it with your team yet.",
+      ),
+    ));
+  }
+
+  /// The server copy wins (so a new phone gets the user's walker); a look
+  /// that only exists on this phone is uploaded once.
+  Future<void> _syncLook(StepLeaderboardSnapshot data) async {
+    if (_lookSyncedThisSession) return;
+    final meId = _currentUserId;
+    final me = data.entries.where((e) => e.userId == meId).firstOrNull;
+    if (me == null) return;
+    _lookSyncedThisSession = true;
+
+    final remote = me.walkerLook;
+    if (remote != null) {
+      final look = WalkerLook.fromMap(remote);
+      if (look != _look) {
+        if (mounted) setState(() => _look = look);
+        await _storeLookLocally(look);
+      }
+    } else if (_hasLocalLook) {
+      await _uploadLook(_look);
     }
   }
 
@@ -255,6 +316,7 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
         : LeaderboardApiService.instance.fetchStepLeaderboard(period: period);
     return future.then((data) {
       _celebrateProgress(data, period);
+      unawaited(_restoredLook.then((_) => _syncLook(data)));
       return data;
     });
   }
@@ -964,16 +1026,24 @@ class _RaceSceneState extends State<_RaceScene> {
 
   /// Other racers get a look generated from their id, so each person
   /// always looks the same; the leader wears the crown.
+  /// Another racer's walker: the one they designed, or one generated from
+  /// their id so they always look the same. Only the current leader wears
+  /// the crown.
   WalkerLook _lookFor(StepLeaderboardEntry entry) {
-    final look = WalkerLook.random(
-      math.Random(_stableHash(entry.userId)),
-      allowedAccessories: const [
-        WalkerAccessory.none,
-        WalkerAccessory.backpack,
-      ],
-    );
-    return entry.rank == 1 && entry.totalSteps > 0
-        ? look.copyWith(accessory: WalkerAccessory.crown)
+    final saved = entry.walkerLook;
+    final look = saved != null
+        ? WalkerLook.fromMap(saved)
+        : WalkerLook.random(
+            math.Random(_stableHash(entry.userId)),
+            allowedAccessories: const [
+              WalkerAccessory.none,
+              WalkerAccessory.backpack,
+            ],
+          );
+    final isLeader = entry.rank == 1 && entry.totalSteps > 0;
+    if (isLeader) return look.copyWith(accessory: WalkerAccessory.crown);
+    return look.accessory == WalkerAccessory.crown
+        ? look.copyWith(accessory: WalkerAccessory.none)
         : look;
   }
 
