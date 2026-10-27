@@ -202,4 +202,50 @@ class MarathonTest extends TestCase
         $this->postJson('/api/walker-look', ['look' => ['bib' => 7] + $look])->assertStatus(422);
         $this->postJson('/api/walker-look', ['look' => ['kit' => 'ocean'] + $look])->assertStatus(422);
     }
+
+    public function test_the_race_leaderboard_ranks_confirmed_runners_by_distance(): void
+    {
+        $marathon = $this->marathon(['price' => 0, 'distance_km' => 10]);
+        $join = function (string $name, int $steps) use ($marathon): User {
+            $user = User::factory()->create(['name' => $name]);
+            Sanctum::actingAs($user);
+            $this->postJson("/api/marathons/{$marathon->id}/register", ['full_name' => $name] + $this->form());
+            DailyTracker::create([
+                'user_id' => (string) $user->id, 'username' => $name,
+                'date' => '2026-11-02', 'step_count' => $steps,
+            ]);
+
+            return $user;
+        };
+        $join('Ben', 6000);   // 4.02 km
+        $join('Ana', 16000);  // 10.72 km: finisher
+        $cara = $join('Cara', 9000); // 6.03 km
+        $outsider = User::factory()->create(['name' => 'Dan']);
+        DailyTracker::create([
+            'user_id' => (string) $outsider->id, 'username' => 'Dan',
+            'date' => '2026-11-02', 'step_count' => 99999,
+        ]);
+
+        Carbon::setTestNow('2026-11-03 09:00:00');
+        Sanctum::actingAs($cara);
+        $response = $this->getJson("/api/marathons/{$marathon->id}/leaderboard")
+            ->assertOk()
+            ->assertJsonPath('marathon.myRegistration.status', 'confirmed')
+            ->assertJsonCount(3, 'runners');
+
+        $runners = collect($response->json('runners'));
+        $this->assertSame(['Ana', 'Cara', 'Ben'], $runners->pluck('name')->all());
+        $this->assertSame([1, 2, 3], $runners->pluck('rank')->all());
+        $this->assertTrue($runners[0]['finished']);
+        $this->assertSame(6.03, $runners[1]['km']);
+        $this->assertNotNull($runners[1]['bibNumber']);
+    }
+
+    public function test_an_unpublished_marathon_has_no_public_leaderboard(): void
+    {
+        $marathon = $this->marathon(['is_published' => false]);
+        Sanctum::actingAs(User::factory()->create());
+
+        $this->getJson("/api/marathons/{$marathon->id}/leaderboard")->assertNotFound();
+    }
 }

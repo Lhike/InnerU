@@ -112,6 +112,34 @@ class MarathonController extends Controller
         ]);
     }
 
+    /** Everyone racing in [$marathon], for the race view in the leaderboard. */
+    public function leaderboard(Request $request, Marathon $marathon): JsonResponse
+    {
+        if (! $marathon->is_published) {
+            return response()->json(['message' => 'Marathon not found.'], Response::HTTP_NOT_FOUND);
+        }
+
+        $runners = $this->progress->standings($marathon)
+            ->values()
+            ->map(fn (array $row, int $index) => [
+                'userId' => (string) $row['registration']->user_id,
+                'name' => $row['registration']->user?->name ?? $row['registration']->full_name,
+                'profilePic' => $row['registration']->user?->profile_pic,
+                'walkerLook' => $row['registration']->user?->walker_look,
+                'bibNumber' => $row['registration']->bib_number,
+                'steps' => $row['steps'],
+                'km' => $row['km'],
+                'percent' => $row['percent'],
+                'finished' => $row['finished'],
+                'rank' => $index + 1,
+            ]);
+
+        return response()->json([
+            'marathon' => $this->payload($marathon, $this->registrationFor($request, $marathon)),
+            'runners' => $runners,
+        ]);
+    }
+
     public function certificate(Request $request, Marathon $marathon): JsonResponse
     {
         $registration = $this->registrationFor($request, $marathon);

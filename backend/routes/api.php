@@ -126,6 +126,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/marathons/{marathon}/register', [MarathonController::class, 'register']);
     Route::post('/marathons/{marathon}/payment', [MarathonController::class, 'submitPayment']);
     Route::get('/marathons/{marathon}/certificate', [MarathonController::class, 'certificate']);
+    Route::get('/marathons/{marathon}/leaderboard', [MarathonController::class, 'leaderboard']);
     Route::get('/admin/marathons', [AdminMarathonController::class, 'index']);
     Route::post('/admin/marathons', [AdminMarathonController::class, 'store']);
     Route::patch('/admin/marathons/{marathon}', [AdminMarathonController::class, 'update']);

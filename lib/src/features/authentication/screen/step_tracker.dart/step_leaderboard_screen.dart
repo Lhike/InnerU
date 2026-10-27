@@ -6,10 +6,13 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/walker_avatar.dart';
+import 'package:selfcare_projects/src/features/marathon/marathon_certificate_screen.dart';
+import 'package:selfcare_projects/src/features/marathon/marathon_detail_screen.dart';
 import 'package:selfcare_projects/src/features/marathon/marathon_list_screen.dart';
 import 'package:selfcare_projects/src/features/marathon/marathon_theme.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
 import 'package:selfcare_projects/src/services/leaderboard_api_service.dart';
+import 'package:selfcare_projects/src/services/marathon_api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 typedef StepLeaderboardLoader = Future<StepLeaderboardSnapshot> Function(
@@ -30,7 +33,15 @@ class StepLeaderboardScreen extends StatefulWidget {
     this.currentUserId,
     this.clock,
     this.lookSaver,
+    this.marathonApi,
+    this.initialMarathonId,
   });
+
+  /// Overridable for tests; defaults to the marathon API.
+  final MarathonApiService? marathonApi;
+
+  /// Opens straight onto this marathon's race instead of the company race.
+  final String? initialMarathonId;
 
   /// Overridable for tests; defaults to the leaderboard API.
   final StepLeaderboardLoader? loader;
@@ -211,11 +222,59 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
 
   DateTime _clock() => (widget.clock ?? DateTime.now)();
 
+  /// Marathons that can be picked in the race menu.
+  List<Marathon> _marathons = [];
+
+  /// The marathon being shown, or null for the company steps race.
+  String? _marathonId;
+  Future<MarathonRace>? _raceFuture;
+  StepLeaderboardSnapshot? _lastSnapshot;
+
+  MarathonApiService get _marathonApi =>
+      widget.marathonApi ?? MarathonApiService.instance;
+
+  Future<void> _loadMarathons() async {
+    try {
+      final marathons = await _marathonApi.fetchMarathons();
+      if (!mounted) return;
+      setState(() => _marathons = marathons
+          .where(
+              (m) => m.phase != MarathonPhase.ended || m.myRegistration != null)
+          .toList());
+    } catch (error) {
+      debugPrint('Could not load marathons: $error');
+    }
+  }
+
+  void _selectMarathon(String id) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _marathonId = id;
+      _raceFuture = _marathonApi.fetchRace(id);
+    });
+  }
+
+  Future<void> _openMarathonPage(Widget page) async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+    if (!mounted) return;
+    // The user may have joined, paid or put on a marathon kit.
+    unawaited(_restoreLook());
+    unawaited(_loadMarathons());
+    final id = _marathonId;
+    if (id != null) setState(() => _raceFuture = _marathonApi.fetchRace(id));
+  }
+
   @override
   void initState() {
     super.initState();
     _now = _clock();
     _future = _load();
+    // Loaded in the background while a marathon is shown; its error state
+    // only matters once the company race is on screen.
+    _future.ignore();
+    _marathonId = widget.initialMarathonId;
+    if (_marathonId != null) _raceFuture = _marathonApi.fetchRace(_marathonId!);
+    _loadMarathons();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _now = _clock());
     });
@@ -317,6 +376,7 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
         ? loader(period)
         : LeaderboardApiService.instance.fetchStepLeaderboard(period: period);
     return future.then((data) {
+      _lastSnapshot = data;
       _celebrateProgress(data, period);
       unawaited(_restoredLook.then((_) => _syncLook(data)));
       return data;
@@ -383,6 +443,17 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
   }
 
   Future<void> _refresh() async {
+    final marathonId = _marathonId;
+    if (marathonId != null) {
+      final race = _marathonApi.fetchRace(marathonId);
+      setState(() => _raceFuture = race);
+      try {
+        await race;
+      } catch (_) {
+        // Shown by the FutureBuilder.
+      }
+      return;
+    }
     final future = _load();
     setState(() => _future = future);
     try {
@@ -393,9 +464,11 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
   }
 
   void _selectPeriod(StepLeaderboardPeriod period) {
-    if (period == _period) return;
+    if (period == _period && _marathonId == null) return;
     HapticFeedback.selectionClick();
     setState(() {
+      _marathonId = null;
+      _raceFuture = null;
       _period = period;
       _future = _load();
     });
@@ -447,34 +520,36 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
         children: [
           SafeArea(
             bottom: false,
-            child: FutureBuilder<StepLeaderboardSnapshot>(
-              future: _future,
-              builder: (context, snapshot) {
-                final loading =
-                    snapshot.connectionState != ConnectionState.done;
-                final data = snapshot.data;
-                return Column(
-                  children: [
-                    _buildTopBar(data),
-                    Expanded(
-                      child: loading
-                          ? const Center(
-                              child: CircularProgressIndicator(
-                                color: _RacePalette.accent,
-                              ),
-                            )
-                          : snapshot.hasError || data == null
-                              ? _buildError()
-                              : RefreshIndicator(
-                                  color: _RacePalette.accent,
-                                  onRefresh: _refresh,
-                                  child: _buildRace(data),
-                                ),
-                    ),
-                  ],
-                );
-              },
-            ),
+            child: _marathonId != null
+                ? _buildMarathonMode()
+                : FutureBuilder<StepLeaderboardSnapshot>(
+                    future: _future,
+                    builder: (context, snapshot) {
+                      final loading =
+                          snapshot.connectionState != ConnectionState.done;
+                      final data = snapshot.data;
+                      return Column(
+                        children: [
+                          _buildTopBar(data?.companyTotalSteps),
+                          Expanded(
+                            child: loading
+                                ? const Center(
+                                    child: CircularProgressIndicator(
+                                      color: _RacePalette.accent,
+                                    ),
+                                  )
+                                : snapshot.hasError || data == null
+                                    ? _buildError()
+                                    : RefreshIndicator(
+                                        color: _RacePalette.accent,
+                                        onRefresh: _refresh,
+                                        child: _buildRace(data),
+                                      ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
           ),
           Positioned.fill(
             child: IgnorePointer(
@@ -493,91 +568,159 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
     );
   }
 
-  Widget _buildTopBar(StepLeaderboardSnapshot? data) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 16, 4),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: () => Navigator.maybePop(context),
-            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-            tooltip: 'Back',
-          ),
-          Expanded(
-            child: Center(
-              child: PopupMenuButton<StepLeaderboardPeriod>(
-                initialValue: _period,
-                color: _RacePalette.card,
-                onSelected: _selectPeriod,
-                itemBuilder: (context) => _periodLabels.entries
-                    .map((entry) => PopupMenuItem(
+  Widget _buildTopBar(int? teamSteps, {MarathonTheme? marathonTheme}) {
+    final selectedMarathon =
+        _marathons.where((m) => m.id == _marathonId).firstOrNull;
+    final label = _marathonId == null
+        ? _periodLabels[_period]!
+        : '${marathonTheme?.emoji ?? '🏅'} ${selectedMarathon?.title ?? 'Marathon'}';
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 16, 4),
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: () => Navigator.maybePop(context),
+                icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                tooltip: 'Back',
+              ),
+              Expanded(
+                child: Center(
+                  child: PopupMenuButton<Object>(
+                    key: const ValueKey('race-menu'),
+                    color: _RacePalette.card,
+                    onSelected: (choice) {
+                      if (choice is StepLeaderboardPeriod) {
+                        _selectPeriod(choice);
+                      } else if (choice is Marathon) {
+                        _selectMarathon(choice.id);
+                      } else if (choice == 'browse') {
+                        _openMarathonPage(MarathonListScreen(
+                          api: widget.marathonApi,
+                          today: widget.clock?.call(),
+                        ));
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      for (final entry in _periodLabels.entries)
+                        PopupMenuItem<Object>(
                           value: entry.key,
                           child: Text(entry.value, style: _body(15)),
-                        ))
-                    .toList(),
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: _RacePalette.card,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: _RacePalette.cardBorder),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          _periodLabels[_period]!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: _body(15),
+                        ),
+                    ],
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _RacePalette.card,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color:
+                              marathonTheme?.accent ?? _RacePalette.cardBorder,
                         ),
                       ),
-                      const SizedBox(width: 6),
-                      const Icon(Icons.keyboard_arrow_down_rounded,
-                          color: Colors.white, size: 20),
-                    ],
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: _body(15),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          const Icon(Icons.keyboard_arrow_down_rounded,
+                              color: Colors.white, size: 20),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+              if (_marathonId == null)
+                Tooltip(
+                  message: 'Team steps',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.directions_walk_rounded,
+                          color: _RacePalette.gold, size: 20),
+                      const SizedBox(width: 2),
+                      Text(
+                        teamSteps == null
+                            ? '--'
+                            : NumberFormat.compact().format(teamSteps),
+                        style: _display(18),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Text(marathonTheme?.emoji ?? '🏅',
+                    style: const TextStyle(fontSize: 22)),
+            ],
           ),
-          IconButton(
-            tooltip: 'Virtual marathons',
-            visualDensity: VisualDensity.compact,
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const MarathonListScreen()),
-              );
-              // A marathon kit may have been put on.
-              if (mounted) unawaited(_restoreLook());
-            },
-            icon: const Text('🏅', style: TextStyle(fontSize: 20)),
+        ),
+      ],
+    );
+  }
+
+  /// Always-visible buttons to switch between the company steps race and
+  /// each marathon, plus a link to every marathon.
+  Widget _buildRaceButtons() {
+    String phaseLabel(Marathon m) {
+      if (m.myRegistration?.isFinisher == true) return '🏁';
+      final joined = m.myRegistration != null ? '✓ ' : '';
+      return switch (m.phase) {
+        MarathonPhase.ongoing => '${joined}Live',
+        MarathonPhase.upcoming => '${joined}Soon',
+        MarathonPhase.ended => '${joined}Ended',
+      };
+    }
+
+    return SizedBox(
+      height: 46,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+        children: [
+          _RaceButton(
+            key: const ValueKey('race-button-company'),
+            label: '🏃 Company race',
+            selected: _marathonId == null,
+            colors: const [_RacePalette.accent, _RacePalette.gold],
+            onTap: () => _selectPeriod(_period),
           ),
-          Tooltip(
-            message: 'Team steps',
-            child: Row(
-              children: [
-                const Icon(Icons.directions_walk_rounded,
-                    color: _RacePalette.gold, size: 20),
-                const SizedBox(width: 2),
-                Text(
-                  data == null
-                      ? '--'
-                      : NumberFormat.compact().format(data.companyTotalSteps),
-                  style: _display(18),
-                ),
-              ],
+          for (final marathon in _marathons)
+            _RaceButton(
+              key: ValueKey('race-button-${marathon.id}'),
+              label: '${MarathonTheme.of(marathon.theme).emoji} '
+                  '${marathon.title} · ${phaseLabel(marathon)}',
+              selected: _marathonId == marathon.id,
+              colors: MarathonTheme.of(marathon.theme).gradient,
+              onTap: () => _selectMarathon(marathon.id),
             ),
+          _RaceButton(
+            key: const ValueKey('race-button-browse'),
+            label: '🏅 All marathons',
+            selected: false,
+            colors: const [_RacePalette.card, _RacePalette.card],
+            outlined: true,
+            onTap: () => _openMarathonPage(MarathonListScreen(
+              api: widget.marathonApi,
+              today: widget.clock?.call(),
+            )),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildError() {
+  Widget _buildError(
+      [String message = 'Unable to load the steps leaderboard.']) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -588,7 +731,7 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
                 size: 48, color: _RacePalette.muted),
             const SizedBox(height: 12),
             Text(
-              'Unable to load the steps leaderboard.',
+              message,
               textAlign: TextAlign.center,
               style: _body(15, color: _RacePalette.muted),
             ),
@@ -606,6 +749,261 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
     );
   }
 
+  Widget _buildMarathonMode() {
+    return FutureBuilder<MarathonRace>(
+      future: _raceFuture,
+      builder: (context, snapshot) {
+        final race = snapshot.data;
+        final theme =
+            race == null ? null : MarathonTheme.of(race.marathon.theme);
+        return Column(
+          children: [
+            _buildTopBar(null, marathonTheme: theme),
+            Expanded(
+              child: snapshot.connectionState != ConnectionState.done
+                  ? const Center(
+                      child:
+                          CircularProgressIndicator(color: _RacePalette.accent),
+                    )
+                  : snapshot.hasError || race == null
+                      ? _buildError('Unable to load the marathon.')
+                      : RefreshIndicator(
+                          color: _RacePalette.accent,
+                          onRefresh: _refresh,
+                          child: _buildMarathonRace(race),
+                        ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// A marathon shown as a real race: runners walk the track by distance,
+  /// the finish line is the marathon distance, and markers are in km.
+  Widget _buildMarathonRace(MarathonRace race) {
+    final marathon = race.marathon;
+    final theme = MarathonTheme.of(marathon.theme);
+    final kmById = {for (final r in race.runners) r.userId: r.km};
+    final finishedIds = {
+      for (final r in race.runners)
+        if (r.finished) r.userId
+    };
+    final entries = [
+      for (final r in race.runners)
+        StepLeaderboardEntry(
+          userId: r.userId,
+          name: r.name,
+          totalSteps: r.steps,
+          daysTracked: 0,
+          rank: r.rank,
+          profilePic: r.profilePic,
+          walkerLook: r.walkerLook,
+        ),
+    ];
+    String km(double value) => '${value.toStringAsFixed(1)} km';
+    final myIndex = entries.indexWhere((e) => e.userId == _currentUserId);
+    final me = myIndex >= 0 ? entries[myIndex] : null;
+    final ahead = myIndex > 0 ? entries[myIndex - 1] : null;
+    final myKm = me == null ? 0.0 : kmById[me.userId] ?? 0;
+    final distance = marathon.distanceKm <= 0 ? 1.0 : marathon.distanceKm;
+
+    String? aheadLabel;
+    if (ahead != null) {
+      aheadLabel = finishedIds.contains(ahead.userId)
+          ? '🏁 Finished'
+          : 'in ${km(((kmById[ahead.userId] ?? 0) - myKm).clamp(0.1, distance))}';
+    }
+
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.only(bottom: 24),
+      children: [
+        _buildRaceButtons(),
+        const SizedBox(height: 8),
+        _buildMarathonHero(marathon, theme, myKm),
+        const SizedBox(height: 8),
+        _RaceScene(
+          key: ValueKey('marathon-${marathon.id}'),
+          entries: entries,
+          me: me,
+          ahead: ahead,
+          aheadLabel: aheadLabel,
+          leadLabel: myIndex == 0 && entries.length > 1
+              ? '+${km(myKm - (kmById[entries[1].userId] ?? 0))} ahead'
+              : null,
+          shareOf: (entry) => (kmById[entry.userId] ?? 0) / distance,
+          valueText: (entry) => finishedIds.contains(entry.userId)
+              ? '🏁 ${km(distance)}'
+              : km(kmById[entry.userId] ?? 0),
+          valueUnit: '',
+          markers: [
+            for (final share in const [0.25, 0.5, 0.75])
+              (share, '${formatKm(distance * share)} km'),
+          ],
+          stride: _stride,
+          scenery: _scenery,
+          sky: _SkyMode.at(_now),
+          look: _look,
+          banner: _banner,
+          onCustomize: () => _openCustomizer(
+            _lastSnapshot?.weekPlacements ?? const [],
+            _walkStreak(_lastSnapshot?.weekPlacements ?? const [], _now),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text('Runners', style: _display(20)),
+        ),
+        const SizedBox(height: 8),
+        if (entries.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(32),
+            child: Center(
+              child: Text(
+                'No runners yet. Be the first to join!',
+                style: _body(15, color: _RacePalette.muted),
+              ),
+            ),
+          )
+        else
+          for (final r in race.runners)
+            _MarathonRunnerRow(
+              runner: r,
+              isMe: r.userId == _currentUserId,
+              distanceKm: distance,
+            ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Text(
+            '🏅 Finishers receive a finisher shirt, medal and certificate, '
+            'plus a virtual certificate.',
+            textAlign: TextAlign.center,
+            style: _body(13, color: _RacePalette.muted),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMarathonHero(
+    Marathon marathon,
+    MarathonTheme theme,
+    double myKm,
+  ) {
+    final registration = marathon.myRegistration;
+    final dateFormat = DateFormat('EEE, MMM d');
+    final today = DateTime(_now.year, _now.month, _now.day);
+    final String timing;
+    switch (marathon.phase) {
+      case MarathonPhase.upcoming:
+        final days = marathon.startsAt.difference(today).inDays;
+        timing = 'Opens ${days <= 1 ? 'tomorrow' : 'in $days days'} · '
+            '${dateFormat.format(marathon.startsAt)}';
+      case MarathonPhase.ongoing:
+        final end = marathon.endsAt.add(const Duration(days: 1));
+        timing = _countdown(end.difference(_now).isNegative
+            ? Duration.zero
+            : end.difference(_now));
+      case MarathonPhase.ended:
+        timing = 'Race finished';
+    }
+
+    Widget action(String label, VoidCallback onTap) => FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Colors.white,
+            foregroundColor: theme.gradient.last,
+          ),
+          onPressed: onTap,
+          child: Text(label, style: _body(14, color: theme.gradient.last)),
+        );
+    void openDetails() => _openMarathonPage(MarathonDetailScreen(
+          marathonId: marathon.id,
+          initial: marathon,
+          api: widget.marathonApi,
+          today: widget.clock?.call(),
+        ));
+
+    final confirmed = registration?.isConfirmed == true;
+    final String status;
+    Widget? primary;
+    if (registration == null) {
+      status = marathon.phase == MarathonPhase.ended
+          ? 'This marathon has ended.'
+          : '${formatKm(marathon.distanceKm)} km · ${formatPrice(marathon)} · '
+              'finisher shirt, medal & certificate';
+      if (marathon.phase != MarathonPhase.ended) {
+        primary = action('Join this marathon', openDetails);
+      }
+    } else if (confirmed) {
+      status = registration.isFinisher
+          ? '🏅 You finished! Bib #${registration.bibNumber}'
+          : 'Bib #${registration.bibNumber}';
+      if (registration.isFinisher) {
+        primary = action(
+          'View certificate',
+          () => _openMarathonPage(MarathonCertificateScreen(
+            marathonId: marathon.id,
+            api: widget.marathonApi,
+          )),
+        );
+      }
+    } else {
+      status = myStatusLabel(registration) ?? '';
+      if (registration.status != MarathonRegistrationStatus.paymentSubmitted) {
+        primary = action('Complete payment', openDetails);
+      }
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: theme.gradient,
+        ),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(theme.emoji, style: const TextStyle(fontSize: 26)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(marathon.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: _display(20)),
+              ),
+              TextButton(
+                onPressed: openDetails,
+                child: Text('Details', style: _body(13)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (confirmed)
+            Text(
+              '${myKm.toStringAsFixed(1)} / ${formatKm(marathon.distanceKm)} km',
+              style: _display(40),
+            ),
+          Text(timing, style: _body(14)),
+          const SizedBox(height: 4),
+          Text(status, style: _body(13, color: Colors.white70)),
+          if (primary != null) ...[
+            const SizedBox(height: 10),
+            primary,
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildRace(StepLeaderboardSnapshot data) {
     final entries = data.entries;
     final myIndex =
@@ -614,11 +1012,14 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
     final ahead = myIndex > 0 ? entries[myIndex - 1] : null;
     final streak = _walkStreak(data.weekPlacements, _now);
     final look = _effectiveLook(data.weekPlacements, streak);
+    final leaderSteps = entries.isEmpty ? 0 : entries.first.totalSteps;
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 24),
       children: [
+        _buildRaceButtons(),
+        const SizedBox(height: 8),
         _WeekStrip(placements: data.weekPlacements, today: _now),
         const SizedBox(height: 14),
         _buildHero(data, me, streak),
@@ -629,13 +1030,24 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
           entries: entries,
           me: me,
           ahead: ahead,
-          gapToAhead: ahead == null || me == null
+          aheadLabel: ahead == null || me == null
               ? null
-              : ahead.totalSteps - me.totalSteps + 1,
-          leadOverNext: myIndex == 0 && entries.length > 1
-              ? me!.totalSteps - entries[1].totalSteps
+              : 'in ${_stepsFormat.format(ahead.totalSteps - me.totalSteps + 1)}',
+          leadLabel: myIndex == 0 && entries.length > 1
+              ? '+${_stepsFormat.format(me!.totalSteps - entries[1].totalSteps)} ahead'
               : null,
-          format: _stepsFormat,
+          // The leader walks nearest the finish.
+          shareOf: (entry) =>
+              leaderSteps <= 0 ? 0 : entry.totalSteps / leaderSteps,
+          valueText: (entry) => _stepsFormat.format(entry.totalSteps),
+          markers: [
+            if (leaderSteps > 0)
+              for (final share in const [0.25, 0.5, 0.75])
+                (
+                  share,
+                  NumberFormat.compact().format((leaderSteps * share).round()),
+                ),
+          ],
           stride: _stride,
           scenery: _scenery,
           sky: _SkyMode.at(_now),
@@ -751,6 +1163,65 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
       ),
     );
     if (look != null) await _saveLook(look);
+  }
+}
+
+class _RaceButton extends StatelessWidget {
+  const _RaceButton({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.colors,
+    required this.onTap,
+    this.outlined = false,
+  });
+
+  final String label;
+  final bool selected;
+  final List<Color> colors;
+  final VoidCallback onTap;
+  final bool outlined;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Semantics(
+        button: true,
+        selected: selected,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                gradient: selected ? LinearGradient(colors: colors) : null,
+                color: selected ? null : _RacePalette.card,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: selected
+                      ? Colors.white
+                      : outlined
+                          ? _RacePalette.gold
+                          : colors.first.withValues(alpha: 0.7),
+                  width: selected ? 2 : 1.5,
+                ),
+              ),
+              child: Text(
+                label,
+                style: _body(13,
+                    color: outlined && !selected
+                        ? _RacePalette.gold
+                        : Colors.white),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -934,18 +1405,22 @@ enum _SkyMode {
   }
 }
 
-/// A side-scrolling race: every member walks along the track at a spot set
-/// by their steps (the leader nearest the finish). Swipe to see everyone;
-/// it opens centred on the viewer.
+/// A side-scrolling race: every racer walks along the track at a spot set
+/// by [shareOf] (0 at the start, 1 at the finish). Used for the company's
+/// steps race and for marathons. Swipe to see everyone; it opens centred
+/// on the viewer.
 class _RaceScene extends StatefulWidget {
   const _RaceScene({
     super.key,
     required this.entries,
     required this.me,
     required this.ahead,
-    required this.gapToAhead,
-    required this.leadOverNext,
-    required this.format,
+    required this.aheadLabel,
+    required this.leadLabel,
+    required this.shareOf,
+    required this.valueText,
+    required this.markers,
+    this.valueUnit = ' steps',
     required this.stride,
     required this.scenery,
     required this.sky,
@@ -957,9 +1432,20 @@ class _RaceScene extends StatefulWidget {
   final List<StepLeaderboardEntry> entries;
   final StepLeaderboardEntry? me;
   final StepLeaderboardEntry? ahead;
-  final int? gapToAhead;
-  final int? leadOverNext;
-  final NumberFormat format;
+
+  /// Shown above [ahead], e.g. "in 1,501".
+  final String? aheadLabel;
+
+  /// Shown under the viewer when they lead, e.g. "+4,000 ahead".
+  final String? leadLabel;
+  final double Function(StepLeaderboardEntry entry) shareOf;
+  final String Function(StepLeaderboardEntry entry) valueText;
+
+  /// Appended to [valueText] in a racer's tooltip.
+  final String valueUnit;
+
+  /// Signposts along the track as (share, label).
+  final List<(double, String)> markers;
   final Animation<double> stride;
   final Animation<double> scenery;
   final _SkyMode sky;
@@ -1075,23 +1561,20 @@ class _RaceSceneState extends State<_RaceScene> {
   List<_TrackSpot> _layout(double trackLength) {
     final entries = widget.entries;
     final me = widget.me;
-    final leader = entries.isEmpty ? 0 : entries.first.totalSteps;
-    double rawX(int steps) =>
-        _startX +
-        (leader <= 0 ? 0 : (steps / leader).clamp(0.0, 1.0)) * trackLength;
+    double rawX(StepLeaderboardEntry entry) =>
+        _startX + widget.shareOf(entry).clamp(0.0, 1.0) * trackLength;
 
     if (entries.isEmpty) {
       return [_TrackSpot(me, _startX, 2)];
     }
 
-    final ordered = [...entries]..sort((a, b) => a.totalSteps != b.totalSteps
-        ? a.totalSteps.compareTo(b.totalSteps)
-        : b.rank.compareTo(a.rank));
+    // Furthest along last; ties keep the ranking order.
+    final ordered = [...entries]..sort((a, b) => b.rank.compareTo(a.rank));
     final spots = <_TrackSpot>[];
     var previousX = double.negativeInfinity;
     var backLane = 1;
     for (final entry in ordered) {
-      final x = math.max(rawX(entry.totalSteps), previousX + _minGap);
+      final x = math.max(rawX(entry), previousX + _minGap);
       final isViewer = entry.userId == me?.userId;
       int lane;
       if (isViewer) {
@@ -1150,8 +1633,6 @@ class _RaceSceneState extends State<_RaceScene> {
 
           final finishX = math.max(_startX + trackLength, furthest) + 80;
           final worldWidth = finishX + 110;
-          final leaderSteps =
-              widget.entries.isEmpty ? 0 : widget.entries.first.totalSteps;
 
           return Stack(
             children: [
@@ -1180,13 +1661,8 @@ class _RaceSceneState extends State<_RaceScene> {
                       clipBehavior: Clip.none,
                       children: [
                         _trackMarker(_startX, 'START'),
-                        if (leaderSteps > 0)
-                          for (final fraction in const [0.25, 0.5, 0.75])
-                            _trackMarker(
-                              _startX + trackLength * fraction,
-                              NumberFormat.compact()
-                                  .format((leaderSteps * fraction).round()),
-                            ),
+                        for (final (share, label) in widget.markers)
+                          _trackMarker(_startX + trackLength * share, label),
                         Positioned(
                           left: finishX - 9,
                           top: h * 0.5,
@@ -1301,7 +1777,7 @@ class _RaceSceneState extends State<_RaceScene> {
             message: entry == null
                 ? ''
                 : '${_ordinal(entry.rank)} · ${entry.name} · '
-                    '${widget.format.format(entry.totalSteps)} steps',
+                    '${widget.valueText(entry)}${widget.valueUnit}',
             triggerMode: TooltipTriggerMode.tap,
             child: walker,
           );
@@ -1323,7 +1799,7 @@ class _RaceSceneState extends State<_RaceScene> {
           child: Center(
             child: isMe
                 ? _StepsTag(
-                    steps: widget.format.format(entry.totalSteps),
+                    steps: widget.valueText(entry),
                     rank: entry.rank,
                   )
                 : _racerTag(entry, scale),
@@ -1337,12 +1813,10 @@ class _RaceSceneState extends State<_RaceScene> {
           child: Column(
             children: [
               _Pill(text: '${entry.name.split(' ').first} · You'),
-              if (widget.leadOverNext != null)
+              if (widget.leadLabel != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
-                  child: _Pill(
-                    text: '+${widget.format.format(widget.leadOverNext)} ahead',
-                  ),
+                  child: _Pill(text: widget.leadLabel!),
                 ),
             ],
           ),
@@ -1355,7 +1829,7 @@ class _RaceSceneState extends State<_RaceScene> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (isAhead)
+        if (isAhead && widget.aheadLabel != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 3),
             child: Container(
@@ -1364,10 +1838,7 @@ class _RaceSceneState extends State<_RaceScene> {
                 color: _RacePalette.accent,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(
-                'in ${widget.format.format(widget.gapToAhead ?? 0)}',
-                style: _body(11),
-              ),
+              child: Text(widget.aheadLabel!, style: _body(11)),
             ),
           ),
         Row(
@@ -1994,6 +2465,72 @@ class _RaceBarRacer extends StatelessWidget {
             child: Center(child: Text('👑', style: TextStyle(fontSize: 13))),
           ),
       ],
+    );
+  }
+}
+
+class _MarathonRunnerRow extends StatelessWidget {
+  const _MarathonRunnerRow({
+    required this.runner,
+    required this.isMe,
+    required this.distanceKm,
+  });
+
+  final MarathonRunner runner;
+  final bool isMe;
+  final double distanceKm;
+
+  @override
+  Widget build(BuildContext context) {
+    final entry = StepLeaderboardEntry(
+      userId: runner.userId,
+      name: runner.name,
+      totalSteps: runner.steps,
+      daysTracked: 0,
+      rank: runner.rank,
+      profilePic: runner.profilePic,
+    );
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: _RacePalette.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isMe ? _RacePalette.accent : _RacePalette.cardBorder,
+          width: isMe ? 2 : 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          _RankMedal(rank: runner.rank, size: 34),
+          const SizedBox(width: 12),
+          _Avatar(entry: entry, size: 38),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isMe ? '${runner.name} (You)' : runner.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _body(15),
+                ),
+                if (runner.bibNumber != null)
+                  Text('Bib #${runner.bibNumber}',
+                      style: _body(12, color: _RacePalette.muted)),
+              ],
+            ),
+          ),
+          Text(
+            runner.finished
+                ? '🏁 ${formatKm(distanceKm)} km'
+                : '${runner.km.toStringAsFixed(1)} km',
+            style: _display(17),
+          ),
+        ],
+      ),
     );
   }
 }
