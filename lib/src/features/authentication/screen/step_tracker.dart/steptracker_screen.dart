@@ -14,6 +14,7 @@ import 'package:selfcare_projects/src/features/authentication/screen/meditation/
 import 'package:selfcare_projects/src/features/authentication/screen/notes/notes_type.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/step_goal_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/step_leaderboard_screen.dart';
+import 'package:selfcare_projects/src/features/marathon/marathon_list_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/my_step_submissions_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/step_map_tracker_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/step_submission_screen.dart';
@@ -2017,6 +2018,19 @@ class _StepTrackerState extends State<StepTracker>
                                     },
                                     icon: const Icon(Icons.leaderboard_rounded),
                                     label: const Text('Steps Leaderboard'),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              const MarathonListScreen(),
+                                        ),
+                                      );
+                                    },
+                                    icon: const Text('🏅'),
+                                    label: const Text('Virtual Marathons'),
                                   ),
                                   if (_hasCoach)
                                     OutlinedButton.icon(
