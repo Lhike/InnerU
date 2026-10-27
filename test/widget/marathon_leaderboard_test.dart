@@ -121,7 +121,7 @@ void main() {
     await tester.pumpWidget(leaderboard(api, marathonId: '9'));
     await frames(tester);
 
-    expect(find.text('🏅 Sunrise 10K'), findsOneWidget);
+    expect(find.text('🌅 Sunrise 10K'), findsOneWidget);
     expect(find.text('4.2 / 10 km'), findsOneWidget);
     expect(find.text('Bib #7'), findsWidgets);
     // Every runner walks the track; the finish line is the distance.
@@ -129,36 +129,46 @@ void main() {
     expect(find.text('2.5 km'), findsOneWidget);
     expect(find.text('in 0.8 km'), findsOneWidget);
 
-    await tester.scrollUntilVisible(find.text('Cara Lim'), 200,
+    await tester.scrollUntilVisible(find.text('Dan Uy (You)'), 200,
         scrollable: find.byType(Scrollable).first);
     expect(find.text('🏁 10 km'), findsOneWidget);
     expect(find.text('Dan Uy (You)'), findsOneWidget);
   });
 
-  testWidgets('the race menu switches between the company race and marathons',
+  testWidgets(
+      'visible race buttons switch between the company race and marathons',
       (tester) async {
     usePhoneScreen(tester);
     final api = _FakeMarathons([_race.marathon], race: _race);
     await tester.pumpWidget(leaderboard(api));
     await frames(tester);
 
+    // The buttons are on screen without opening any menu.
+    expect(find.text('🏃 Company race'), findsOneWidget);
+    expect(find.text('🌅 Sunrise 10K · ✓ Live'), findsOneWidget);
     expect(find.text('Today'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('race-menu')));
-    await frames(tester);
-    expect(find.text('🏅 Browse all marathons'), findsOneWidget);
-    await tester.tap(find.text('🌅 Sunrise 10K'));
-    await frames(tester);
 
+    await tester.ensureVisible(find.text('🌅 Sunrise 10K · ✓ Live'));
+    await tester.pump();
+    await tester.tap(find.text('🌅 Sunrise 10K · ✓ Live'));
+    await frames(tester);
     expect(api.raceLoads, 1);
-    expect(find.text('🏅 Sunrise 10K'), findsOneWidget);
     expect(find.text('4.2 / 10 km'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('🏃 Company race'));
+    await tester.pump();
+    await tester.tap(find.text('🏃 Company race'));
+    await frames(tester);
+    expect(find.text('4.2 / 10 km'), findsNothing);
+    expect(find.text('Today'), findsOneWidget);
+
+    // The period menu only holds the company race periods.
     await tester.tap(find.byKey(const ValueKey('race-menu')));
     await frames(tester);
-    await tester.tap(find.text('This Week').last);
+    expect(find.text('This Week'), findsOneWidget);
+    await tester.tap(find.text('This Week'));
     await frames(tester);
     expect(find.text('This Week'), findsOneWidget);
-    expect(find.text('4.2 / 10 km'), findsNothing);
   });
 
   testWidgets('people who have not joined are invited to join', (tester) async {

@@ -573,105 +573,147 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
         _marathons.where((m) => m.id == _marathonId).firstOrNull;
     final label = _marathonId == null
         ? _periodLabels[_period]!
-        : '🏅 ${selectedMarathon?.title ?? 'Marathon'}';
+        : '${marathonTheme?.emoji ?? '🏅'} ${selectedMarathon?.title ?? 'Marathon'}';
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 16, 4),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: () => Navigator.maybePop(context),
-            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-            tooltip: 'Back',
-          ),
-          Expanded(
-            child: Center(
-              child: PopupMenuButton<Object>(
-                key: const ValueKey('race-menu'),
-                color: _RacePalette.card,
-                onSelected: (choice) {
-                  if (choice is StepLeaderboardPeriod) {
-                    _selectPeriod(choice);
-                  } else if (choice is Marathon) {
-                    _selectMarathon(choice.id);
-                  } else if (choice == 'browse') {
-                    _openMarathonPage(MarathonListScreen(
-                      api: widget.marathonApi,
-                      today: widget.clock?.call(),
-                    ));
-                  }
-                },
-                itemBuilder: (context) => [
-                  for (final entry in _periodLabels.entries)
-                    PopupMenuItem<Object>(
-                      value: entry.key,
-                      child: Text(entry.value, style: _body(15)),
-                    ),
-                  const PopupMenuDivider(),
-                  for (final marathon in _marathons)
-                    PopupMenuItem<Object>(
-                      value: marathon,
-                      child: Text(
-                        '${MarathonTheme.of(marathon.theme).emoji} ${marathon.title}',
-                        style: _body(15),
-                      ),
-                    ),
-                  PopupMenuItem<Object>(
-                    value: 'browse',
-                    child: Text('🏅 Browse all marathons',
-                        style: _body(15, color: _RacePalette.gold)),
-                  ),
-                ],
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                  decoration: BoxDecoration(
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 16, 4),
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: () => Navigator.maybePop(context),
+                icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                tooltip: 'Back',
+              ),
+              Expanded(
+                child: Center(
+                  child: PopupMenuButton<Object>(
+                    key: const ValueKey('race-menu'),
                     color: _RacePalette.card,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: marathonTheme?.accent ?? _RacePalette.cardBorder,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: _body(15),
+                    onSelected: (choice) {
+                      if (choice is StepLeaderboardPeriod) {
+                        _selectPeriod(choice);
+                      } else if (choice is Marathon) {
+                        _selectMarathon(choice.id);
+                      } else if (choice == 'browse') {
+                        _openMarathonPage(MarathonListScreen(
+                          api: widget.marathonApi,
+                          today: widget.clock?.call(),
+                        ));
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      for (final entry in _periodLabels.entries)
+                        PopupMenuItem<Object>(
+                          value: entry.key,
+                          child: Text(entry.value, style: _body(15)),
+                        ),
+                    ],
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _RacePalette.card,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color:
+                              marathonTheme?.accent ?? _RacePalette.cardBorder,
                         ),
                       ),
-                      const SizedBox(width: 6),
-                      const Icon(Icons.keyboard_arrow_down_rounded,
-                          color: Colors.white, size: 20),
-                    ],
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: _body(15),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          const Icon(Icons.keyboard_arrow_down_rounded,
+                              color: Colors.white, size: 20),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-          if (_marathonId == null)
-            Tooltip(
-              message: 'Team steps',
-              child: Row(
-                children: [
-                  const Icon(Icons.directions_walk_rounded,
-                      color: _RacePalette.gold, size: 20),
-                  const SizedBox(width: 2),
-                  Text(
-                    teamSteps == null
-                        ? '--'
-                        : NumberFormat.compact().format(teamSteps),
-                    style: _display(18),
+              if (_marathonId == null)
+                Tooltip(
+                  message: 'Team steps',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.directions_walk_rounded,
+                          color: _RacePalette.gold, size: 20),
+                      const SizedBox(width: 2),
+                      Text(
+                        teamSteps == null
+                            ? '--'
+                            : NumberFormat.compact().format(teamSteps),
+                        style: _display(18),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            )
-          else
-            Text(marathonTheme?.emoji ?? '🏅',
-                style: const TextStyle(fontSize: 22)),
+                )
+              else
+                Text(marathonTheme?.emoji ?? '🏅',
+                    style: const TextStyle(fontSize: 22)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Always-visible buttons to switch between the company steps race and
+  /// each marathon, plus a link to every marathon.
+  Widget _buildRaceButtons() {
+    String phaseLabel(Marathon m) {
+      if (m.myRegistration?.isFinisher == true) return '🏁';
+      final joined = m.myRegistration != null ? '✓ ' : '';
+      return switch (m.phase) {
+        MarathonPhase.ongoing => '${joined}Live',
+        MarathonPhase.upcoming => '${joined}Soon',
+        MarathonPhase.ended => '${joined}Ended',
+      };
+    }
+
+    return SizedBox(
+      height: 46,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+        children: [
+          _RaceButton(
+            key: const ValueKey('race-button-company'),
+            label: '🏃 Company race',
+            selected: _marathonId == null,
+            colors: const [_RacePalette.accent, _RacePalette.gold],
+            onTap: () => _selectPeriod(_period),
+          ),
+          for (final marathon in _marathons)
+            _RaceButton(
+              key: ValueKey('race-button-${marathon.id}'),
+              label: '${MarathonTheme.of(marathon.theme).emoji} '
+                  '${marathon.title} · ${phaseLabel(marathon)}',
+              selected: _marathonId == marathon.id,
+              colors: MarathonTheme.of(marathon.theme).gradient,
+              onTap: () => _selectMarathon(marathon.id),
+            ),
+          _RaceButton(
+            key: const ValueKey('race-button-browse'),
+            label: '🏅 All marathons',
+            selected: false,
+            colors: const [_RacePalette.card, _RacePalette.card],
+            outlined: true,
+            onTap: () => _openMarathonPage(MarathonListScreen(
+              api: widget.marathonApi,
+              today: widget.clock?.call(),
+            )),
+          ),
         ],
       ),
     );
@@ -777,6 +819,8 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 24),
       children: [
+        _buildRaceButtons(),
+        const SizedBox(height: 8),
         _buildMarathonHero(marathon, theme, myKm),
         const SizedBox(height: 8),
         _RaceScene(
@@ -974,6 +1018,8 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 24),
       children: [
+        _buildRaceButtons(),
+        const SizedBox(height: 8),
         _WeekStrip(placements: data.weekPlacements, today: _now),
         const SizedBox(height: 14),
         _buildHero(data, me, streak),
@@ -1117,6 +1163,65 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
       ),
     );
     if (look != null) await _saveLook(look);
+  }
+}
+
+class _RaceButton extends StatelessWidget {
+  const _RaceButton({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.colors,
+    required this.onTap,
+    this.outlined = false,
+  });
+
+  final String label;
+  final bool selected;
+  final List<Color> colors;
+  final VoidCallback onTap;
+  final bool outlined;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Semantics(
+        button: true,
+        selected: selected,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                gradient: selected ? LinearGradient(colors: colors) : null,
+                color: selected ? null : _RacePalette.card,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: selected
+                      ? Colors.white
+                      : outlined
+                          ? _RacePalette.gold
+                          : colors.first.withValues(alpha: 0.7),
+                  width: selected ? 2 : 1.5,
+                ),
+              ),
+              child: Text(
+                label,
+                style: _body(13,
+                    color: outlined && !selected
+                        ? _RacePalette.gold
+                        : Colors.white),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
