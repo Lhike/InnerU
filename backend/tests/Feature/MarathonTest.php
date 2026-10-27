@@ -248,4 +248,18 @@ class MarathonTest extends TestCase
 
         $this->getJson("/api/marathons/{$marathon->id}/leaderboard")->assertNotFound();
     }
+
+    public function test_the_sample_marathon_seeder_is_rerunnable(): void
+    {
+        Carbon::setTestNow('2026-10-27 09:00:00');
+        $this->seed(\Database\Seeders\SampleMarathonSeeder::class);
+        $this->seed(\Database\Seeders\SampleMarathonSeeder::class);
+
+        Sanctum::actingAs(User::factory()->create());
+        $this->getJson('/api/marathons')
+            ->assertOk()
+            ->assertJsonCount(1, 'marathons')
+            ->assertJsonPath('marathons.0.theme', 'undersea')
+            ->assertJsonPath('marathons.0.phase', 'ongoing');
+    }
 }

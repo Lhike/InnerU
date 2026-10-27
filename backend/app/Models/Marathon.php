@@ -9,7 +9,7 @@ use Illuminate\Support\Carbon;
 class Marathon extends Model
 {
     /** Theme keys the app knows how to draw. */
-    public const THEMES = ['sunrise', 'ocean', 'forest', 'sakura', 'neon_night', 'holiday', 'independence'];
+    public const THEMES = ['sunrise', 'ocean', 'forest', 'sakura', 'neon_night', 'holiday', 'independence', 'undersea'];
 
     protected $fillable = [
         'title',
