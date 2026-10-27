@@ -137,12 +137,18 @@ class MarathonController extends Controller
         ]);
     }
 
-    /** Confirms a registration and gives it the next bib number. */
+    /**
+     * Confirms a registration and gives it the next bib number. Call inside
+     * a transaction: locking the marathon row serialises approvals so two
+     * runners never get the same bib. (PostgreSQL can't lock an aggregate
+     * like MAX() directly.)
+     */
     public static function confirm(MarathonRegistration $registration, ?int $reviewerId): void
     {
+        Marathon::query()->whereKey($registration->marathon_id)->lockForUpdate()->first();
+
         $bib = $registration->bib_number ?? ((int) MarathonRegistration::query()
             ->where('marathon_id', $registration->marathon_id)
-            ->lockForUpdate()
             ->max('bib_number')) + 1;
 
         $registration->forceFill([
