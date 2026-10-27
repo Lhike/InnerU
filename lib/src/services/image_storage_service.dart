@@ -47,6 +47,17 @@ class ImageStorageService {
     );
   }
 
+  static Future<String?> uploadMarathonPaymentBytes(
+    Uint8List bytes, {
+    String fileName = 'marathon-payment.jpg',
+  }) async {
+    return _uploadBytes(
+      bytes,
+      fileName: fileName,
+      kind: 'marathon_payment',
+    );
+  }
+
   /// Uploads a photo only after the Exercise queue has safely persisted its
   /// original bytes. The deterministic file name is supplied by the queue so
   /// a timeout/retry cannot create an unbounded set of duplicate uploads.

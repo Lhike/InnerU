@@ -56,6 +56,8 @@ class WalkerLook {
     this.bottomColor = const Color(0xFF37474F),
     this.shoeColor = const Color(0xFFF5F5F5),
     this.accessory = WalkerAccessory.backpack,
+    this.kit,
+    this.bib,
   });
 
   final Color skinTone;
@@ -67,6 +69,11 @@ class WalkerLook {
   final Color bottomColor;
   final Color shoeColor;
   final WalkerAccessory accessory;
+
+  /// Marathon theme whose kit the walker wears, with the race [bib]
+  /// number pinned to the shirt. Both are set together.
+  final String? kit;
+  final int? bib;
 
   static const skinTones = <Color>[
     Color(0xFFFFDBC4),
@@ -113,6 +120,9 @@ class WalkerLook {
     Color? bottomColor,
     Color? shoeColor,
     WalkerAccessory? accessory,
+    String? kit,
+    int? bib,
+    bool takeOffKit = false,
   }) {
     return WalkerLook(
       skinTone: skinTone ?? this.skinTone,
@@ -124,6 +134,8 @@ class WalkerLook {
       bottomColor: bottomColor ?? this.bottomColor,
       shoeColor: shoeColor ?? this.shoeColor,
       accessory: accessory ?? this.accessory,
+      kit: takeOffKit ? null : kit ?? this.kit,
+      bib: takeOffKit ? null : bib ?? this.bib,
     );
   }
 
@@ -157,6 +169,8 @@ class WalkerLook {
         'bottomColor': bottomColor.toARGB32(),
         'shoes': shoeColor.toARGB32(),
         'accessory': accessory.name,
+        if (kit != null && bib != null) 'kit': kit,
+        if (kit != null && bib != null) 'bib': bib,
       };
 
   String toJson() => jsonEncode(toMap());
@@ -185,6 +199,12 @@ class WalkerLook {
       bottomColor: color('bottomColor', fallback.bottomColor),
       shoeColor: color('shoes', fallback.shoeColor),
       accessory: named(WalkerAccessory.values, 'accessory', fallback.accessory),
+      kit: json['kit'] is String && json['bib'] is int
+          ? json['kit'] as String
+          : null,
+      bib: json['kit'] is String && json['bib'] is int
+          ? json['bib'] as int
+          : null,
     );
   }
 
@@ -468,7 +488,39 @@ class WalkerPainter extends CustomPainter {
       case WalkerTop.tank:
         break;
     }
+
+    final bib = look.bib;
+    if (bib != null) _drawBib(canvas, h, bib);
     canvas.restore();
+  }
+
+  /// Race number pinned to the front of the shirt.
+  void _drawBib(Canvas canvas, double h, int bib) {
+    final rect = RRect.fromLTRBR(
+        -h * 0.035, -h * 0.2, h * 0.068, -h * 0.11, Radius.circular(h * 0.01));
+    canvas.drawRRect(rect, Paint()..color = Colors.white);
+    canvas.drawRRect(
+      rect,
+      Paint()
+        ..color = Colors.black26
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = h * 0.004,
+    );
+    final painter = TextPainter(
+      text: TextSpan(
+        text: '$bib',
+        style: TextStyle(
+          color: Colors.black,
+          fontSize: h * (bib > 999 ? 0.032 : 0.045),
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: h * 0.1);
+    painter.paint(
+      canvas,
+      rect.center - Offset(painter.width / 2, painter.height / 2),
+    );
   }
 
   void _drawNeck(

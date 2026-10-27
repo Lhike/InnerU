@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:selfcare_projects/src/features/marathon/admin_marathons_screen.dart';
 import 'package:flutter/services.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/adminscreen/addcoach.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/adminscreen/admin_daily_tracker_overview.dart';
@@ -243,6 +244,13 @@ class _AdminDashboardContentState extends State<_AdminDashboardContent> {
       MaterialPageRoute(
         builder: (context) => const AdminDailyTrackerOverviewScreen(),
       ),
+    );
+  }
+
+  void _openMarathons() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const AdminMarathonsScreen()),
     );
   }
 
@@ -496,6 +504,13 @@ class _AdminDashboardContentState extends State<_AdminDashboardContent> {
             title: 'Abundance Management',
             subtitle: 'Assign Abundance students, goals, and quests.',
             onTap: _openAbundanceManagement,
+          ),
+          const Divider(height: 1),
+          _ActionTile(
+            icon: CupertinoIcons.flag_fill,
+            title: 'Virtual marathons',
+            subtitle: 'Create marathons and review runners\' payments.',
+            onTap: _openMarathons,
           ),
         ],
       ),

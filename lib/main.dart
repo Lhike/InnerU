@@ -36,6 +36,7 @@ import 'package:selfcare_projects/src/features/authentication/screen/splash_scre
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/step_leaderboard_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/steptracker_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/todo_list.dart';
+import 'package:selfcare_projects/src/features/marathon/marathon_list_screen.dart';
 import 'package:selfcare_projects/src/features/meditation_song/meditation_song.dart';
 import 'package:selfcare_projects/src/models/note_model.dart';
 import 'package:selfcare_projects/src/services/Provider/time_provider.dart';
@@ -209,6 +210,7 @@ class App extends StatelessWidget {
           '/meditation': (context) => Meditation(),
           '/notes': (context) => Notes(),
           '/stepTracker': (context) => StepTracker(),
+          '/marathons': (context) => const MarathonListScreen(),
           '/stepsLeaderboard': (context) =>
               _companyThemed(const StepLeaderboardScreen()),
           '/exerciseTracker': (context) => const ExerciseTrackerScreen(),

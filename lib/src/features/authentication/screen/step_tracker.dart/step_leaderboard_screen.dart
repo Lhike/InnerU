@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/walker_avatar.dart';
+import 'package:selfcare_projects/src/features/marathon/marathon_list_screen.dart';
+import 'package:selfcare_projects/src/features/marathon/marathon_theme.dart';
 import 'package:selfcare_projects/src/services/auth_service.dart';
 import 'package:selfcare_projects/src/services/leaderboard_api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -524,7 +526,14 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(_periodLabels[_period]!, style: _body(15)),
+                      Flexible(
+                        child: Text(
+                          _periodLabels[_period]!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: _body(15),
+                        ),
+                      ),
                       const SizedBox(width: 6),
                       const Icon(Icons.keyboard_arrow_down_rounded,
                           color: Colors.white, size: 20),
@@ -533,6 +542,19 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
                 ),
               ),
             ),
+          ),
+          IconButton(
+            tooltip: 'Virtual marathons',
+            visualDensity: VisualDensity.compact,
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const MarathonListScreen()),
+              );
+              // A marathon kit may have been put on.
+              if (mounted) unawaited(_restoreLook());
+            },
+            icon: const Text('🏅', style: TextStyle(fontSize: 20)),
           ),
           Tooltip(
             message: 'Team steps',
@@ -1574,7 +1596,15 @@ class _WalkerCustomizerState extends State<_WalkerCustomizer>
 
   void _update(WalkerLook look) {
     HapticFeedback.selectionClick();
-    setState(() => _look = look);
+    final changedClothes = look.top != _look.top ||
+        look.topColor != _look.topColor ||
+        look.bottom != _look.bottom ||
+        look.bottomColor != _look.bottomColor ||
+        look.shoeColor != _look.shoeColor;
+    // Changing clothes takes off the marathon kit.
+    setState(() => _look = changedClothes && look.kit != null
+        ? look.copyWith(takeOffKit: true)
+        : look);
   }
 
   void _randomize() {
@@ -1714,6 +1744,27 @@ class _WalkerCustomizerState extends State<_WalkerCustomizer>
               ),
             ),
           ),
+          if (_look.kit != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${MarathonTheme.of(_look.kit).emoji} Wearing the '
+                      '${MarathonTheme.of(_look.kit).name} marathon kit · '
+                      'Bib #${_look.bib}',
+                      style: _body(13),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => _update(_look.copyWith(takeOffKit: true)),
+                    child: Text('Take off kit',
+                        style: _body(13, color: _RacePalette.accent)),
+                  ),
+                ],
+              ),
+            ),
           _section(
             'Skin tone',
             _swatches(WalkerLook.skinTones, _look.skinTone,
