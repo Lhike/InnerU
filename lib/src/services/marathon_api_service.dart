@@ -392,6 +392,11 @@ class MarathonApiService {
           : await _api.patchJson('/api/admin/marathons/$id', fields,
               token: _token));
 
+  /// Deletes the marathon and everyone's registration for it.
+  Future<void> adminDeleteMarathon(String id) async {
+    await _api.deleteJson('/api/admin/marathons/$id', token: _token);
+  }
+
   Future<List<AdminMarathonRegistration>> adminFetchRegistrations(
       String marathonId) async {
     final response = await _api.getJson(

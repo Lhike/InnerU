@@ -41,6 +41,7 @@ class _FakeApi extends MarathonApiService {
   String? paidReference;
   String? paidProof;
   final reviews = <String>[];
+  final deleted = <String>[];
 
   Marathon _withStatus(MarathonRegistrationStatus status) => _marathon(
         price: current.price,
@@ -83,7 +84,11 @@ class _FakeApi extends MarathonApiService {
       );
 
   @override
-  Future<List<Marathon>> adminFetchMarathons() async => [current];
+  Future<List<Marathon>> adminFetchMarathons() async =>
+      deleted.contains(current.id) ? [] : [current];
+
+  @override
+  Future<void> adminDeleteMarathon(String id) async => deleted.add(id);
 
   @override
   Future<List<AdminMarathonRegistration>> adminFetchRegistrations(
@@ -376,5 +381,29 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Reject'));
     await tester.pumpAndSettle();
     expect(api.reviews.last, '55:reject:Amount does not match');
+  });
+
+  testWidgets('admins delete a marathon after confirming', (tester) async {
+    usePhoneScreen(tester);
+    final api = _FakeApi(_marathon());
+    await tester.pumpWidget(MaterialApp(
+      home: AdminMarathonsScreen(api: api),
+    ));
+    await tester.pumpAndSettle();
+
+    final delete = find.byKey(ValueKey('delete-marathon-${api.current.id}'));
+    await tester.tap(delete);
+    await tester.pumpAndSettle();
+    expect(find.text('Delete marathon?'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(api.deleted, isEmpty);
+
+    await tester.tap(delete);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('confirm-delete-marathon')));
+    await tester.pumpAndSettle();
+    expect(api.deleted, [api.current.id]);
+    expect(find.text('No marathons yet.'), findsOneWidget);
   });
 }

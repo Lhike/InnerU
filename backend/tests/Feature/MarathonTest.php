@@ -73,6 +73,23 @@ class MarathonTest extends TestCase
             ->assertJsonPath('marathons.0.myRegistration', null);
     }
 
+    public function test_only_admins_delete_marathons_along_with_their_registrations(): void
+    {
+        $marathon = $this->marathon();
+        $runner = User::factory()->create();
+        $marathon->registrations()->create($this->form() + ['user_id' => $runner->id, 'status' => 'confirmed']);
+
+        Sanctum::actingAs($runner);
+        $this->deleteJson("/api/admin/marathons/{$marathon->id}")->assertForbidden();
+        $this->assertModelExists($marathon);
+
+        Sanctum::actingAs($this->admin());
+        $this->deleteJson("/api/admin/marathons/{$marathon->id}")->assertOk()->assertJsonPath('deleted', true);
+        $this->assertModelMissing($marathon);
+        $this->assertDatabaseCount('marathon_registrations', 0);
+        $this->deleteJson("/api/admin/marathons/{$marathon->id}")->assertNotFound();
+    }
+
     public function test_join_pay_get_approved_and_receive_a_bib(): void
     {
         Carbon::setTestNow('2026-10-27 09:00:00');
