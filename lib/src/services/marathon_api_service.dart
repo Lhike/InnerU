@@ -241,6 +241,56 @@ class AdminMarathonRegistration {
       );
 }
 
+/// One runner on a marathon's race track.
+class MarathonRunner {
+  const MarathonRunner({
+    required this.userId,
+    required this.name,
+    required this.km,
+    required this.rank,
+    this.steps = 0,
+    this.percent = 0,
+    this.finished = false,
+    this.profilePic,
+    this.walkerLook,
+    this.bibNumber,
+  });
+
+  final String userId;
+  final String name;
+  final double km;
+  final int rank;
+  final int steps;
+  final double percent;
+  final bool finished;
+  final String? profilePic;
+  final Map<String, dynamic>? walkerLook;
+  final int? bibNumber;
+
+  factory MarathonRunner.fromJson(Map<String, dynamic> json) => MarathonRunner(
+        userId: json['userId'].toString(),
+        name: json['name']?.toString() ?? 'Runner',
+        km: _double(json['km']),
+        rank: _int(json['rank']) ?? 0,
+        steps: _int(json['steps']) ?? 0,
+        percent: _double(json['percent']),
+        finished: json['finished'] == true,
+        profilePic: json['profilePic']?.toString(),
+        walkerLook: json['walkerLook'] is Map
+            ? Map<String, dynamic>.from(json['walkerLook'] as Map)
+            : null,
+        bibNumber: _int(json['bibNumber']),
+      );
+}
+
+/// A marathon with everyone racing in it.
+class MarathonRace {
+  const MarathonRace({required this.marathon, required this.runners});
+
+  final Marathon marathon;
+  final List<MarathonRunner> runners;
+}
+
 class MarathonRegistrationForm {
   const MarathonRegistrationForm({
     required this.fullName,
@@ -308,6 +358,18 @@ class MarathonApiService {
         {'payment_reference': reference, 'payment_proof_url': proofUrl},
         token: _token,
       ));
+
+  Future<MarathonRace> fetchRace(String id) async {
+    final response =
+        await _api.getJson('/api/marathons/$id/leaderboard', token: _token);
+    return MarathonRace(
+      marathon: _one(response),
+      runners: (response['runners'] as List? ?? const [])
+          .whereType<Map>()
+          .map((r) => MarathonRunner.fromJson(Map<String, dynamic>.from(r)))
+          .toList(),
+    );
+  }
 
   Future<MarathonCertificate> fetchCertificate(String id) async {
     final response =

@@ -14,7 +14,7 @@ import 'package:selfcare_projects/src/features/authentication/screen/meditation/
 import 'package:selfcare_projects/src/features/authentication/screen/notes/notes_type.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/step_goal_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/step_leaderboard_screen.dart';
-import 'package:selfcare_projects/src/features/marathon/marathon_list_screen.dart';
+import 'package:selfcare_projects/src/features/marathon/marathon_announcement.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/my_step_submissions_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/step_map_tracker_screen.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/step_submission_screen.dart';
@@ -127,6 +127,12 @@ class _StepTrackerState extends State<StepTracker>
     _initializeApp();
     _startAppleHealthRefreshTimer();
     unawaited(_loadCoachAssignment());
+    // Let people know when there's a marathon to join (once per marathon).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_isDisposed) {
+        unawaited(MarathonAnnouncement.maybeShow(context));
+      }
+    });
   }
 
   Future<void> _loadCoachAssignment() async {
@@ -2018,19 +2024,6 @@ class _StepTrackerState extends State<StepTracker>
                                     },
                                     icon: const Icon(Icons.leaderboard_rounded),
                                     label: const Text('Steps Leaderboard'),
-                                  ),
-                                  OutlinedButton.icon(
-                                    onPressed: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              const MarathonListScreen(),
-                                        ),
-                                      );
-                                    },
-                                    icon: const Text('🏅'),
-                                    label: const Text('Virtual Marathons'),
                                   ),
                                   if (_hasCoach)
                                     OutlinedButton.icon(
