@@ -96,6 +96,7 @@ class User extends Authenticatable implements MustVerifyEmail
         return [
             'email_verified_at' => 'datetime',
             'birthdate' => 'date',
+            'walker_look' => 'array',
             'is_coach' => 'boolean',
             'is_admin' => 'boolean',
             'has_company' => 'boolean',
