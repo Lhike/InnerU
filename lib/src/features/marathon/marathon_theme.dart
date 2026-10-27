@@ -88,6 +88,15 @@ class MarathonTheme {
       kitBottom: Color(0xFFCE1126),
       kitShoes: Color(0xFFFCD116),
     ),
+    MarathonTheme(
+      key: 'undersea',
+      name: 'Under the Sea',
+      emoji: '🫧',
+      gradient: [Color(0xFF4FC3F7), Color(0xFF01579B)],
+      kitTop: Color(0xFFFFEB3B),
+      kitBottom: Color(0xFF795548),
+      kitShoes: Color(0xFF1B1B1B),
+    ),
   ];
 
   static MarathonTheme of(String? key) =>
