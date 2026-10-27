@@ -20,7 +20,9 @@ class _AdminMarathonsScreenState extends State<AdminMarathonsScreen> {
 
   Future<void> _refresh() async {
     final future = _api.adminFetchMarathons();
-    setState(() => _future = future);
+    setState(() {
+      _future = future;
+    });
     try {
       await future;
     } catch (_) {}
@@ -35,6 +37,44 @@ class _AdminMarathonsScreenState extends State<AdminMarathonsScreen> {
       ),
     );
     if (saved != null) _refresh();
+  }
+
+  Future<void> _delete(Marathon marathon) async {
+    final registered = marathon.registrationCount;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete marathon?'),
+        content: Text(
+          '"${marathon.title}" will be removed for everyone'
+          '${registered > 0 ? ', including $registered registration${registered == 1 ? '' : 's'}' : ''}. '
+          'This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const ValueKey('confirm-delete-marathon'),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await _api.adminDeleteMarathon(marathon.id);
+      messenger.showSnackBar(
+          SnackBar(content: Text('Deleted "${marathon.title}".')));
+      _refresh();
+    } catch (error) {
+      messenger.showSnackBar(
+          SnackBar(content: Text('Could not delete: $error')));
+    }
   }
 
   @override
@@ -86,9 +126,20 @@ class _AdminMarathonsScreenState extends State<AdminMarathonsScreen> {
                       '${m.pendingReviewCount > 0 ? ' · ${m.pendingReviewCount} to review' : ''}',
                     ),
                     isThreeLine: true,
-                    trailing: m.pendingReviewCount > 0
-                        ? Badge(label: Text('${m.pendingReviewCount}'))
-                        : null,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (m.pendingReviewCount > 0)
+                          Badge(label: Text('${m.pendingReviewCount}')),
+                        IconButton(
+                          key: ValueKey('delete-marathon-${m.id}'),
+                          tooltip: 'Delete marathon',
+                          icon: const Icon(Icons.delete_outline,
+                              color: Colors.red),
+                          onPressed: () => _delete(m),
+                        ),
+                      ],
+                    ),
                     onTap: () async {
                       await Navigator.push(
                         context,

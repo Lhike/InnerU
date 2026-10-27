@@ -62,6 +62,18 @@ class AdminMarathonController extends Controller
         return response()->json(['marathon' => MarathonController::marathonPayload($marathon->refresh())]);
     }
 
+    /** Removes the marathon with its registrations. */
+    public function destroy(Request $request, Marathon $marathon): JsonResponse
+    {
+        if ($denied = $this->denyUnlessAdmin($request)) {
+            return $denied;
+        }
+
+        $marathon->delete();
+
+        return response()->json(['deleted' => true]);
+    }
+
     public function registrations(Request $request, Marathon $marathon): JsonResponse
     {
         if ($denied = $this->denyUnlessAdmin($request)) {

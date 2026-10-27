@@ -130,6 +130,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/admin/marathons', [AdminMarathonController::class, 'index']);
     Route::post('/admin/marathons', [AdminMarathonController::class, 'store']);
     Route::patch('/admin/marathons/{marathon}', [AdminMarathonController::class, 'update']);
+    Route::delete('/admin/marathons/{marathon}', [AdminMarathonController::class, 'destroy']);
     Route::get('/admin/marathons/{marathon}/registrations', [AdminMarathonController::class, 'registrations']);
     Route::post('/admin/marathon-registrations/{registration}/review', [AdminMarathonController::class, 'review']);
     Route::get('/coaches', [CoachManagementController::class, 'directory']);

@@ -455,7 +455,9 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
       return;
     }
     final future = _load();
-    setState(() => _future = future);
+    setState(() {
+      _future = future;
+    });
     try {
       await future;
     } catch (_) {
