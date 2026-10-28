@@ -151,7 +151,7 @@ class _MarathonDetailScreenState extends State<MarathonDetailScreen>
       );
     }
 
-    final theme = MarathonTheme.of(marathon.theme);
+    final theme = marathon.look;
     final registration = marathon.myRegistration;
     final bib =
         registration?.isConfirmed == true ? registration!.bibNumber : null;
@@ -191,6 +191,10 @@ class _MarathonDetailScreenState extends State<MarathonDetailScreen>
                     const SizedBox(height: 16),
                     Text(marathon.description!.trim()),
                   ],
+                  if (marathon.kitImageUrl != null) ...[
+                    const SizedBox(height: 16),
+                    _KitPicture(theme: theme, url: marathon.kitImageUrl!),
+                  ],
                   const SizedBox(height: 16),
                   _buildStatusCard(marathon, theme),
                   const SizedBox(height: 16),
@@ -214,6 +218,29 @@ class _MarathonDetailScreenState extends State<MarathonDetailScreen>
       if (marathon.phase == MarathonPhase.ended) {
         return const _Card(child: Text('This marathon has ended.'));
       }
+      if (marathon.registrationWindow != MarathonRegistrationWindow.open) {
+        final opens = marathon.registrationOpensAt;
+        return _Card(
+          child: Row(
+            children: [
+              const Icon(Icons.event_busy_rounded),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  marathon.registrationWindow ==
+                              MarathonRegistrationWindow.notYet &&
+                          opens != null
+                      ? 'Registration opens on ${dateFormat.format(opens)}. '
+                          'Come back then to join!'
+                      : 'Registration for this marathon is closed.',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+      final closes = marathon.registrationClosesAt;
       return _Card(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -226,6 +253,11 @@ class _MarathonDetailScreenState extends State<MarathonDetailScreen>
             ),
             const SizedBox(height: 4),
             const Text('Includes your finisher shirt, medal and certificate.'),
+            if (closes != null) ...[
+              const SizedBox(height: 4),
+              Text('Register by ${dateFormat.format(closes)}.',
+                  style: const TextStyle(fontSize: 12)),
+            ],
             const SizedBox(height: 12),
             FilledButton.icon(
               style: FilledButton.styleFrom(
@@ -479,6 +511,47 @@ class _FactsRow extends StatelessWidget {
         fact(Icons.confirmation_number_outlined, formatPrice(marathon),
             'Entry fee'),
       ],
+    );
+  }
+}
+
+/// The AI-drawn picture of this marathon's kit.
+class _KitPicture extends StatelessWidget {
+  const _KitPicture({required this.theme, required this.url});
+
+  final MarathonTheme theme;
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('${theme.emoji} The ${theme.name} kit',
+              style:
+                  const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+          const SizedBox(height: 4),
+          const Text('Your walker wears it in the race once you are in.',
+              style: TextStyle(fontSize: 12)),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: AspectRatio(
+              aspectRatio: 1,
+              child: Image.network(
+                url,
+                key: const ValueKey('marathon-kit-image'),
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => ColoredBox(
+                  color: theme.accent.withValues(alpha: 0.1),
+                  child: const Center(child: Icon(Icons.image_not_supported)),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

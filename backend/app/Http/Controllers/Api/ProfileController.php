@@ -125,7 +125,7 @@ class ProfileController extends Controller
 
         $validated = $request->validate([
             'file' => ['required', 'file', 'max:20480'],
-            'kind' => ['nullable', 'string', Rule::in(['avatar', 'image', 'community', 'video', 'step_proof', 'group_photo', 'exercise', 'marathon_payment'])],
+            'kind' => ['nullable', 'string', Rule::in(['avatar', 'image', 'community', 'video', 'step_proof', 'group_photo', 'exercise', 'marathon_payment', 'marathon_qr'])],
             // Optional because current clients carry the key in the exercise
             // filename. New clients may send it explicitly without changing
             // the deterministic storage contract.
@@ -246,6 +246,7 @@ class ProfileController extends Controller
             'video' => "users/{$userId}/videos",
             'step_proof' => "users/{$userId}/step-proofs",
             'marathon_payment' => "users/{$userId}/marathon-payments",
+            'marathon_qr' => "users/{$userId}/marathon-qr",
             'group_photo' => "users/{$userId}/group-photos",
             'exercise' => "users/{$userId}/exercise-sessions",
             default => "users/{$userId}/images",

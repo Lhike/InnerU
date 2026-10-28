@@ -95,10 +95,25 @@ class _MarathonPaymentScreenState extends State<MarathonPaymentScreen> {
     }
   }
 
+  void _showQr(String url) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: InteractiveViewer(
+            child: Image.network(url, fit: BoxFit.contain),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final marathon = widget.marathon;
-    final theme = MarathonTheme.of(marathon.theme);
+    final theme = marathon.look;
     final instructions = (marathon.paymentInstructions ?? '').trim();
 
     return Scaffold(
@@ -137,6 +152,42 @@ class _MarathonPaymentScreenState extends State<MarathonPaymentScreen> {
           const Text('1. Send your payment',
               style: TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
+          if (marathon.paymentQrUrl != null) ...[
+            Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    const Text('Scan to pay',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: () => _showQr(marathon.paymentQrUrl!),
+                      child: Image.network(
+                        marathon.paymentQrUrl!,
+                        key: const ValueKey('payment-qr'),
+                        height: 240,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Text('Could not load the QR code.'),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Tap to enlarge. You can also screenshot it and upload '
+                      'it in your GCash, Maya or bank app.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           Card(
             margin: EdgeInsets.zero,
             child: ListTile(

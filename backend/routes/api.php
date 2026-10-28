@@ -131,6 +131,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/admin/marathons', [AdminMarathonController::class, 'store']);
     Route::patch('/admin/marathons/{marathon}', [AdminMarathonController::class, 'update']);
     Route::delete('/admin/marathons/{marathon}', [AdminMarathonController::class, 'destroy']);
+    Route::post('/admin/marathons/ai/theme', [AdminMarathonController::class, 'suggestTheme'])->middleware('throttle:20,1');
+    Route::post('/admin/marathons/ai/kit-image', [AdminMarathonController::class, 'kitImage'])->middleware('throttle:6,1');
     Route::get('/admin/marathons/{marathon}/registrations', [AdminMarathonController::class, 'registrations']);
     Route::post('/admin/marathon-registrations/{registration}/review', [AdminMarathonController::class, 'review']);
     Route::get('/coaches', [CoachManagementController::class, 'directory']);

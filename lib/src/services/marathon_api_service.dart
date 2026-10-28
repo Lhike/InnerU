@@ -4,6 +4,12 @@ import 'package:selfcare_projects/src/services/auth_service.dart';
 
 enum MarathonPhase { upcoming, ongoing, ended }
 
+/// Whether people can join yet.
+enum MarathonRegistrationWindow { notYet, open, closed }
+
+Map<String, dynamic>? _map(dynamic value) =>
+    value is Map ? Map<String, dynamic>.from(value) : null;
+
 /// Where a runner's registration stands.
 enum MarathonRegistrationStatus {
   pendingPayment('pending_payment'),
@@ -24,6 +30,11 @@ DateTime? _date(dynamic value) =>
 
 double _double(dynamic value) =>
     value is num ? value.toDouble() : double.tryParse('$value') ?? 0;
+
+String? _text(dynamic value) {
+  final text = value?.toString().trim() ?? '';
+  return text.isEmpty ? null : text;
+}
 
 int? _int(dynamic value) =>
     value is num ? value.toInt() : int.tryParse('${value ?? ''}');
@@ -108,7 +119,13 @@ class Marathon {
     required this.endsAt,
     required this.phase,
     this.description,
+    this.themeData,
+    this.kitImageUrl,
+    this.registrationOpensAt,
+    this.registrationClosesAt,
+    this.registrationWindow = MarathonRegistrationWindow.open,
     this.paymentInstructions,
+    this.paymentQrUrl,
     this.isPublished = true,
     this.myRegistration,
     this.registrationCount = 0,
@@ -119,13 +136,29 @@ class Marathon {
   final String title;
   final String? description;
   final String theme;
+
+  /// Colours and kit of an AI-made ('custom') theme.
+  final Map<String, dynamic>? themeData;
+
+  /// A picture of the kit, when the AI drew one.
+  final String? kitImageUrl;
   final double distanceKm;
   final double price;
   final String currency;
   final DateTime startsAt;
   final DateTime endsAt;
   final MarathonPhase phase;
+
+  /// Null opens right away.
+  final DateTime? registrationOpensAt;
+
+  /// Last day to join; the race's end unless the organizer set one.
+  final DateTime? registrationClosesAt;
+  final MarathonRegistrationWindow registrationWindow;
   final String? paymentInstructions;
+
+  /// QR code runners scan to pay.
+  final String? paymentQrUrl;
   final bool isPublished;
   final MyMarathonRegistration? myRegistration;
 
@@ -140,6 +173,8 @@ class Marathon {
         title: json['title']?.toString() ?? 'Marathon',
         description: json['description']?.toString(),
         theme: json['theme']?.toString() ?? 'sunrise',
+        themeData: _map(json['themeData']),
+        kitImageUrl: _text(json['kitImageUrl']),
         distanceKm: _double(json['distanceKm']),
         price: _double(json['price']),
         currency: json['currency']?.toString() ?? 'PHP',
@@ -149,7 +184,15 @@ class Marathon {
           (p) => p.name == json['phase'],
           orElse: () => MarathonPhase.upcoming,
         ),
+        registrationOpensAt: _date(json['registrationOpensAt']),
+        registrationClosesAt: _date(json['registrationClosesAt']),
+        registrationWindow: switch (json['registrationStatus']) {
+          'not_yet' => MarathonRegistrationWindow.notYet,
+          'closed' => MarathonRegistrationWindow.closed,
+          _ => MarathonRegistrationWindow.open,
+        },
         paymentInstructions: json['paymentInstructions']?.toString(),
+        paymentQrUrl: _text(json['paymentQrUrl']),
         isPublished: json['isPublished'] != false,
         myRegistration: json['myRegistration'] is Map
             ? MyMarathonRegistration.fromJson(
@@ -167,6 +210,7 @@ class MarathonCertificate {
     required this.marathonTitle,
     required this.theme,
     required this.distanceKm,
+    this.themeData,
     this.bibNumber,
     this.finishedAt,
   });
@@ -175,6 +219,7 @@ class MarathonCertificate {
   final String runnerName;
   final String marathonTitle;
   final String theme;
+  final Map<String, dynamic>? themeData;
   final double distanceKm;
   final int? bibNumber;
   final DateTime? finishedAt;
@@ -185,6 +230,7 @@ class MarathonCertificate {
         runnerName: json['runnerName']?.toString() ?? '',
         marathonTitle: json['marathonTitle']?.toString() ?? '',
         theme: json['theme']?.toString() ?? 'sunrise',
+        themeData: _map(json['themeData']),
         distanceKm: _double(json['distanceKm']),
         bibNumber: _int(json['bibNumber']),
         finishedAt: _date(json['finishedAt']),
@@ -391,6 +437,30 @@ class MarathonApiService {
           ? await _api.postJson('/api/admin/marathons', fields, token: _token)
           : await _api.patchJson('/api/admin/marathons/$id', fields,
               token: _token));
+
+  /// Asks the AI for a theme from [prompt]; returns theme data for a
+  /// 'custom' marathon. Throws [ApiException] with a readable message.
+  Future<Map<String, dynamic>> adminSuggestTheme(String prompt) async {
+    final response = await _api.postJson(
+      '/api/admin/marathons/ai/theme',
+      {'prompt': prompt},
+      token: _token,
+      timeout: const Duration(seconds: 60),
+    );
+    return Map<String, dynamic>.from(response['theme'] as Map);
+  }
+
+  /// Asks the AI to draw [themeData]'s kit; returns the picture's URL.
+  Future<String> adminDrawKit(
+      String prompt, Map<String, dynamic> themeData) async {
+    final response = await _api.postJson(
+      '/api/admin/marathons/ai/kit-image',
+      {'prompt': prompt, 'theme_data': themeData},
+      token: _token,
+      timeout: const Duration(seconds: 170),
+    );
+    return response['kitImageUrl'].toString();
+  }
 
   /// Deletes the marathon and everyone's registration for it.
   Future<void> adminDeleteMarathon(String id) async {

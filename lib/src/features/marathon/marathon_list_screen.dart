@@ -117,7 +117,7 @@ class MarathonCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = MarathonTheme.of(marathon.theme);
+    final theme = marathon.look;
     final dates = DateFormat('MMM d');
     final status = marathonStatusLabel(marathon, today);
     final mine = myStatusLabel(marathon.myRegistration);

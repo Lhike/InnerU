@@ -699,10 +699,10 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
           for (final marathon in _marathons)
             _RaceButton(
               key: ValueKey('race-button-${marathon.id}'),
-              label: '${MarathonTheme.of(marathon.theme).emoji} '
+              label: '${marathon.look.emoji} '
                   '${marathon.title} · ${phaseLabel(marathon)}',
               selected: _marathonId == marathon.id,
-              colors: MarathonTheme.of(marathon.theme).gradient,
+              colors: marathon.look.gradient,
               onTap: () => _selectMarathon(marathon.id),
             ),
           _RaceButton(
@@ -756,8 +756,7 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
       future: _raceFuture,
       builder: (context, snapshot) {
         final race = snapshot.data;
-        final theme =
-            race == null ? null : MarathonTheme.of(race.marathon.theme);
+        final theme = race?.marathon.look;
         return Column(
           children: [
             _buildTopBar(null, marathonTheme: theme),
@@ -785,7 +784,7 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
   /// the finish line is the marathon distance, and markers are in km.
   Widget _buildMarathonRace(MarathonRace race) {
     final marathon = race.marathon;
-    final theme = MarathonTheme.of(marathon.theme);
+    final theme = marathon.look;
     final kmById = {for (final r in race.runners) r.userId: r.km};
     final finishedIds = {
       for (final r in race.runners)
@@ -936,7 +935,11 @@ class _StepLeaderboardScreenState extends State<StepLeaderboardScreen>
           : '${formatKm(marathon.distanceKm)} km · ${formatPrice(marathon)} · '
               'finisher shirt, medal & certificate';
       if (marathon.phase != MarathonPhase.ended) {
-        primary = action('Join this marathon', openDetails);
+        primary = action(
+            marathon.registrationWindow == MarathonRegistrationWindow.open
+                ? 'Join this marathon'
+                : 'See details',
+            openDetails);
       }
     } else if (confirmed) {
       status = registration.isFinisher
@@ -2224,9 +2227,11 @@ class _WalkerCustomizerState extends State<_WalkerCustomizer>
                 children: [
                   Expanded(
                     child: Text(
-                      '${MarathonTheme.of(_look.kit).emoji} Wearing the '
-                      '${MarathonTheme.of(_look.kit).name} marathon kit · '
-                      'Bib #${_look.bib}',
+                      _look.kit == MarathonTheme.customKey
+                          ? '🏅 Wearing your marathon kit · Bib #${_look.bib}'
+                          : '${MarathonTheme.of(_look.kit).emoji} Wearing the '
+                              '${MarathonTheme.of(_look.kit).name} marathon kit · '
+                              'Bib #${_look.bib}',
                       style: _body(13),
                     ),
                   ),

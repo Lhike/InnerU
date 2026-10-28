@@ -105,7 +105,7 @@ class MarathonCertificateCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = MarathonTheme.of(certificate.theme);
+    final theme = MarathonTheme.of(certificate.theme, certificate.themeData);
     final finished = certificate.finishedAt;
 
     return AspectRatio(

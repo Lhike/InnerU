@@ -81,7 +81,7 @@ class _AnnouncementDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = MarathonTheme.of(marathon.theme);
+    final theme = marathon.look;
     final dates = DateFormat('MMM d');
 
     return Dialog(
