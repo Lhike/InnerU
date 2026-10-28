@@ -49,8 +49,14 @@ class MarathonController extends Controller
 
     public function register(Request $request, Marathon $marathon): JsonResponse
     {
-        if (! $marathon->is_published || $marathon->phase() === 'ended') {
+        $window = $marathon->registrationStatus();
+        if (! $marathon->is_published || $window === 'closed' || $marathon->phase() === 'ended') {
             return response()->json(['message' => 'Registration for this marathon is closed.'], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+        if ($window === 'not_yet') {
+            return response()->json([
+                'message' => 'Registration opens on '.$marathon->registration_opens_at->format('M j, Y').'.',
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         $validated = $request->validate([
@@ -158,6 +164,7 @@ class MarathonController extends Controller
                 'runnerName' => $registration->full_name,
                 'marathonTitle' => $marathon->title,
                 'theme' => $marathon->theme,
+                'themeData' => $marathon->theme_data,
                 'distanceKm' => $marathon->distance_km,
                 'bibNumber' => $registration->bib_number,
                 'finishedAt' => $registration->finished_at?->toIso8601String(),
@@ -222,13 +229,19 @@ class MarathonController extends Controller
             'title' => $marathon->title,
             'description' => $marathon->description,
             'theme' => $marathon->theme,
+            'themeData' => $marathon->theme_data,
+            'kitImageUrl' => $marathon->kit_image_url,
             'distanceKm' => $marathon->distance_km,
             'price' => $marathon->price,
             'currency' => $marathon->currency,
             'startsAt' => $marathon->starts_at->toDateString(),
             'endsAt' => $marathon->ends_at->toDateString(),
             'phase' => $marathon->phase(),
+            'registrationOpensAt' => $marathon->registration_opens_at?->toDateString(),
+            'registrationClosesAt' => $marathon->registrationClosesOn()->toDateString(),
+            'registrationStatus' => $marathon->registrationStatus(),
             'paymentInstructions' => $marathon->payment_instructions,
+            'paymentQrUrl' => $marathon->payment_qr_url,
             'isPublished' => $marathon->is_published,
         ];
     }

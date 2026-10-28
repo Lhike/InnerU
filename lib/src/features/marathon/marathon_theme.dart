@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:selfcare_projects/src/features/authentication/screen/step_tracker.dart/walker_avatar.dart';
+import 'package:selfcare_projects/src/services/marathon_api_service.dart';
 
 /// Look of a marathon: its colours, art and the kit runners' walkers wear.
-/// Keys match `Marathon::THEMES` on the backend.
+/// Keys match `Marathon::THEMES` on the backend. A 'custom' theme (made
+/// with AI) carries its own colours in the marathon's theme data.
 class MarathonTheme {
   const MarathonTheme({
     required this.key,
@@ -12,7 +14,11 @@ class MarathonTheme {
     required this.kitTop,
     required this.kitBottom,
     required this.kitShoes,
+    this.kitStyle = WalkerTop.tee,
+    this.accessory,
   });
+
+  static const customKey = 'custom';
 
   final String key;
   final String name;
@@ -21,6 +27,10 @@ class MarathonTheme {
   final Color kitTop;
   final Color kitBottom;
   final Color kitShoes;
+  final WalkerTop kitStyle;
+
+  /// Worn with the kit; null keeps the runner's own accessory.
+  final WalkerAccessory? accessory;
 
   Color get accent => gradient.last;
 
@@ -99,16 +109,77 @@ class MarathonTheme {
     ),
   ];
 
-  static MarathonTheme of(String? key) =>
-      all.firstWhere((theme) => theme.key == key, orElse: () => all.first);
+  /// The theme for [key]; a custom one is read from [data].
+  static MarathonTheme of(String? key, [Map<String, dynamic>? data]) {
+    if (key == customKey) {
+      return data == null ? _customFallback : MarathonTheme.fromData(data);
+    }
+    return all.firstWhere((theme) => theme.key == key, orElse: () => all.first);
+  }
+
+  /// A custom theme from the backend's theme data (hex colours).
+  factory MarathonTheme.fromData(Map<String, dynamic> data) {
+    final gradient = data['gradient'] is List
+        ? (data['gradient'] as List).map((c) => _hex(c, null)).toList()
+        : const <Color?>[];
+    final fallback = _customFallback;
+    final accessory = data['accessory']?.toString();
+    return MarathonTheme(
+      key: customKey,
+      name: (data['name']?.toString().trim().isNotEmpty ?? false)
+          ? data['name'].toString().trim()
+          : fallback.name,
+      emoji: (data['emoji']?.toString().trim().isNotEmpty ?? false)
+          ? data['emoji'].toString().trim()
+          : fallback.emoji,
+      gradient: [
+        (gradient.isNotEmpty ? gradient.first : null) ??
+            fallback.gradient.first,
+        (gradient.length > 1 ? gradient[1] : null) ?? fallback.gradient.last,
+      ],
+      kitTop: _hex(data['kitTop'], fallback.kitTop)!,
+      kitBottom: _hex(data['kitBottom'], fallback.kitBottom)!,
+      kitShoes: _hex(data['kitShoes'], fallback.kitShoes)!,
+      kitStyle: WalkerTop.values.firstWhere((t) => t.name == data['top'],
+          orElse: () => WalkerTop.tee),
+      accessory: accessory == null
+          ? null
+          : WalkerAccessory.values
+              .where((a) => a.name == accessory)
+              .firstOrNull,
+    );
+  }
+
+  /// A custom theme whose colours are not known here (e.g. a kit label).
+  static const _customFallback = MarathonTheme(
+    key: customKey,
+    name: 'Marathon',
+    emoji: '🏅',
+    gradient: [Color(0xFFFF9A44), Color(0xFFFC6076)],
+    kitTop: Color(0xFFFF7043),
+    kitBottom: Color(0xFF37474F),
+    kitShoes: Color(0xFFFFC93C),
+  );
+
+  static Color? _hex(dynamic value, Color? fallback) {
+    final hex = value?.toString().replaceFirst('#', '') ?? '';
+    final parsed = hex.length == 6 ? int.tryParse(hex, radix: 16) : null;
+    return parsed == null ? fallback : Color(0xFF000000 | parsed);
+  }
 
   /// [look] dressed in this marathon's kit with the runner's [bib].
   WalkerLook dress(WalkerLook look, int bib) => look.copyWith(
-        top: WalkerTop.tee,
+        top: kitStyle,
+        accessory: accessory,
         topColor: kitTop,
         bottomColor: kitBottom,
         shoeColor: kitShoes,
         kit: key,
         bib: bib,
       );
+}
+
+extension MarathonLook on Marathon {
+  /// This marathon's theme, including an AI-made one.
+  MarathonTheme get look => MarathonTheme.of(theme, themeData);
 }

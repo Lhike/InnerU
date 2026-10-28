@@ -58,6 +58,18 @@ class ImageStorageService {
     );
   }
 
+  /// The QR code runners scan to pay a marathon's entry fee (admins).
+  static Future<String?> uploadMarathonQrBytes(
+    Uint8List bytes, {
+    String fileName = 'marathon-qr.jpg',
+  }) async {
+    return _uploadBytes(
+      bytes,
+      fileName: fileName,
+      kind: 'marathon_qr',
+    );
+  }
+
   /// Uploads a photo only after the Exercise queue has safely persisted its
   /// original bytes. The deterministic file name is supplied by the queue so
   /// a timeout/retry cannot create an unbounded set of duplicate uploads.

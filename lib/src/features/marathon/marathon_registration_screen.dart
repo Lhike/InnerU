@@ -91,7 +91,7 @@ class _MarathonRegistrationScreenState
   @override
   Widget build(BuildContext context) {
     final marathon = widget.marathon;
-    final theme = MarathonTheme.of(marathon.theme);
+    final theme = marathon.look;
     InputDecoration decoration(String label, {String? hint}) => InputDecoration(
           labelText: label,
           hintText: hint,

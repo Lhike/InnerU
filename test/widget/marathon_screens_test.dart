@@ -7,6 +7,8 @@ import 'package:selfcare_projects/src/features/marathon/admin_marathons_screen.d
 import 'package:selfcare_projects/src/features/marathon/marathon_detail_screen.dart';
 import 'package:selfcare_projects/src/features/marathon/marathon_list_screen.dart';
 import 'package:selfcare_projects/src/features/marathon/marathon_payment_screen.dart';
+import 'package:selfcare_projects/src/features/marathon/marathon_theme.dart';
+import 'package:selfcare_projects/src/services/api_client.dart';
 import 'package:selfcare_projects/src/services/marathon_api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,6 +19,10 @@ Marathon _marathon({
   MarathonPhase phase = MarathonPhase.upcoming,
   double price = 499,
   MyMarathonRegistration? registration,
+  MarathonRegistrationWindow window = MarathonRegistrationWindow.open,
+  DateTime? registrationOpensAt,
+  DateTime? registrationClosesAt,
+  String? paymentQrUrl,
 }) =>
     Marathon(
       id: id,
@@ -31,7 +37,24 @@ Marathon _marathon({
       phase: phase,
       paymentInstructions: 'GCash 0917 000 0000 · Juan Dela Cruz',
       myRegistration: registration,
+      registrationWindow: window,
+      registrationOpensAt: registrationOpensAt,
+      registrationClosesAt: registrationClosesAt,
+      paymentQrUrl: paymentQrUrl,
     );
+
+const _aiTheme = <String, dynamic>{
+  'name': 'Pineapple Party',
+  'emoji': '🍍',
+  'tagline': 'Walk the reef, one step at a time!',
+  'gradient': ['#4FC3F7', '#01579B'],
+  'kitTop': '#FFEB3B',
+  'kitBottom': '#795548',
+  'kitShoes': '#1B1B1B',
+  'top': 'tee',
+  'accessory': 'cap',
+  'prompt': 'under the sea',
+};
 
 class _FakeApi extends MarathonApiService {
   _FakeApi(this.current) : super.forTesting();
@@ -42,6 +65,10 @@ class _FakeApi extends MarathonApiService {
   String? paidProof;
   final reviews = <String>[];
   final deleted = <String>[];
+  Map<String, dynamic>? saved;
+  String? themeIdea;
+  Object? aiFailure;
+  int kitDrawings = 0;
 
   Marathon _withStatus(MarathonRegistrationStatus status) => _marathon(
         price: current.price,
@@ -89,6 +116,27 @@ class _FakeApi extends MarathonApiService {
 
   @override
   Future<void> adminDeleteMarathon(String id) async => deleted.add(id);
+
+  @override
+  Future<Map<String, dynamic>> adminSuggestTheme(String prompt) async {
+    themeIdea = prompt;
+    if (aiFailure != null) throw aiFailure!;
+    return Map<String, dynamic>.from(_aiTheme);
+  }
+
+  @override
+  Future<String> adminDrawKit(
+      String prompt, Map<String, dynamic> themeData) async {
+    kitDrawings++;
+    return 'https://cdn.example.com/kit.png';
+  }
+
+  @override
+  Future<Marathon> adminSaveMarathon(Map<String, dynamic> fields,
+      {String? id}) async {
+    saved = fields;
+    return current;
+  }
 
   @override
   Future<List<AdminMarathonRegistration>> adminFetchRegistrations(
@@ -405,5 +453,156 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.deleted, [api.current.id]);
     expect(find.text('No marathons yet.'), findsOneWidget);
+  });
+
+  group('AI themes, registration dates and payment QR', () {
+    test('a custom theme is read from its data and dresses the walker', () {
+      final theme = MarathonTheme.of('custom', _aiTheme);
+      expect(theme.name, 'Pineapple Party');
+      expect(theme.gradient, const [Color(0xFF4FC3F7), Color(0xFF01579B)]);
+      final look = theme.dress(const WalkerLook(), 3);
+      expect(look.topColor, const Color(0xFFFFEB3B));
+      expect(look.bottomColor, const Color(0xFF795548));
+      expect(look.accessory, WalkerAccessory.cap);
+      expect(look.kit, 'custom');
+      expect(look.bib, 3);
+      // Unknown colours fall back instead of breaking the race.
+      expect(MarathonTheme.fromData(const {'kitTop': 'nope'}).kitTop,
+          isA<Color>());
+    });
+
+    testWidgets('admins generate a theme, draw the kit and upload a QR',
+        (tester) async {
+      usePhoneScreen(tester);
+      final api = _FakeApi(_marathon(
+        registrationOpensAt: DateTime(2026, 10, 20),
+        registrationClosesAt: DateTime(2026, 11, 10),
+      ));
+      await tester.pumpWidget(MaterialApp(
+        home: AdminMarathonEditor(
+          marathon: api.current,
+          api: api,
+          pickQr: () async => Uint8List.fromList([1, 2, 3]),
+          uploadQr: (_) async => 'https://cdn.example.com/qr.png',
+        ),
+      ));
+      await tester.pump();
+
+      await tester.enterText(
+          find.byKey(const ValueKey('ai-idea')), 'under the sea');
+      await tester.tap(find.byKey(const ValueKey('ai-generate')));
+      await tester.pump();
+      await tester.pump();
+      expect(api.themeIdea, 'under the sea');
+      expect(find.text('🍍 Pineapple Party'), findsOneWidget);
+      expect(find.byType(WalkerAvatar), findsOneWidget);
+
+      await scrollTo(tester, find.byKey(const ValueKey('ai-draw-kit-now')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('ai-draw-kit-now')));
+      await tester.pump();
+      await tester.pump();
+      expect(api.kitDrawings, 1);
+      expect(find.byKey(const ValueKey('ai-kit-image')), findsOneWidget);
+
+      await scrollTo(tester, find.byKey(const ValueKey('qr-upload')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('qr-upload')));
+      await tester.pump();
+      await tester.pump();
+      expect(find.byKey(const ValueKey('qr-image')), findsOneWidget);
+      expect(find.text('Opens Oct 20, 2026'), findsOneWidget);
+      expect(find.text('Closes Nov 10, 2026'), findsOneWidget);
+
+      await scrollTo(tester, find.text('Save marathon'));
+      await tester.pump();
+      await tester.tap(find.text('Save marathon'));
+      await tester.pump();
+      final saved = api.saved!;
+      expect(saved['theme'], 'custom');
+      expect((saved['theme_data'] as Map)['name'], 'Pineapple Party');
+      expect(saved['kit_image_url'], 'https://cdn.example.com/kit.png');
+      expect(saved['payment_qr_url'], 'https://cdn.example.com/qr.png');
+      expect(saved['registration_opens_at'], '2026-10-20');
+      expect(saved['registration_closes_at'], '2026-11-10');
+    });
+
+    testWidgets('picking a ready-made theme drops the AI one', (tester) async {
+      usePhoneScreen(tester);
+      final api = _FakeApi(_marathon());
+      await tester.pumpWidget(MaterialApp(
+        home: AdminMarathonEditor(marathon: api.current, api: api),
+      ));
+      await tester.pump();
+      await tester.enterText(find.byKey(const ValueKey('ai-idea')), 'space');
+      await tester.tap(find.byKey(const ValueKey('ai-generate')));
+      await tester.pump();
+      await tester.pump();
+
+      await scrollTo(tester, find.byKey(const ValueKey('theme-ocean')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('theme-ocean')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('ai-theme-preview')), findsNothing);
+      await scrollTo(tester, find.text('Save marathon'));
+      await tester.pump();
+      await tester.tap(find.text('Save marathon'));
+      await tester.pump();
+      expect(api.saved!['theme'], 'ocean');
+      expect(api.saved!['theme_data'], isNull);
+    });
+
+    testWidgets('AI errors are explained', (tester) async {
+      usePhoneScreen(tester);
+      final api = _FakeApi(_marathon())
+        ..aiFailure = ApiException(503,
+            'AI themes are not set up yet. Add OPENAI_API_KEY to the server .env.');
+      await tester.pumpWidget(MaterialApp(
+        home: AdminMarathonEditor(api: api),
+      ));
+      await tester.tap(find.byKey(const ValueKey('ai-generate')));
+      await tester.pump();
+      expect(find.textContaining('Type an idea first'), findsOneWidget);
+
+      await tester.enterText(find.byKey(const ValueKey('ai-idea')), 'space');
+      await tester.tap(find.byKey(const ValueKey('ai-generate')));
+      await tester.pump();
+      await tester.pump();
+      expect(find.textContaining('OPENAI_API_KEY'), findsOneWidget);
+    });
+
+    testWidgets('people cannot join before registration opens', (tester) async {
+      usePhoneScreen(tester);
+      final api = _FakeApi(_marathon(
+        window: MarathonRegistrationWindow.notYet,
+        registrationOpensAt: DateTime(2026, 10, 30),
+      ));
+      await tester.pumpWidget(MaterialApp(
+        home: MarathonDetailScreen(marathonId: '1', api: api, today: _today),
+      ));
+      await frames(tester);
+
+      await scrollTo(tester, find.textContaining('Registration opens on'));
+      expect(
+          find.text(
+              'Registration opens on Fri, Oct 30, 2026. Come back then to join!'),
+          findsOneWidget);
+      expect(find.text('Join this marathon'), findsNothing);
+    });
+
+    testWidgets('the payment page shows the QR to scan', (tester) async {
+      usePhoneScreen(tester);
+      final api = _FakeApi(_marathon(
+        paymentQrUrl: 'https://cdn.example.com/qr.png',
+        registration: const MyMarathonRegistration(
+            status: MarathonRegistrationStatus.pendingPayment),
+      ));
+      await tester.pumpWidget(MaterialApp(
+        home: MarathonPaymentScreen(marathon: api.current, api: api),
+      ));
+      await tester.pump();
+      expect(find.text('Scan to pay'), findsOneWidget);
+      expect(find.byKey(const ValueKey('payment-qr')), findsOneWidget);
+    });
   });
 }

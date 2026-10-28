@@ -14,6 +14,13 @@ return [
     |
     */
 
+    'openai' => [
+        'key' => env('OPENAI_API_KEY'),
+        'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+        'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
+        'image_model' => env('OPENAI_IMAGE_MODEL', 'gpt-image-1'),
+    ],
+
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),
     ],

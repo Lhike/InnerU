@@ -7,6 +7,8 @@ use App\Models\Marathon;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -196,6 +198,138 @@ class MarathonTest extends TestCase
         Sanctum::actingAs(User::factory()->create());
 
         $this->postJson("/api/marathons/{$marathon->id}/register", $this->form())->assertStatus(422);
+    }
+
+    public function test_people_join_only_while_registration_is_open(): void
+    {
+        $marathon = $this->marathon([
+            'registration_opens_at' => '2026-10-20',
+            'registration_closes_at' => '2026-11-05',
+        ]);
+        Sanctum::actingAs(User::factory()->create());
+
+        Carbon::setTestNow('2026-10-19 09:00:00');
+        $this->getJson("/api/marathons/{$marathon->id}")
+            ->assertJsonPath('marathon.registrationStatus', 'not_yet')
+            ->assertJsonPath('marathon.registrationOpensAt', '2026-10-20')
+            ->assertJsonPath('marathon.registrationClosesAt', '2026-11-05');
+        $this->postJson("/api/marathons/{$marathon->id}/register", $this->form())
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Registration opens on Oct 20, 2026.');
+
+        Carbon::setTestNow('2026-11-06 09:00:00');
+        $this->postJson("/api/marathons/{$marathon->id}/register", $this->form())
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Registration for this marathon is closed.');
+
+        Carbon::setTestNow('2026-11-05 09:00:00');
+        $this->postJson("/api/marathons/{$marathon->id}/register", $this->form())->assertCreated();
+    }
+
+    public function test_admins_set_the_registration_window_payment_qr_and_a_custom_theme(): void
+    {
+        Sanctum::actingAs($this->admin());
+        $theme = [
+            'name' => 'Pineapple Party',
+            'emoji' => '🍍',
+            'gradient' => ['#4FC3F7', '#01579B'],
+            'kitTop' => '#FFEB3B',
+            'kitBottom' => '#795548',
+            'kitShoes' => '#1B1B1B',
+            'top' => 'tee',
+            'accessory' => 'none',
+            'unexpected' => 'dropped',
+        ];
+        $fields = [
+            'title' => 'Pineapple 5K',
+            'theme' => 'custom',
+            'distance_km' => 5,
+            'price' => 99,
+            'starts_at' => '2026-11-01',
+            'ends_at' => '2026-11-30',
+            'registration_opens_at' => '2026-10-20',
+            'registration_closes_at' => '2026-11-10',
+            'payment_qr_url' => 'https://cdn.example.com/qr.png',
+            'kit_image_url' => 'https://cdn.example.com/kit.png',
+        ];
+
+        $this->postJson('/api/admin/marathons', ['theme_data' => null] + $fields)->assertStatus(422);
+        $this->postJson('/api/admin/marathons', ['registration_closes_at' => '2026-12-05'] + $fields + ['theme_data' => $theme])
+            ->assertStatus(422)->assertJsonValidationErrors('registration_closes_at');
+        $id = $this->postJson('/api/admin/marathons', $fields + ['theme_data' => $theme])
+            ->assertCreated()
+            ->assertJsonPath('marathon.themeData.name', 'Pineapple Party')
+            ->assertJsonMissingPath('marathon.themeData.unexpected')
+            ->assertJsonPath('marathon.paymentQrUrl', 'https://cdn.example.com/qr.png')
+            ->assertJsonPath('marathon.kitImageUrl', 'https://cdn.example.com/kit.png')
+            ->assertJsonPath('marathon.registrationOpensAt', '2026-10-20')
+            ->json('marathon.id');
+
+        // Closing must stay on or after opening, even when only one date changes.
+        $this->patchJson("/api/admin/marathons/{$id}", ['registration_closes_at' => '2026-10-01'])->assertStatus(422);
+        // A preset theme drops the custom colours.
+        $this->patchJson("/api/admin/marathons/{$id}", ['theme' => 'ocean'])
+            ->assertOk()
+            ->assertJsonPath('marathon.themeData', null);
+    }
+
+    public function test_admins_get_an_ai_theme_and_kit_picture(): void
+    {
+        Storage::fake('public');
+        config(['services.openai.key' => 'sk-test', 'filesystems.media_upload_disk' => 'public', 'filesystems.media_upload_path' => '']);
+        Http::fake([
+            'api.openai.com/v1/chat/completions' => Http::response([
+                'choices' => [['message' => ['content' => json_encode([
+                    'name' => 'Pineapple Party',
+                    'emoji' => '🍍',
+                    'tagline' => 'Walk the reef!',
+                    'gradient' => ['#4fc3f7', 'nope'],
+                    'kitTop' => 'FE3',
+                    'kitBottom' => '#795548',
+                    'kitShoes' => '#1B1B1B',
+                    'top' => 'cape',
+                    'accessory' => 'cap',
+                ])]]],
+            ]),
+            'api.openai.com/v1/images/generations' => Http::response([
+                'data' => [['b64_json' => base64_encode('png-bytes')]],
+            ]),
+        ]);
+
+        Sanctum::actingAs(User::factory()->create());
+        $this->postJson('/api/admin/marathons/ai/theme', ['prompt' => 'under the sea'])->assertForbidden();
+
+        Sanctum::actingAs($this->admin());
+        $theme = $this->postJson('/api/admin/marathons/ai/theme', ['prompt' => 'under the sea'])
+            ->assertOk()
+            ->assertJsonPath('theme.name', 'Pineapple Party')
+            // Bad values fall back to ones the app can draw.
+            ->assertJsonPath('theme.gradient', ['#4FC3F7', '#FC6076'])
+            ->assertJsonPath('theme.kitTop', '#FFEE33')
+            ->assertJsonPath('theme.top', 'tee')
+            ->assertJsonPath('theme.accessory', 'cap')
+            ->assertJsonPath('theme.prompt', 'under the sea')
+            ->json('theme');
+        Http::assertSent(fn ($request) => $request->hasHeader('Authorization', 'Bearer sk-test')
+            && str_contains($request->url(), 'chat/completions'));
+
+        $url = $this->postJson('/api/admin/marathons/ai/kit-image', ['prompt' => 'under the sea', 'theme_data' => $theme])
+            ->assertOk()
+            ->json('kitImageUrl');
+        $this->assertStringContainsString('/marathons/kits/', $url);
+        $files = Storage::disk('public')->allFiles('marathons/kits');
+        $this->assertCount(1, $files);
+        $this->assertSame('png-bytes', Storage::disk('public')->get($files[0]));
+    }
+
+    public function test_ai_themes_explain_when_openai_is_not_set_up(): void
+    {
+        config(['services.openai.key' => null]);
+        Sanctum::actingAs($this->admin());
+
+        $this->postJson('/api/admin/marathons/ai/theme', ['prompt' => 'space'])
+            ->assertStatus(503)
+            ->assertJsonPath('message', 'AI themes are not set up yet. Add OPENAI_API_KEY to the server .env.');
     }
 
     public function test_only_confirmed_runners_can_wear_the_marathon_kit(): void
